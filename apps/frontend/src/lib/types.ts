@@ -1,0 +1,158 @@
+export type WarehouseCategory = {
+  color?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  id: string;
+  name: string;
+};
+
+export type ProductCategory = {
+  description?: string | null;
+  id: string;
+  name: string;
+};
+
+export type UnitOfMeasure = {
+  abbreviation: string;
+  id: string;
+  name: string;
+};
+
+export type Product = {
+  active: boolean;
+  category: ProductCategory;
+  categoryId: string;
+  code: string;
+  description?: string | null;
+  id: string;
+  name: string;
+  unit: UnitOfMeasure;
+  unitId: string;
+};
+
+export type Stock = {
+  currentQuantity: number;
+  id: string;
+  lastMovementAt?: string | null;
+  minimumQuantity: number;
+  product: Product;
+  productId: string;
+  warehouse?: Warehouse;
+  warehouseId: string;
+};
+
+export type WarehouseSummary = {
+  lastMovementAt: string | null;
+  lowStockItems: number;
+  outOfStockItems: number;
+  stockedProducts: number;
+};
+
+export type Warehouse = {
+  active: boolean;
+  category: WarehouseCategory;
+  categoryId: string;
+  createdAt: string;
+  description?: string | null;
+  id: string;
+  isGeneral: boolean;
+  movements?: Movement[];
+  name: string;
+  stocks: Stock[];
+  summary: WarehouseSummary;
+  updatedAt: string;
+};
+
+export type MovementType =
+  | "ENTRADA"
+  | "SAIDA"
+  | "TRANSFERENCIA_SAIDA"
+  | "TRANSFERENCIA_ENTRADA";
+
+export type UserRole = "ADMIN" | "OPERATOR";
+
+export type User = {
+  email: string;
+  id: string;
+  name: string;
+  role: UserRole;
+};
+
+export type Session = {
+  token: string;
+  user: User;
+};
+
+export type Invoice = {
+  cnpj: string;
+  companyName: string;
+  id: string;
+  issueDate: string;
+  movements?: Movement[];
+  number: string;
+  observation?: string | null;
+};
+
+export type UserWarehouseAssignment = {
+  id: string;
+  warehouse: Pick<Warehouse, "category" | "id" | "name">;
+  warehouseId: string;
+};
+
+export type ManagedUser = User & {
+  active: boolean;
+  warehouseAssignments: UserWarehouseAssignment[];
+};
+
+export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export type TransferRequestStatus =
+  | "PENDING_RECEIPT"
+  | "RECEIVED"
+  | "CANCELLED";
+
+export type EntryRequest = {
+  createdAt: string;
+  id: string;
+  movementDate: string;
+  observation?: string | null;
+  product: Pick<Product, "code" | "id" | "name" | "unit">;
+  quantity: number;
+  requestedBy: Pick<User, "email" | "id" | "name">;
+  reviewedAt?: string | null;
+  reviewedBy?: Pick<User, "email" | "id" | "name"> | null;
+  status: RequestStatus;
+  warehouse: Pick<Warehouse, "category" | "id" | "name">;
+};
+
+export type TransferRequest = {
+  createdAt: string;
+  createdBy: Pick<User, "email" | "id" | "name">;
+  destinationWarehouse: Pick<Warehouse, "category" | "id" | "name">;
+  id: string;
+  movementDate: string;
+  observation?: string | null;
+  product: Pick<Product, "code" | "id" | "name" | "unit">;
+  quantity: number;
+  receivedAt?: string | null;
+  receivedBy?: Pick<User, "email" | "id" | "name"> | null;
+  sourceWarehouse: Pick<Warehouse, "category" | "id" | "name">;
+  status: TransferRequestStatus;
+};
+
+export type Movement = {
+  destinationNote?: string | null;
+  destinationWarehouse?: Pick<Warehouse, "id" | "name"> | null;
+  id: string;
+  movementDate: string;
+  observation?: string | null;
+  product: Pick<Product, "code" | "id" | "name" | "unit">;
+  productId: string;
+  quantity: number;
+  responsibleUser?: User;
+  sourceWarehouse?: Pick<Warehouse, "id" | "name"> | null;
+  type: MovementType;
+  unitPrice?: number | string | null;
+  warehouse: Pick<Warehouse, "id" | "name">;
+  warehouseId: string;
+};

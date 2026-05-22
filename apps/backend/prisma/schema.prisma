@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum MovementType {
+  ENTRADA
+  SAIDA
+  TRANSFERENCIA_SAIDA
+  TRANSFERENCIA_ENTRADA
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TransferRequestStatus {
+  PENDING_RECEIPT
+  RECEIVED
+  CANCELLED
+}
+
+model User {
+  id                       String            @id @default(cuid())
+  name                     String
+  email                    String            @unique
+  passwordHash             String            @default("")
+  role                     UserRole          @default(ADMIN)
+  active                   Boolean           @default(true)
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  movements                StockMovement[]
+  warehouseAssignments     UserWarehouse[]
+  requestedEntries         EntryRequest[]    @relation("EntryRequester")
+  reviewedEntries          EntryRequest[]    @relation("EntryReviewer")
+  createdTransfers         TransferRequest[] @relation("TransferCreator")
+  receivedTransfers        TransferRequest[] @relation("TransferReceiver")
+}
+
+model WarehouseCategory {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String?
+  color       String?
+  icon        String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  warehouses  Warehouse[]
+}
+
+model Warehouse {
+  id                        String            @id @default(cuid())
+  name                      String            @unique
+  description               String?
+  categoryId                String
+  isGeneral                 Boolean           @default(false)
+  active                    Boolean           @default(true)
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+  category                  WarehouseCategory @relation(fields: [categoryId], references: [id])
+  stocks                    Stock[]
+  movements                 StockMovement[]   @relation("WarehouseMovements")
+  outgoingTransfers         StockMovement[]   @relation("MovementSourceWarehouse")
+  incomingTransfers         StockMovement[]   @relation("MovementDestinationWarehouse")
+  userAssignments           UserWarehouse[]
+  entryRequests             EntryRequest[]
+  outgoingTransferRequests  TransferRequest[] @relation("TransferRequestSource")
+  incomingTransferRequests  TransferRequest[] @relation("TransferRequestDestination")
+}
+
+model ProductCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+model UnitOfMeasure {
+  id           String    @id @default(cuid())
+  name         String    @unique
+  abbreviation String    @unique
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  products     Product[]
+}
+
+model Product {
+  id               String            @id @default(cuid())
+  code             String            @unique
+  name             String
+  description      String?
+  categoryId       String
+  unitId           String
+  active           Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  category         ProductCategory   @relation(fields: [categoryId], references: [id])
+  unit             UnitOfMeasure     @relation(fields: [unitId], references: [id])
+  stocks           Stock[]
+  movements        StockMovement[]
+  entryRequests    EntryRequest[]
+  transferRequests TransferRequest[]
+}
+
+model UserWarehouse {
+  id          String    @id @default(cuid())
+  userId      String
+  warehouseId String
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@unique([userId, warehouseId])
+}
+
+model Stock {
+  id              String    @id @default(cuid())
+  warehouseId     String
+  productId       String
+  currentQuantity Int       @default(0)
+  minimumQuantity Int       @default(0)
+  lastMovementAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [id])
+  product         Product   @relation(fields: [productId], references: [id])
+
+  @@unique([warehouseId, productId])
+}
+
+model StockMovement {
+  id                     String       @id @default(cuid())
+  type                   MovementType
+  warehouseId            String
+  productId              String
+  sourceWarehouseId      String?
+  destinationWarehouseId String?
+  quantity               Int
+  unitPrice              Decimal?
+  destinationNote        String?
+  observation            String?
+  invoiceId              String?
+  movementDate           DateTime
+  responsibleUserId      String
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  warehouse              Warehouse    @relation("WarehouseMovements", fields: [warehouseId], references: [id])
+  sourceWarehouse        Warehouse?   @relation("MovementSourceWarehouse", fields: [sourceWarehouseId], references: [id])
+  destinationWarehouse   Warehouse?   @relation("MovementDestinationWarehouse", fields: [destinationWarehouseId], references: [id])
+  product                Product      @relation(fields: [productId], references: [id])
+  responsibleUser        User         @relation(fields: [responsibleUserId], references: [id])
+  invoice                Invoice?     @relation(fields: [invoiceId], references: [id])
+}
+
+model EntryRequest {
+  id               String        @id @default(cuid())
+  warehouseId      String
+  productId        String
+  quantity         Int
+  observation      String?
+  movementDate     DateTime
+  status           RequestStatus @default(PENDING)
+  requestedById    String
+  reviewedById     String?
+  reviewedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  warehouse        Warehouse     @relation(fields: [warehouseId], references: [id])
+  product          Product       @relation(fields: [productId], references: [id])
+  requestedBy      User          @relation("EntryRequester", fields: [requestedById], references: [id])
+  reviewedBy       User?         @relation("EntryReviewer", fields: [reviewedById], references: [id])
+}
+
+model TransferRequest {
+  id                     String                @id @default(cuid())
+  sourceWarehouseId      String
+  destinationWarehouseId String
+  productId              String
+  quantity               Int
+  observation            String?
+  movementDate           DateTime
+  status                 TransferRequestStatus @default(PENDING_RECEIPT)
+  createdById            String
+  receivedById           String?
+  receivedAt             DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  sourceWarehouse        Warehouse             @relation("TransferRequestSource", fields: [sourceWarehouseId], references: [id])
+  destinationWarehouse   Warehouse             @relation("TransferRequestDestination", fields: [destinationWarehouseId], references: [id])
+  product                Product               @relation(fields: [productId], references: [id])
+  createdBy              User                  @relation("TransferCreator", fields: [createdById], references: [id])
+  receivedBy             User?                 @relation("TransferReceiver", fields: [receivedById], references: [id])
+}
+
+model Invoice {
+  id          String          @id @default(cuid())
+  companyName String
+  cnpj        String
+  number      String
+  issueDate   DateTime
+  observation String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  movements   StockMovement[]
+}

@@ -1,0 +1,97 @@
+import { UserRole, type Prisma, type PrismaClient } from "@prisma/client";
+import { hashPassword } from "./auth-service.js";
+
+const userInclude = {
+  warehouseAssignments: {
+    include: {
+      warehouse: {
+        include: {
+          category: true,
+        },
+      },
+    },
+    orderBy: {
+      warehouse: {
+        name: "asc",
+      },
+    },
+  },
+} satisfies Prisma.UserInclude;
+
+type UserWithAssignments = Prisma.UserGetPayload<{
+  include: typeof userInclude;
+}>;
+
+type UserInput = {
+  active: boolean;
+  email: string;
+  name: string;
+  password?: string;
+  role: UserRole;
+  warehouseIds: string[];
+};
+
+function assignmentCreates(input: UserInput) {
+  if (input.role !== UserRole.OPERATOR) {
+    return [];
+  }
+
+  return input.warehouseIds.map((warehouseId) => ({ warehouseId }));
+}
+
+export function safeUser(user: UserWithAssignments) {
+  const { passwordHash: _passwordHash, ...safe } = user;
+
+  return safe;
+}
+
+export async function listUsers(prisma: PrismaClient) {
+  const users = await prisma.user.findMany({
+    include: userInclude,
+    orderBy: { name: "asc" },
+  });
+
+  return users.map(safeUser);
+}
+
+export async function createUser(prisma: PrismaClient, input: UserInput) {
+  const user = await prisma.user.create({
+    data: {
+      active: input.active,
+      email: input.email,
+      name: input.name,
+      passwordHash: await hashPassword(input.password ?? ""),
+      role: input.role,
+      warehouseAssignments: {
+        create: assignmentCreates(input),
+      },
+    },
+    include: userInclude,
+  });
+
+  return safeUser(user);
+}
+
+export async function updateUser(
+  prisma: PrismaClient,
+  id: string,
+  input: UserInput,
+) {
+  const user = await prisma.user.update({
+    where: { id },
+    data: {
+      active: input.active,
+      email: input.email,
+      name: input.name,
+      passwordHash: input.password ? await hashPassword(input.password) : undefined,
+      role: input.role,
+      warehouseAssignments: {
+        deleteMany: {},
+        create: assignmentCreates(input),
+      },
+    },
+    include: userInclude,
+  });
+
+  return safeUser(user);
+}

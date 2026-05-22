@@ -1,0 +1,178 @@
+import {
+  Bell,
+  Boxes,
+  ClipboardCheck,
+  ClipboardList,
+  FileText,
+  Layers3,
+  Menu,
+  PackageSearch,
+  Ruler,
+  Tags,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useApiResource } from "@/lib/api";
+import { useSession } from "@/lib/session";
+import type { UserRole } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const items = [
+  { icon: Layers3, label: "Dashboard", to: "/dashboard" },
+  { icon: Boxes, label: "Almoxarifados", to: "/warehouses" },
+  { icon: PackageSearch, label: "Produtos", role: "ADMIN", to: "/products" },
+  { icon: Tags, label: "Categorias", role: "ADMIN", to: "/categories" },
+  { icon: Ruler, label: "Unidades", role: "ADMIN", to: "/units" },
+  { icon: FileText, label: "Notas fiscais", role: "ADMIN", to: "/invoices" },
+  { icon: ClipboardList, label: "Solicitacoes", to: "/requests" },
+  { icon: ClipboardCheck, label: "Movimentacoes", to: "/movements" },
+  { icon: UsersRound, label: "Usuarios", role: "ADMIN", to: "/users" },
+] satisfies Array<{
+  icon: typeof Boxes;
+  label: string;
+  role?: UserRole;
+  to: string;
+}>;
+
+function navigationItems(role: UserRole) {
+  return items.filter((item) => !item.role || item.role === role);
+}
+
+function Navigation({ role }: { role: UserRole }) {
+  return (
+    <nav className="grid gap-1">
+      {navigationItems(role).map(({ icon: Icon, label, to }) => (
+        <NavLink
+          className={({ isActive }) =>
+            cn(
+              "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-slate-700 transition hover:bg-muted",
+              isActive && "bg-primary text-primary-foreground hover:bg-primary",
+            )
+          }
+          key={to}
+          to={to}
+        >
+          <Icon className="h-4 w-4 shrink-0" />
+          {label}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
+  const { clearSession, session } = useSession();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const role = session?.user.role ?? "OPERATOR";
+  const title =
+    navigationItems(role).find((item) => location.pathname.startsWith(item.to))
+      ?.label ?? "Almoxarifado";
+  const summary = useApiResource<{
+    pendingEntryRequests: number;
+    pendingReceipts: number;
+    total: number;
+  }>("/requests/summary", {
+    pendingEntryRequests: 0,
+    pendingReceipts: 0,
+    total: 0,
+  });
+
+  function logout() {
+    clearSession();
+    navigate("/login");
+  }
+
+  return (
+    <div className="min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
+      <aside className="hidden border-r bg-card lg:flex lg:flex-col">
+        <div className="px-5 py-6">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary text-primary-foreground">
+              <Boxes className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Prefeitura</p>
+              <p className="text-xs text-muted-foreground">Almoxarifado</p>
+            </div>
+          </div>
+        </div>
+        <Separator />
+        <div className="flex-1 p-4">
+          <Navigation role={role} />
+        </div>
+      </aside>
+
+      <div className="min-w-0">
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur md:px-6">
+          <div className="flex items-center gap-3">
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button aria-label="Abrir menu" className="lg:hidden" size="icon" variant="outline">
+                  <Menu className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent>
+                <div className="mb-5 pr-8">
+                  <p className="font-semibold">Almoxarifado Municipal</p>
+                  <p className="text-sm text-muted-foreground">Operacao de estoque</p>
+                </div>
+                <Navigation role={role} />
+              </SheetContent>
+            </Sheet>
+            <div>
+              <p className="text-xs font-medium uppercase text-muted-foreground">Controle</p>
+              <h1 className="text-lg font-semibold">{title}</h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button aria-label="Notificacoes internas" size="icon" variant="outline">
+                  <Bell className="h-4 w-4" />
+                  {summary.data.total ? (
+                    <span className="absolute -mr-7 -mt-7 grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[11px] font-semibold text-white">
+                      {summary.data.total}
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuItem onSelect={() => navigate("/requests")}>
+                  {summary.data.pendingEntryRequests} entradas aguardando analise
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => navigate("/requests")}>
+                  {summary.data.pendingReceipts} transferencias aguardando recebimento
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <UserRound className="h-4 w-4" />
+                  {session?.user.name ?? "Usuario"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={logout}>Sair</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </header>
+        <main className="mx-auto w-full max-w-[90rem] p-4 md:p-6">{children}</main>
+      </div>
+    </div>
+  );
+}
