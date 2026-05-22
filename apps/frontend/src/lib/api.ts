@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getStoredSession } from "./session";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://[2804:2424:8101:447::8]:3333";
+const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3333";
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const session = getStoredSession();
