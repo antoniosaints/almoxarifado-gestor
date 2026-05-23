@@ -1,12 +1,9 @@
-import { UserRole } from "@prisma/client";
 import { Router } from "express";
-import { asyncHandler, requireRole } from "../lib/http.js";
+import { asyncHandler } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import { invoiceInput } from "../validators/inputs.js";
 
 export const invoiceRoutes = Router();
-
-invoiceRoutes.use(requireRole(UserRole.ADMIN));
 
 invoiceRoutes.get(
   "/",

@@ -248,7 +248,6 @@ describe("api", () => {
       .post("/movements/entry")
       .set("Authorization", authorizationFor(operator))
       .send({
-        invoiceId: "ignored-for-operator",
         minimumQuantity: 2,
         movementDate: "2026-05-22T12:00:00.000Z",
         productId: product.id,
@@ -262,10 +261,12 @@ describe("api", () => {
       currentQuantity: 4,
       minimumQuantity: 2,
       productId: product.id,
+      totalValue: "396",
+      unitPriceAverage: "99",
       warehouseId: warehouse.id,
     });
     expect(response.body.movement.invoiceId).toBeNull();
-    expect(response.body.movement.unitPrice).toBeNull();
+    expect(response.body.movement.unitPrice).toBe("99");
   });
 
   it("lets admins create operators assigned to warehouses", async () => {

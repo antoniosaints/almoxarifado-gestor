@@ -217,6 +217,8 @@ async function main() {
   for (const [index, product] of products.entries()) {
     const currentQuantity = [150, 40, 18, 12, 300][index];
     const minimumQuantity = [60, 20, 20, 10, 120][index];
+    const unitPriceAverage = [28.5, 36.9, 7.25, 18.4, 5.8][index];
+    const totalValue = Math.round(currentQuantity * unitPriceAverage * 100) / 100;
 
     await prisma.stock.upsert({
       where: {
@@ -228,6 +230,8 @@ async function main() {
       update: {
         currentQuantity,
         minimumQuantity,
+        unitPriceAverage,
+        totalValue,
         lastMovementAt: movementDate,
       },
       create: {
@@ -235,6 +239,8 @@ async function main() {
         productId: product.id,
         currentQuantity,
         minimumQuantity,
+        unitPriceAverage,
+        totalValue,
         lastMovementAt: movementDate,
       },
     });
@@ -255,6 +261,7 @@ async function main() {
           warehouseId: central.id,
           productId: product.id,
           quantity: currentQuantity,
+          unitPrice: unitPriceAverage,
           observation: "Saldo inicial da seed",
           movementDate,
           responsibleUserId: admin.id,

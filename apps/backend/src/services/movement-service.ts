@@ -27,31 +27,64 @@ function assertPositiveQuantity(quantity: number) {
   }
 }
 
+function toNumber(value: unknown) {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  return Number(value);
+}
+
+function roundCurrency(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 export async function createEntry(prisma: PrismaClient, input: EntryInput) {
   assertPositiveQuantity(input.quantity);
 
   return prisma.$transaction(async (transaction) => {
-    const stock = await transaction.stock.upsert({
+    const existingStock = await transaction.stock.findUnique({
       where: {
         warehouseId_productId: {
           warehouseId: input.warehouseId,
           productId: input.productId,
         },
       },
-      update: {
-        currentQuantity: {
-          increment: input.quantity,
-        },
-        lastMovementAt: input.movementDate,
-      },
-      create: {
-        currentQuantity: input.quantity,
-        lastMovementAt: input.movementDate,
-        minimumQuantity: input.minimumQuantity ?? 0,
-        productId: input.productId,
-        warehouseId: input.warehouseId,
-      },
     });
+    const entryUnitPrice =
+      input.unitPrice === null || input.unitPrice === undefined
+        ? 0
+        : roundCurrency(input.unitPrice);
+    const stock = existingStock
+      ? await transaction.stock.update({
+          where: { id: existingStock.id },
+          data: (() => {
+            const nextQuantity = existingStock.currentQuantity + input.quantity;
+            const nextAverage = roundCurrency(
+              (existingStock.currentQuantity * toNumber(existingStock.unitPriceAverage) +
+                input.quantity * entryUnitPrice) /
+                nextQuantity,
+            );
+
+            return {
+              currentQuantity: nextQuantity,
+              lastMovementAt: input.movementDate,
+              totalValue: roundCurrency(nextQuantity * nextAverage),
+              unitPriceAverage: nextAverage,
+            };
+          })(),
+        })
+      : await transaction.stock.create({
+          data: {
+            currentQuantity: input.quantity,
+            lastMovementAt: input.movementDate,
+            minimumQuantity: input.minimumQuantity ?? 0,
+            productId: input.productId,
+            totalValue: roundCurrency(input.quantity * entryUnitPrice),
+            unitPriceAverage: entryUnitPrice,
+            warehouseId: input.warehouseId,
+          },
+        });
 
     const movement = await transaction.stockMovement.create({
       data: {
@@ -91,10 +124,11 @@ export async function createOutput(prisma: PrismaClient, input: OutputInput) {
     const updatedStock = await transaction.stock.update({
       where: { id: stock.id },
       data: {
-        currentQuantity: {
-          decrement: input.quantity,
-        },
+        currentQuantity: stock.currentQuantity - input.quantity,
         lastMovementAt: input.movementDate,
+        totalValue: roundCurrency(
+          (stock.currentQuantity - input.quantity) * toNumber(stock.unitPriceAverage),
+        ),
       },
     });
 

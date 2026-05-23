@@ -37,6 +37,8 @@ export type Stock = {
   minimumQuantity: number;
   product: Product;
   productId: string;
+  totalValue: number | string;
+  unitPriceAverage: number | string;
   warehouse?: Warehouse;
   warehouseId: string;
 };
@@ -144,6 +146,8 @@ export type Movement = {
   destinationNote?: string | null;
   destinationWarehouse?: Pick<Warehouse, "id" | "name"> | null;
   id: string;
+  invoice?: Invoice | null;
+  invoiceId?: string | null;
   movementDate: string;
   observation?: string | null;
   product: Pick<Product, "code" | "id" | "name" | "unit">;

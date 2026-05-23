@@ -44,6 +44,7 @@ movementRoutes.get(
         },
         include: {
           destinationWarehouse: true,
+          invoice: true,
           product: {
             include: {
               unit: true,
@@ -68,8 +69,8 @@ movementRoutes.post(
     response.status(201).json(
       await createEntry(prisma, {
         ...input,
-        invoiceId: user.role === UserRole.ADMIN ? input.invoiceId : null,
-        unitPrice: user.role === UserRole.ADMIN ? input.unitPrice : null,
+        invoiceId: input.invoiceId ?? null,
+        unitPrice: input.unitPrice ?? null,
         userId: user.id,
       }),
     );

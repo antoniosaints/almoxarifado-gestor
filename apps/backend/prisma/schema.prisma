@@ -132,6 +132,8 @@ model Stock {
   productId       String
   currentQuantity Int       @default(0)
   minimumQuantity Int       @default(0)
+  unitPriceAverage Decimal   @default(0)
+  totalValue      Decimal    @default(0)
   lastMovementAt  DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

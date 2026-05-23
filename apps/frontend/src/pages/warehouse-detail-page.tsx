@@ -2,9 +2,11 @@ import {
   ArrowLeft,
   ArrowRightLeft,
   Boxes,
+  History,
   PackageMinus,
   PackagePlus,
   Pencil,
+  Plus,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
@@ -37,24 +39,30 @@ import type {
   Invoice,
   Movement,
   Product,
+  ProductCategory,
   Stock,
+  UnitOfMeasure,
   Warehouse,
 } from "@/lib/types";
-import { formatDate, todayInputValue } from "@/lib/utils";
-import { MovementsTable } from "./movements-page";
+import { formatCurrency, formatDate, todayInputValue } from "@/lib/utils";
+import { movementLabels, MovementsTable } from "./movements-page";
 
 type MovementFormProps = {
   initialProductId?: string;
   kind: "entry" | "entryRequest" | "output" | "transfer";
+  lockedProduct?: Product;
   onSaved: () => Promise<void>;
+  onProductCreated?: (product: Product) => Promise<void> | void;
+  productCategories?: ProductCategory[];
   products: Product[];
+  units?: UnitOfMeasure[];
   warehouse: Warehouse;
   warehouses: Warehouse[];
 };
 
 function movementLabel(kind: MovementFormProps["kind"]) {
   if (kind === "entry") {
-    return "Entrada de estoque";
+    return "Incluir Estoque";
   }
 
   if (kind === "entryRequest") {
@@ -66,6 +74,161 @@ function movementLabel(kind: MovementFormProps["kind"]) {
   }
 
   return "Transferir";
+}
+
+type ProductDraft = {
+  active: boolean;
+  categoryId: string;
+  description: string;
+  name: string;
+  unitId: string;
+};
+
+function emptyProductDraft(
+  productCategories: ProductCategory[],
+  units: UnitOfMeasure[],
+): ProductDraft {
+  return {
+    active: true,
+    categoryId: productCategories[0]?.id ?? "",
+    description: "",
+    name: "",
+    unitId: units[0]?.id ?? "",
+  };
+}
+
+function NewProductInlineDialog({
+  onCreated,
+  productCategories,
+  units,
+}: {
+  onCreated: (product: Product) => Promise<void> | void;
+  productCategories: ProductCategory[];
+  units: UnitOfMeasure[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<ProductDraft>(() =>
+    emptyProductDraft(productCategories, units),
+  );
+  const [message, setMessage] = useState<string | null>(null);
+
+  function openDialog() {
+    setDraft(emptyProductDraft(productCategories, units));
+    setMessage(null);
+    setOpen(true);
+  }
+
+  async function saveProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage(null);
+
+    try {
+      const product = await api<Product>("/products", {
+        body: JSON.stringify(draft),
+        method: "POST",
+      });
+      await onCreated(product);
+      setOpen(false);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao salvar produto.",
+      );
+    }
+  }
+
+  return (
+    <>
+      <button
+        className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+        onClick={openDialog}
+        type="button"
+      >
+        <Plus className="mr-1 inline h-3.5 w-3.5" />
+        Novo produto
+      </button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo produto</DialogTitle>
+            <DialogDescription>
+              O produto sera selecionado automaticamente para incluir estoque.
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={saveProduct}>
+            {message ? <ResourceError message={message} /> : null}
+            <FormField>
+              <Label htmlFor="stock-product-name">Nome</Label>
+              <Input
+                id="stock-product-name"
+                onChange={(event) =>
+                  setDraft({ ...draft, name: event.target.value })
+                }
+                required
+                value={draft.name}
+              />
+            </FormField>
+            <FormField>
+              <Label htmlFor="stock-product-description">Descricao</Label>
+              <Textarea
+                id="stock-product-description"
+                onChange={(event) =>
+                  setDraft({ ...draft, description: event.target.value })
+                }
+                value={draft.description}
+              />
+            </FormField>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField>
+                <Label htmlFor="stock-product-category">Categoria</Label>
+                <SearchSelect
+                  ariaLabel="Categoria"
+                  id="stock-product-category"
+                  onValueChange={(categoryId) =>
+                    setDraft({ ...draft, categoryId })
+                  }
+                  options={productCategories.map((category) => ({
+                    label: category.name,
+                    value: category.id,
+                  }))}
+                  placeholder="Selecione"
+                  value={draft.categoryId}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="stock-product-unit">Unidade</Label>
+                <SearchSelect
+                  ariaLabel="Unidade"
+                  id="stock-product-unit"
+                  onValueChange={(unitId) => setDraft({ ...draft, unitId })}
+                  options={units.map((unit) => ({
+                    label: `${unit.name} / ${unit.abbreviation}`,
+                    value: unit.id,
+                  }))}
+                  placeholder="Selecione"
+                  value={draft.unitId}
+                />
+              </FormField>
+            </div>
+            <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
+              <input
+                checked={draft.active}
+                onChange={(event) =>
+                  setDraft({ ...draft, active: event.target.checked })
+                }
+                type="checkbox"
+              />
+              Produto ativo
+            </label>
+            <Button disabled={!draft.categoryId || !draft.unitId} type="submit">
+              Salvar produto
+            </Button>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 function InvoiceFields({
@@ -101,7 +264,9 @@ function InvoiceFields({
       await invoices.reload();
     } catch (caughtError) {
       setMessage(
-        caughtError instanceof Error ? caughtError.message : "Falha ao salvar nota.",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao salvar nota.",
       );
     }
   }
@@ -158,7 +323,9 @@ function InvoiceFields({
                 <Label htmlFor="invoice-cnpj">CNPJ</Label>
                 <Input
                   id="invoice-cnpj"
-                  onChange={(event) => setDraft({ ...draft, cnpj: event.target.value })}
+                  onChange={(event) =>
+                    setDraft({ ...draft, cnpj: event.target.value })
+                  }
                   required
                   value={draft.cnpj}
                 />
@@ -167,7 +334,9 @@ function InvoiceFields({
                 <Label htmlFor="invoice-number">Numero da nota</Label>
                 <Input
                   id="invoice-number"
-                  onChange={(event) => setDraft({ ...draft, number: event.target.value })}
+                  onChange={(event) =>
+                    setDraft({ ...draft, number: event.target.value })
+                  }
                   required
                   value={draft.number}
                 />
@@ -177,7 +346,9 @@ function InvoiceFields({
               <Label htmlFor="invoice-date">Data da nota</Label>
               <Input
                 id="invoice-date"
-                onChange={(event) => setDraft({ ...draft, issueDate: event.target.value })}
+                onChange={(event) =>
+                  setDraft({ ...draft, issueDate: event.target.value })
+                }
                 required
                 type="date"
                 value={draft.issueDate}
@@ -204,14 +375,18 @@ function InvoiceFields({
 function MovementForm({
   initialProductId = "",
   kind,
+  lockedProduct,
   onSaved,
+  onProductCreated,
+  productCategories = [],
   products,
+  units = [],
   warehouse,
   warehouses,
 }: MovementFormProps) {
-  const { session } = useSession();
-  const admin = session?.user.role === "ADMIN";
-  const [productId, setProductId] = useState(initialProductId);
+  const [productId, setProductId] = useState(
+    lockedProduct?.id ?? initialProductId,
+  );
   const [quantity, setQuantity] = useState("1");
   const [observation, setObservation] = useState("");
   const [destinationNote, setDestinationNote] = useState("");
@@ -221,10 +396,12 @@ function MovementForm({
   const [minimumQuantity, setMinimumQuantity] = useState("0");
   const [movementDate, setMovementDate] = useState(todayInputValue());
   const [message, setMessage] = useState<string | null>(null);
+  const selectedStock = warehouse.stocks.find(
+    (stock) => stock.productId === productId,
+  );
   const createsNewStock =
-    kind === "entry" &&
-    Boolean(productId) &&
-    !warehouse.stocks.some((stock) => stock.productId === productId);
+    kind === "entry" && Boolean(productId) && !selectedStock && !lockedProduct;
+  const productOptions = lockedProduct ? [lockedProduct] : products;
 
   const endpoint = {
     entry: "/movements/entry",
@@ -255,10 +432,7 @@ function MovementForm({
             observation,
             productId,
             quantity,
-            unitPrice:
-              kind === "entry" && warehouse.isGeneral && unitPrice
-                ? unitPrice
-                : undefined,
+            unitPrice: kind === "entry" ? unitPrice : undefined,
             warehouseId: warehouse.id,
           };
 
@@ -283,161 +457,186 @@ function MovementForm({
       await onSaved();
     } catch (caughtError) {
       setMessage(
-        caughtError instanceof Error ? caughtError.message : "Falha ao registrar.",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao registrar.",
       );
     }
   }
 
   return (
     <Form onSubmit={save}>
-          {message ? (
-            <Alert
-              className={
-                message === "Movimentacao registrada." ||
-                message === "Solicitacao enviada." ||
-                message === "Transferencia enviada para recebimento."
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-950"
-                  : "border-rose-200 bg-rose-50 text-rose-950"
-              }
-            >
-              <AlertTitle>
-                {message === "Movimentacao registrada." ||
-                message === "Solicitacao enviada." ||
-                message === "Transferencia enviada para recebimento."
-                  ? "Pronto"
-                  : "Atencao"}
-              </AlertTitle>
-              <AlertDescription className="text-current">{message}</AlertDescription>
-            </Alert>
-          ) : null}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <FormField>
-              <Label htmlFor={`${kind}-product`}>Produto</Label>
-              <SearchSelect
-                ariaLabel="Produto"
-                emptyMessage="Nenhum produto disponivel."
-                id={`${kind}-product`}
-                onValueChange={setProductId}
-                options={products
-                  .filter((product) => product.active)
-                  .map((product) => ({
-                    label: `${product.code} - ${product.name}`,
-                    searchText: `${product.category.name} ${product.unit.abbreviation}`,
-                    value: product.id,
-                  }))}
-                placeholder="Selecione"
-                value={productId}
+      {message ? (
+        <Alert
+          className={
+            message === "Movimentacao registrada." ||
+            message === "Solicitacao enviada." ||
+            message === "Transferencia enviada para recebimento."
+              ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+              : "border-rose-200 bg-rose-50 text-rose-950"
+          }
+        >
+          <AlertTitle>
+            {message === "Movimentacao registrada." ||
+            message === "Solicitacao enviada." ||
+            message === "Transferencia enviada para recebimento."
+              ? "Pronto"
+              : "Atencao"}
+          </AlertTitle>
+          <AlertDescription className="text-current">
+            {message}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <FormField>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <Label className="mb-0" htmlFor={`${kind}-product`}>
+              Produto
+            </Label>
+            {kind === "entry" && !lockedProduct && onProductCreated ? (
+              <NewProductInlineDialog
+                onCreated={async (product) => {
+                  await onProductCreated(product);
+                  setProductId(product.id);
+                  setMinimumQuantity("0");
+                }}
+                productCategories={productCategories}
+                units={units}
               />
-            </FormField>
-            <FormField>
-              <Label htmlFor={`${kind}-quantity`}>Quantidade</Label>
-              <Input
-                id={`${kind}-quantity`}
-                min="1"
-                onChange={(event) => setQuantity(event.target.value)}
-                required
-                type="number"
-                value={quantity}
-              />
-            </FormField>
+            ) : null}
           </div>
+          <SearchSelect
+            ariaLabel="Produto"
+            disabled={Boolean(lockedProduct)}
+            emptyMessage="Nenhum produto disponivel."
+            id={`${kind}-product`}
+            onValueChange={setProductId}
+            options={productOptions
+              .filter((product) => lockedProduct || product.active)
+              .map((product) => ({
+                label: `${product.code} - ${product.name}`,
+                searchText: `${product.category.name} ${product.unit.abbreviation}`,
+                value: product.id,
+              }))}
+            placeholder="Selecione"
+            value={productId}
+          />
+        </FormField>
+        <FormField>
+          <Label htmlFor={`${kind}-quantity`}>
+            {createsNewStock ? "Quantidade inicial" : "Quantidade"}
+          </Label>
+          <Input
+            id={`${kind}-quantity`}
+            min="1"
+            onChange={(event) => setQuantity(event.target.value)}
+            required
+            type="number"
+            value={quantity}
+          />
+        </FormField>
+      </div>
 
-          {createsNewStock ? (
-            <FormField>
-              <Label htmlFor="entry-minimum-stock">Estoque minimo inicial</Label>
-              <Input
-                id="entry-minimum-stock"
-                min="0"
-                onChange={(event) => setMinimumQuantity(event.target.value)}
-                required
-                type="number"
-                value={minimumQuantity}
-              />
-            </FormField>
-          ) : null}
+      {kind === "output" ? (
+        <FormField>
+          <Label htmlFor="output-destination">Destino ou justificativa</Label>
+          <Input
+            id="output-destination"
+            onChange={(event) => setDestinationNote(event.target.value)}
+            placeholder="Ex.: manutencao da escola municipal"
+            value={destinationNote}
+          />
+        </FormField>
+      ) : null}
 
-          {kind === "output" ? (
-            <FormField>
-              <Label htmlFor="output-destination">Destino ou justificativa</Label>
-              <Input
-                id="output-destination"
-                onChange={(event) => setDestinationNote(event.target.value)}
-                placeholder="Ex.: manutencao da escola municipal"
-                value={destinationNote}
-              />
-            </FormField>
-          ) : null}
+      {kind === "transfer" ? (
+        <FormField>
+          <Label htmlFor="transfer-destination">Almoxarifado destino</Label>
+          <SearchSelect
+            ariaLabel="Almoxarifado destino"
+            id="transfer-destination"
+            onValueChange={setDestinationWarehouseId}
+            options={warehouses
+              .filter((item) => item.id !== warehouse.id && item.active)
+              .map((item) => ({
+                label: item.name,
+                searchText: item.category.name,
+                value: item.id,
+              }))}
+            placeholder="Selecione"
+            value={destinationWarehouseId}
+          />
+        </FormField>
+      ) : null}
 
-          {kind === "transfer" ? (
-            <FormField>
-              <Label htmlFor="transfer-destination">Almoxarifado destino</Label>
-              <SearchSelect
-                ariaLabel="Almoxarifado destino"
-                id="transfer-destination"
-                onValueChange={setDestinationWarehouseId}
-                options={warehouses
-                  .filter((item) => item.id !== warehouse.id && item.active)
-                  .map((item) => ({
-                    label: item.name,
-                    searchText: item.category.name,
-                    value: item.id,
-                  }))}
-                placeholder="Selecione"
-                value={destinationWarehouseId}
-              />
-            </FormField>
-          ) : null}
+      {kind === "entry" ? (
+        <InvoiceFields invoiceId={invoiceId} onChange={setInvoiceId} />
+      ) : null}
 
-          {kind === "entry" && admin ? (
-            <InvoiceFields invoiceId={invoiceId} onChange={setInvoiceId} />
-          ) : null}
+      <div className={`grid gap-4 ${createsNewStock ? "lg:grid-cols-2" : ""}`}>
+        {createsNewStock ? (
+          <FormField>
+            <Label htmlFor="entry-minimum-stock">Estoque minimo inicial</Label>
+            <Input
+              id="entry-minimum-stock"
+              min="0"
+              onChange={(event) => setMinimumQuantity(event.target.value)}
+              required
+              type="number"
+              value={minimumQuantity}
+            />
+          </FormField>
+        ) : null}
 
-          {kind === "entry" && admin && warehouse.isGeneral ? (
-            <FormField>
-              <Label htmlFor="entry-unit-price">Valor unitario</Label>
-              <Input
-                id="entry-unit-price"
-                min="0"
-                onChange={(event) => setUnitPrice(event.target.value)}
-                placeholder="0.00"
-                step="0.01"
-                type="number"
-                value={unitPrice}
-              />
-            </FormField>
-          ) : null}
+        {kind === "entry" ? (
+          <FormField>
+            <Label htmlFor="entry-unit-price">Valor unitario</Label>
+            <Input
+              id="entry-unit-price"
+              min="0"
+              onChange={(event) => setUnitPrice(event.target.value)}
+              placeholder="0.00"
+              required
+              step="0.01"
+              type="number"
+              value={unitPrice}
+            />
+          </FormField>
+        ) : null}
+      </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <FormField>
-              <Label htmlFor={`${kind}-date`}>Data da movimentacao</Label>
-              <Input
-                id={`${kind}-date`}
-                onChange={(event) => setMovementDate(event.target.value)}
-                required
-                type="datetime-local"
-                value={movementDate}
-              />
-            </FormField>
-            <FormField>
-              <Label htmlFor={`${kind}-observation`}>Observacao</Label>
-              <Textarea
-                id={`${kind}-observation`}
-                onChange={(event) => setObservation(event.target.value)}
-                value={observation}
-              />
-            </FormField>
-          </div>
+      <div className="grid gap-4">
+        <FormField>
+          <Label htmlFor={`${kind}-date`}>Data da movimentacao</Label>
+          <Input
+            id={`${kind}-date`}
+            onChange={(event) => setMovementDate(event.target.value)}
+            required
+            type="datetime-local"
+            value={movementDate}
+          />
+        </FormField>
+        <FormField>
+          <Label htmlFor={`${kind}-observation`}>Observacao</Label>
+          <Textarea
+            id={`${kind}-observation`}
+            onChange={(event) => setObservation(event.target.value)}
+            value={observation}
+          />
+        </FormField>
+      </div>
 
-          <Button type="submit">
-            {kind === "entry" || kind === "entryRequest" ? (
-              <PackagePlus className="h-4 w-4" />
-            ) : kind === "output" ? (
-              <PackageMinus className="h-4 w-4" />
-            ) : (
-              <ArrowRightLeft className="h-4 w-4" />
-            )}
-            {kind === "entryRequest" ? "Enviar solicitacao" : "Registrar"}
-          </Button>
+      <Button type="submit">
+        {kind === "entry" || kind === "entryRequest" ? (
+          <PackagePlus className="h-4 w-4" />
+        ) : kind === "output" ? (
+          <PackageMinus className="h-4 w-4" />
+        ) : (
+          <ArrowRightLeft className="h-4 w-4" />
+        )}
+        {kind === "entryRequest" ? "Enviar solicitacao" : "Registrar"}
+      </Button>
     </Form>
   );
 }
@@ -445,10 +644,15 @@ function MovementForm({
 function MovementDialog({
   compact,
   disabled,
+  label,
   ...props
-}: MovementFormProps & { compact?: boolean; disabled?: boolean }) {
+}: MovementFormProps & {
+  compact?: boolean;
+  disabled?: boolean;
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
-  const label = movementLabel(props.kind);
+  const dialogLabel = label ?? movementLabel(props.kind);
   const icon =
     props.kind === "entry" || props.kind === "entryRequest" ? (
       <PackagePlus className="h-4 w-4" />
@@ -461,19 +665,19 @@ function MovementDialog({
   return (
     <>
       <Button
-        aria-label={compact ? label : undefined}
+        aria-label={compact ? dialogLabel : undefined}
         disabled={disabled}
         onClick={() => setOpen(true)}
         size={compact ? "icon" : "default"}
         variant={compact ? "outline" : "default"}
       >
         {icon}
-        {compact ? null : label}
+        {compact ? null : dialogLabel}
       </Button>
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{label}</DialogTitle>
+            <DialogTitle>{dialogLabel}</DialogTitle>
             <DialogDescription>{props.warehouse.name}</DialogDescription>
           </DialogHeader>
           <MovementForm {...props} />
@@ -487,6 +691,79 @@ type BulkStockAction = "delete" | "zero";
 
 function isLowStock(stock: Stock) {
   return stock.currentQuantity <= stock.minimumQuantity;
+}
+
+function stockCurrency(value: number | string | null | undefined) {
+  const amount = Number(value ?? 0);
+
+  return Number.isFinite(amount) ? formatCurrency(amount) : formatCurrency(0);
+}
+
+function movementsForStock(movements: Movement[], stock: Stock) {
+  return movements.filter(
+    (movement) =>
+      movement.productId === stock.productId &&
+      movement.warehouseId === stock.warehouseId,
+  );
+}
+
+function latestMovementForStock(movements: Movement[], stock: Stock) {
+  return movementsForStock(movements, stock)[0] ?? null;
+}
+
+function movementSummary(movement: Movement | null) {
+  if (!movement) {
+    return "Sem movimentacao";
+  }
+
+  return `${movementLabels[movement.type]} - ${formatDate(movement.movementDate)}`;
+}
+
+function StockMovementsDialog({
+  movements,
+  stock,
+}: {
+  movements: Movement[];
+  stock: Stock;
+}) {
+  const [open, setOpen] = useState(false);
+  const [invoiceOnly, setInvoiceOnly] = useState(false);
+  const stockMovements = movementsForStock(movements, stock);
+  const visibleMovements = invoiceOnly
+    ? stockMovements.filter(
+        (movement) => movement.invoiceId || movement.invoice,
+      )
+    : stockMovements;
+
+  return (
+    <>
+      <Button
+        aria-label={`Ver movimentacoes de ${stock.product.name}`}
+        onClick={() => setOpen(true)}
+        size="icon"
+        variant="outline"
+      >
+        <History className="h-4 w-4" />
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Movimentacoes de {stock.product.name}</DialogTitle>
+            <DialogDescription>
+              Entradas e saidas registradas neste almoxarifado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+            <span className="text-sm text-muted-foreground">
+              Somente com nota fiscal
+            </span>
+            <Switch checked={invoiceOnly} onCheckedChange={setInvoiceOnly} />
+          </div>
+          <MovementsTable movements={visibleMovements} />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 function BulkStockActionDialog({
@@ -539,7 +816,9 @@ function BulkStockActionDialog({
       closeDialog(false);
     } catch (caughtError) {
       setMessage(
-        caughtError instanceof Error ? caughtError.message : "Falha ao concluir acao.",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao concluir acao.",
       );
       setSaving(false);
     }
@@ -552,7 +831,11 @@ function BulkStockActionDialog({
         type="button"
         variant={zeroAction ? "outline" : "destructive"}
       >
-        {zeroAction ? <TriangleAlert className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+        {zeroAction ? (
+          <TriangleAlert className="h-4 w-4" />
+        ) : (
+          <Trash2 className="h-4 w-4" />
+        )}
         {title}
       </Button>
       <Dialog onOpenChange={closeDialog} open={open}>
@@ -578,9 +861,12 @@ function BulkStockActionDialog({
                       type="checkbox"
                     />
                     <span className="min-w-0">
-                      <span className="block truncate font-medium">{stock.product.name}</span>
+                      <span className="block truncate font-medium">
+                        {stock.product.name}
+                      </span>
                       <span className="block text-xs text-muted-foreground">
-                        {stock.currentQuantity} {stock.product.unit.abbreviation} | minimo{" "}
+                        {stock.currentQuantity}{" "}
+                        {stock.product.unit.abbreviation} | minimo{" "}
                         {stock.minimumQuantity}
                       </span>
                     </span>
@@ -615,18 +901,18 @@ function BulkStockActionDialog({
 }
 
 function StockTable({
+  movements,
   onMinimumChange,
   onMovementSaved,
   onStockDeleted,
-  products,
   stocks,
   warehouse,
   warehouses,
 }: {
+  movements: Movement[];
   onMinimumChange: (stockId: string, minimumQuantity: number) => Promise<void>;
   onMovementSaved: () => Promise<void>;
   onStockDeleted: (stockId: string) => Promise<void>;
-  products: Product[];
   stocks: Stock[];
   warehouse: Warehouse;
   warehouses: Warehouse[];
@@ -664,7 +950,9 @@ function StockTable({
             cell: (stock) => (
               <>
                 <p className="font-medium">{stock.product.name}</p>
-                <p className="text-xs text-muted-foreground">{stock.product.code}</p>
+                <p className="text-xs text-muted-foreground">
+                  {stock.product.code}
+                </p>
               </>
             ),
             header: "Produto",
@@ -673,21 +961,37 @@ function StockTable({
           {
             cell: (stock) =>
               `${stock.currentQuantity} ${stock.product.unit.abbreviation}`,
-            header: "Quantidade atual",
+            header: "Quantidade",
             key: "quantity",
           },
           {
-            cell: (stock) => <StockBadge stock={stock} />,
-            header: "Estado",
-            key: "state",
+            cell: (stock) => stock.product.category.name,
+            header: "Categoria",
+            key: "category",
           },
           {
-            cell: (stock) => stock.minimumQuantity,
-            header: "Estoque minimo",
-            key: "minimum",
+            cell: (stock) => stockCurrency(stock.unitPriceAverage),
+            header: "Valor unitario",
+            key: "unit-price",
           },
           {
-            cell: (stock) => formatDate(stock.lastMovementAt),
+            cell: (stock) => stockCurrency(stock.totalValue),
+            header: "Valor total",
+            key: "total-value",
+          },
+          {
+            cell: (stock) => (
+              <div className="flex justify-center">
+                <StockMovementsDialog movements={movements} stock={stock} />
+              </div>
+            ),
+            header: "Mov.",
+            headerClassName: "text-center",
+            key: "movements",
+          },
+          {
+            cell: (stock) =>
+              movementSummary(latestMovementForStock(movements, stock)),
             header: "Ultima movimentacao",
             key: "last-movement",
           },
@@ -700,8 +1004,10 @@ function StockTable({
                         compact
                         initialProductId={stock.productId}
                         kind="entry"
+                        label="Entrada no estoque"
+                        lockedProduct={stock.product}
                         onSaved={onMovementSaved}
-                        products={products}
+                        products={[stock.product]}
                         warehouse={warehouse}
                         warehouses={warehouses}
                       />
@@ -710,6 +1016,8 @@ function StockTable({
                         disabled={stock.currentQuantity <= 0}
                         initialProductId={stock.productId}
                         kind="output"
+                        label="Saida avulsa"
+                        lockedProduct={stock.product}
                         onSaved={onMovementSaved}
                         products={[stock.product]}
                         warehouse={warehouse}
@@ -749,8 +1057,10 @@ function StockTable({
                         compact
                         initialProductId={stock.productId}
                         kind="entry"
+                        label="Entrada no estoque"
+                        lockedProduct={stock.product}
                         onSaved={onMovementSaved}
-                        products={products}
+                        products={[stock.product]}
                         warehouse={warehouse}
                         warehouses={warehouses}
                       />
@@ -759,6 +1069,8 @@ function StockTable({
                         disabled={stock.currentQuantity <= 0}
                         initialProductId={stock.productId}
                         kind="output"
+                        label="Saida avulsa"
+                        lockedProduct={stock.product}
                         onSaved={onMovementSaved}
                         products={[stock.product]}
                         warehouse={warehouse}
@@ -781,10 +1093,13 @@ function StockTable({
           [
             stock.product.name,
             stock.product.code,
+            stock.product.category.name,
             stock.product.unit.abbreviation,
             stock.currentQuantity,
             stock.minimumQuantity,
-            formatDate(stock.lastMovementAt),
+            stockCurrency(stock.unitPriceAverage),
+            stockCurrency(stock.totalValue),
+            movementSummary(latestMovementForStock(movements, stock)),
           ].join(" ")
         }
         toolbar={
@@ -849,28 +1164,33 @@ export function WarehouseTabs({
   movements,
   onMinimumChange,
   onMovementSaved,
+  onProductCreated,
   onStockDeleted,
   entryRequestProducts,
+  productCategories,
   products,
+  units,
   warehouse,
   warehouses,
 }: {
   movements: Movement[];
   onMinimumChange: (stockId: string, minimumQuantity: number) => Promise<void>;
   onMovementSaved: () => Promise<void>;
+  onProductCreated?: (product: Product) => Promise<void> | void;
   onStockDeleted: (stockId: string) => Promise<void>;
   entryRequestProducts?: Product[];
+  productCategories?: ProductCategory[];
   products: Product[];
+  units?: UnitOfMeasure[];
   warehouse: Warehouse;
   warehouses: Warehouse[];
 }) {
   const { session } = useSession();
   const operator = session?.user.role === "OPERATOR";
-  const stockProducts = warehouse.stocks
-    .filter((stock) => stock.currentQuantity > 0)
-    .map((stock) => stock.product);
   const lowStock = warehouse.stocks.filter(
-    (stock) => stock.currentQuantity > 0 && stock.currentQuantity <= stock.minimumQuantity,
+    (stock) =>
+      stock.currentQuantity > 0 &&
+      stock.currentQuantity <= stock.minimumQuantity,
   );
 
   return (
@@ -885,7 +1205,10 @@ export function WarehouseTabs({
           <MovementDialog
             kind="entry"
             onSaved={onMovementSaved}
+            onProductCreated={onProductCreated}
+            productCategories={productCategories}
             products={products}
+            units={units}
             warehouse={warehouse}
             warehouses={warehouses}
           />
@@ -898,13 +1221,6 @@ export function WarehouseTabs({
               warehouses={warehouses}
             />
           ) : null}
-          <MovementDialog
-            kind="output"
-            onSaved={onMovementSaved}
-            products={stockProducts}
-            warehouse={warehouse}
-            warehouses={warehouses}
-          />
           {warehouse.isGeneral && !operator ? (
             <MovementDialog
               kind="transfer"
@@ -934,10 +1250,10 @@ export function WarehouseTabs({
             </Alert>
           )}
           <StockTable
+            movements={movements}
             onMinimumChange={onMinimumChange}
             onMovementSaved={onMovementSaved}
             onStockDeleted={onStockDeleted}
-            products={products}
             stocks={warehouse.stocks}
             warehouse={warehouse}
             warehouses={warehouses}
@@ -946,10 +1262,10 @@ export function WarehouseTabs({
       </TabsContent>
       <TabsContent value="stock">
         <StockTable
+          movements={movements}
           onMinimumChange={onMinimumChange}
           onMovementSaved={onMovementSaved}
           onStockDeleted={onStockDeleted}
-          products={products}
           stocks={warehouse.stocks}
           warehouse={warehouse}
           warehouses={warehouses}
@@ -964,9 +1280,17 @@ export function WarehouseTabs({
 
 export function WarehouseDetailPage() {
   const { warehouseId = "missing" } = useParams();
-  const warehouse = useApiResource<Warehouse | null>(`/warehouses/${warehouseId}`, null);
+  const warehouse = useApiResource<Warehouse | null>(
+    `/warehouses/${warehouseId}`,
+    null,
+  );
   const warehouses = useApiResource<Warehouse[]>("/warehouses", []);
   const products = useApiResource<Product[]>("/products", []);
+  const productCategories = useApiResource<ProductCategory[]>(
+    "/product-categories",
+    [],
+  );
+  const units = useApiResource<UnitOfMeasure[]>("/units", []);
   const entryRequestProducts = useApiResource<Product[]>(
     "/entry-requests/available-products",
     [],
@@ -978,7 +1302,20 @@ export function WarehouseDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   async function reloadOperations() {
-    await Promise.all([warehouse.reload(), warehouses.reload(), movements.reload()]);
+    await Promise.all([
+      warehouse.reload(),
+      warehouses.reload(),
+      movements.reload(),
+    ]);
+  }
+
+  function addProductToOptions(product: Product) {
+    products.setData((currentProducts) =>
+      [
+        ...currentProducts.filter((item) => item.id !== product.id),
+        product,
+      ].sort((a, b) => a.code.localeCompare(b.code)),
+    );
   }
 
   async function updateMinimum(stockId: string, minimumQuantity: number) {
@@ -991,7 +1328,9 @@ export function WarehouseDetailPage() {
       await warehouse.reload();
     } catch (caughtError) {
       setMessage(
-        caughtError instanceof Error ? caughtError.message : "Falha ao atualizar minimo.",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao atualizar minimo.",
       );
     }
   }
@@ -1005,7 +1344,9 @@ export function WarehouseDetailPage() {
       await warehouse.reload();
     } catch (caughtError) {
       setMessage(
-        caughtError instanceof Error ? caughtError.message : "Falha ao remover estoque.",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao remover estoque.",
       );
     }
   }
@@ -1014,6 +1355,8 @@ export function WarehouseDetailPage() {
     warehouse.loading ||
     warehouses.loading ||
     products.loading ||
+    productCategories.loading ||
+    units.loading ||
     entryRequestProducts.loading ||
     movements.loading
   ) {
@@ -1024,6 +1367,8 @@ export function WarehouseDetailPage() {
     warehouse.error ||
     warehouses.error ||
     products.error ||
+    productCategories.error ||
+    units.error ||
     entryRequestProducts.error ||
     movements.error
   ) {
@@ -1033,6 +1378,8 @@ export function WarehouseDetailPage() {
           warehouse.error ??
           warehouses.error ??
           products.error ??
+          productCategories.error ??
+          units.error ??
           entryRequestProducts.error ??
           movements.error ??
           ""
@@ -1049,7 +1396,9 @@ export function WarehouseDetailPage() {
   const currentYear = new Date().getFullYear();
   const monthlyMovements = movements.data.filter((movement) => {
     const date = new Date(movement.movementDate);
-    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    return (
+      date.getMonth() === currentMonth && date.getFullYear() === currentYear
+    );
   });
   const monthEntries = monthlyMovements.filter((movement) =>
     movement.type.includes("ENTRADA"),
@@ -1060,8 +1409,8 @@ export function WarehouseDetailPage() {
 
   return (
     <section className="space-y-5">
-      <div className="space-y-3">
-        <Button asChild size="sm" variant="ghost">
+      <div className="space-y-0 flex flex-row-reverse items-center justify-between">
+        <Button asChild variant="outline">
           <Link to="/dashboard">
             <ArrowLeft className="h-4 w-4" />
             Voltar ao dashboard
@@ -1075,7 +1424,8 @@ export function WarehouseDetailPage() {
             </div>
             <h2 className="text-2xl font-semibold">{warehouse.data.name}</h2>
             <p className="text-sm text-muted-foreground">
-              {warehouse.data.description || "Operacao de estoque do almoxarifado."}
+              {warehouse.data.description ||
+                "Operacao de estoque do almoxarifado."}
             </p>
           </div>
         </div>
@@ -1084,7 +1434,9 @@ export function WarehouseDetailPage() {
       {message ? (
         <Alert className="border-sky-200 bg-sky-50 text-sky-950">
           <AlertTitle>Atualizacao</AlertTitle>
-          <AlertDescription className="text-sky-900">{message}</AlertDescription>
+          <AlertDescription className="text-sky-900">
+            {message}
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -1120,9 +1472,12 @@ export function WarehouseDetailPage() {
         movements={movements.data}
         onMinimumChange={updateMinimum}
         onMovementSaved={reloadOperations}
+        onProductCreated={addProductToOptions}
         onStockDeleted={deleteStock}
         entryRequestProducts={entryRequestProducts.data}
+        productCategories={productCategories.data}
         products={products.data}
+        units={units.data}
         warehouse={warehouse.data}
         warehouses={warehouses.data}
       />

@@ -98,6 +98,7 @@ stockRoutes.post(
             data: {
               currentQuantity: 0,
               lastMovementAt: movementDate,
+              totalValue: 0,
             },
           }),
         ];

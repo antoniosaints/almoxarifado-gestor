@@ -27,6 +27,8 @@ const stock: Stock = {
   minimumQuantity: 4,
   product,
   productId: product.id,
+  totalValue: 279.96,
+  unitPriceAverage: 23.33,
   warehouse: {
     active: true,
     category: {
