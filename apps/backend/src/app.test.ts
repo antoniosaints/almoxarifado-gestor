@@ -460,6 +460,244 @@ describe("api", () => {
     });
   });
 
+  it("limits operator invoice list to assigned warehouse movements", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const assignedWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    const blockedWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado de Obras",
+      },
+    });
+    const assignedInvoice = await prisma.invoice.create({
+      data: {
+        cnpj: "12345678000190",
+        companyName: "Fornecedor Saude",
+        issueDate: new Date("2026-05-20T12:00:00.000Z"),
+        number: "NF-SAude",
+      },
+    });
+    const blockedInvoice = await prisma.invoice.create({
+      data: {
+        cnpj: "98765432000110",
+        companyName: "Fornecedor Obras",
+        issueDate: new Date("2026-05-21T12:00:00.000Z"),
+        number: "NF-Obras",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+        warehouseAssignments: {
+          create: {
+            warehouseId: assignedWarehouse.id,
+          },
+        },
+      },
+    });
+
+    await prisma.stockMovement.createMany({
+      data: [
+        {
+          invoiceId: assignedInvoice.id,
+          movementDate: new Date("2026-05-22T12:00:00.000Z"),
+          productId: product.id,
+          quantity: 3,
+          responsibleUserId: user.id,
+          type: "ENTRADA",
+          warehouseId: assignedWarehouse.id,
+        },
+        {
+          invoiceId: blockedInvoice.id,
+          movementDate: new Date("2026-05-22T12:00:00.000Z"),
+          productId: product.id,
+          quantity: 5,
+          responsibleUserId: user.id,
+          type: "ENTRADA",
+          warehouseId: blockedWarehouse.id,
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get("/invoices")
+      .set("Authorization", authorizationFor(operator));
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((invoice: { id: string }) => invoice.id)).toEqual([
+      assignedInvoice.id,
+    ]);
+    expect(response.body[0].movements).toHaveLength(1);
+    expect(response.body[0].movements[0].warehouse.id).toBe(assignedWarehouse.id);
+  });
+
+  it("imports invoice XML, maps products and updates stock", async () => {
+    const { product, productCategory, unit, user, warehouseCategory } =
+      await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    const mappedProduct = await prisma.product.create({
+      data: {
+        categoryId: productCategory.id,
+        code: "0000002",
+        name: "Clips 26mm",
+        unitId: unit.id,
+      },
+    });
+    const xml = `
+      <nfeProc>
+        <NFe>
+          <infNFe Id="NFe41260512345678000190550010000001231000001234">
+            <ide>
+              <serie>1</serie>
+              <nNF>123</nNF>
+              <dhEmi>2026-05-22T09:30:00-03:00</dhEmi>
+            </ide>
+            <emit>
+              <CNPJ>12345678000190</CNPJ>
+              <xNome>Fornecedor Municipal LTDA</xNome>
+              <xFant>Fornecedor Municipal</xFant>
+              <IE>1234567890</IE>
+              <IM>998877</IM>
+              <enderEmit>
+                <xLgr>Rua Central</xLgr>
+                <nro>100</nro>
+                <xBairro>Centro</xBairro>
+                <xMun>Curitiba</xMun>
+                <UF>PR</UF>
+                <CEP>80000000</CEP>
+                <fone>4133334444</fone>
+              </enderEmit>
+            </emit>
+            <det nItem="1">
+              <prod>
+                <cProd>PAP-EXT</cProd>
+                <xProd>Papel A4</xProd>
+                <uCom>PCT</uCom>
+                <qCom>2.0000</qCom>
+                <vUnCom>25.50</vUnCom>
+                <vProd>51.00</vProd>
+              </prod>
+            </det>
+            <det nItem="2">
+              <prod>
+                <cProd>CLP-001</cProd>
+                <xProd>Clips galvanizado</xProd>
+                <uCom>CX</uCom>
+                <qCom>5.0000</qCom>
+                <vUnCom>8.00</vUnCom>
+                <vProd>40.00</vProd>
+              </prod>
+            </det>
+            <total>
+              <ICMSTot>
+                <vNF>91.00</vNF>
+              </ICMSTot>
+            </total>
+          </infNFe>
+        </NFe>
+      </nfeProc>
+    `;
+
+    const preview = await request(app)
+      .post("/invoices/import-xml/preview")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }))
+      .send({ xml });
+
+    expect(preview.status).toBe(200);
+    expect(preview.body.invoice).toMatchObject({
+      companyName: "Fornecedor Municipal LTDA",
+      number: "123",
+      totalValue: 91,
+    });
+    expect(preview.body.items).toMatchObject([
+      {
+        code: "PAP-EXT",
+        index: 0,
+        name: "Papel A4",
+        suggestedProduct: {
+          id: product.id,
+        },
+      },
+      {
+        code: "CLP-001",
+        index: 1,
+        name: "Clips galvanizado",
+        suggestedProduct: null,
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/invoices/import-xml")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }))
+      .send({
+        categoryId: productCategory.id,
+        productMappings: [{ itemIndex: 1, productId: mappedProduct.id }],
+        warehouseId: warehouse.id,
+        xml,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.invoice).toMatchObject({
+      cnpj: "12345678000190",
+      companyAddress: "Rua Central, 100, Centro",
+      companyCity: "Curitiba",
+      companyName: "Fornecedor Municipal LTDA",
+      companyPhone: "4133334444",
+      companyState: "PR",
+      companyTradeName: "Fornecedor Municipal",
+      companyZipCode: "80000000",
+      invoiceKey: "41260512345678000190550010000001231000001234",
+      number: "123",
+      series: "1",
+      stateRegistration: "1234567890",
+    });
+    expect(response.body.invoice.movements).toHaveLength(2);
+
+    await expect(
+      prisma.stock.findUnique({
+        where: {
+          warehouseId_productId: {
+            productId: product.id,
+            warehouseId: warehouse.id,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      currentQuantity: 2,
+      totalValue: expect.anything(),
+    });
+
+    await expect(
+      prisma.stock.findUnique({
+        where: {
+          warehouseId_productId: {
+            productId: mappedProduct.id,
+            warehouseId: warehouse.id,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({ currentQuantity: 5 });
+    await expect(
+      prisma.product.findFirst({ where: { name: "Clips galvanizado" } }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.unitOfMeasure.findUnique({ where: { abbreviation: "CX" } }),
+    ).resolves.toMatchObject({ name: "CX" });
+  });
+
   it("returns admin insights for KPI dashboard", async () => {
     const { user } = await createBaseFixture(prisma);
 

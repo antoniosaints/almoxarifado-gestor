@@ -95,6 +95,34 @@ const outsideProduct: Product = {
   unitId: "unit",
 };
 
+const generalWarehouseWithStock: Warehouse = {
+  ...warehouseWithStock,
+  id: "central",
+  isGeneral: true,
+  name: "Almoxarifado Central",
+  stocks: [
+    warehouseWithStock.stocks[0],
+    {
+      currentQuantity: 0,
+      id: "central-detergent",
+      lastMovementAt: null,
+      minimumQuantity: 0,
+      product: outsideProduct,
+      productId: outsideProduct.id,
+      totalValue: 0,
+      unitPriceAverage: 0,
+      warehouseId: "central",
+    },
+  ],
+};
+
+function openOverviewTab() {
+  const overviewTab = screen.getByRole("tab", { name: "Visao geral" });
+
+  fireEvent.pointerDown(overviewTab, { button: 0, ctrlKey: false });
+  fireEvent.click(overviewTab);
+}
+
 function openStockTab() {
   const stockTab = screen.getByRole("tab", { name: "Estoque" });
 
@@ -102,9 +130,18 @@ function openStockTab() {
   fireEvent.click(stockTab);
 }
 
+function openHistoryTab() {
+  const historyTab = screen.getByRole("tab", { name: "Historico" });
+
+  fireEvent.pointerDown(historyTab, { button: 0, ctrlKey: false });
+  fireEvent.click(historyTab);
+}
+
 describe("WarehouseTabs", () => {
   afterEach(() => {
+    window.localStorage.clear();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("hides the transfer tab outside the general warehouse", () => {
@@ -164,6 +201,8 @@ describe("WarehouseTabs", () => {
       </MemoryRouter>,
     );
 
+    openStockTab();
+
     expect(screen.getByText("Incluir Estoque")).toBeInTheDocument();
     expect(screen.getByText("Solicitar")).toBeInTheDocument();
     expect(
@@ -198,7 +237,43 @@ describe("WarehouseTabs", () => {
       </MemoryRouter>,
     );
 
+    openStockTab();
+
     fireEvent.click(screen.getByRole("button", { name: "Solicitar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Produto" }));
+
+    expect(screen.getByText("0000001 - Papel A4")).toBeInTheDocument();
+    expect(screen.queryByText("0000003 - Detergente")).not.toBeInTheDocument();
+  });
+
+  it("only offers products with available stock for transfers from the general warehouse", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product, outsideProduct]}
+            warehouse={generalWarehouseWithStock}
+            warehouses={[generalWarehouseWithStock, warehouse]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Transferir" }));
     fireEvent.click(screen.getByRole("button", { name: "Produto" }));
 
     expect(screen.getByText("0000001 - Papel A4")).toBeInTheDocument();
@@ -303,6 +378,105 @@ describe("WarehouseTabs", () => {
     expect(screen.getByRole("button", { name: "Exportar PDF" })).toBeInTheDocument();
   });
 
+  it("offers a filtered movement export from the history tab", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[
+              {
+                id: "movement-1",
+                invoice: {
+                  cnpj: "12345678000190",
+                  companyName: "Fornecedor Municipal",
+                  id: "invoice-1",
+                  issueDate: "2026-05-23T12:00:00.000Z",
+                  number: "NF-1",
+                },
+                invoiceId: "invoice-1",
+                movementDate: "2026-05-23T12:00:00.000Z",
+                product: warehouseWithStock.stocks[0].product,
+                productId: "paper",
+                quantity: 8,
+                type: "ENTRADA",
+                warehouse: {
+                  id: "health",
+                  name: "Almoxarifado da Saude",
+                },
+                warehouseId: "health",
+              },
+            ]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openHistoryTab();
+    fireEvent.click(screen.getByRole("button", { name: "Exportar movimentacoes" }));
+
+    expect(screen.getByRole("dialog", { name: "Exportar movimentacoes" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Periodo de")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filtrar nota fiscal" })).toHaveTextContent(
+      "Todas as notas",
+    );
+    expect(screen.getByRole("button", { name: "Filtrar produto" })).toHaveTextContent(
+      "Todos os produtos",
+    );
+  });
+
+  it("selects all stocks in bulk admin dialogs", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openStockTab();
+    fireEvent.click(screen.getByRole("button", { name: "Zerar estoques" }));
+    expect(screen.getByText("0 de 1 estoque(s) selecionado(s).")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Selecionar todos" }));
+
+    expect(screen.getByText("1 de 1 estoque(s) selecionado(s).")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Limpar selecao" })).toBeInTheDocument();
+  });
+
   it("shows statistical overview instead of duplicating the stock table", () => {
     render(
       <MemoryRouter>
@@ -330,9 +504,75 @@ describe("WarehouseTabs", () => {
       </MemoryRouter>,
     );
 
+    openOverviewTab();
+
     expect(screen.queryByLabelText("Buscar produto no estoque...")).not.toBeInTheDocument();
     expect(screen.getByText("Valor total em estoque")).toBeInTheDocument();
     expect(screen.getByText("Distribuicao por categoria")).toBeInTheDocument();
+  });
+
+  it("uses stock as the first tab and remembers the selected tab", () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText("Buscar produto no estoque...")).toBeInTheDocument();
+
+    openHistoryTab();
+    expect(window.localStorage.getItem("warehouse-tab-health")).toBe("history");
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Exportar movimentacoes" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the include stock modal open after creating a new product", async () => {
@@ -414,6 +654,7 @@ describe("WarehouseTabs", () => {
       </MemoryRouter>,
     );
 
+    fireEvent.click(await screen.findByRole("tab", { name: "Estoque" }));
     fireEvent.click(await screen.findByRole("button", { name: "Incluir Estoque" }));
     fireEvent.click(screen.getByRole("button", { name: "Novo produto" }));
     fireEvent.change(screen.getByLabelText("Nome"), {

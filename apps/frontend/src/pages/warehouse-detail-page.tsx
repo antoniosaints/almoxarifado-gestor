@@ -15,7 +15,7 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
@@ -89,6 +89,22 @@ type ProductDraft = {
   unitId: string;
 };
 
+const warehouseTabValues = ["stock", "overview", "history"] as const;
+
+function readStoredWarehouseTab(warehouseId: string) {
+  if (typeof window === "undefined") {
+    return "stock";
+  }
+
+  const storedTab = window.localStorage.getItem(`warehouse-tab-${warehouseId}`);
+
+  if (storedTab && warehouseTabValues.some((tab) => tab === storedTab)) {
+    return storedTab;
+  }
+
+  return "stock";
+}
+
 function emptyProductDraft(
   productCategories: ProductCategory[],
   units: UnitOfMeasure[],
@@ -111,16 +127,85 @@ function NewProductInlineDialog({
   productCategories: ProductCategory[];
   units: UnitOfMeasure[];
 }) {
+  const { session } = useSession();
+  const canManageCatalog = session?.user.role === "ADMIN";
   const [open, setOpen] = useState(false);
+  const [availableCategories, setAvailableCategories] =
+    useState(productCategories);
+  const [availableUnits, setAvailableUnits] = useState(units);
   const [draft, setDraft] = useState<ProductDraft>(() =>
     emptyProductDraft(productCategories, units),
   );
   const [message, setMessage] = useState<string | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newUnitAbbreviation, setNewUnitAbbreviation] = useState("");
+  const [newUnitName, setNewUnitName] = useState("");
+
+  useEffect(() => {
+    setAvailableCategories(productCategories);
+  }, [productCategories]);
+
+  useEffect(() => {
+    setAvailableUnits(units);
+  }, [units]);
 
   function openDialog() {
-    setDraft(emptyProductDraft(productCategories, units));
+    setDraft(emptyProductDraft(availableCategories, availableUnits));
     setMessage(null);
+    setNewCategoryName("");
+    setNewUnitAbbreviation("");
+    setNewUnitName("");
     setOpen(true);
+  }
+
+  async function createCategory() {
+    if (!newCategoryName.trim()) {
+      return;
+    }
+
+    try {
+      const category = await api<ProductCategory>("/product-categories", {
+        body: JSON.stringify({ description: "", name: newCategoryName.trim() }),
+        method: "POST",
+      });
+
+      setAvailableCategories((categories) => [...categories, category]);
+      setDraft((current) =>
+        current ? { ...current, categoryId: category.id } : current,
+      );
+      setNewCategoryName("");
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao criar categoria.",
+      );
+    }
+  }
+
+  async function createUnit() {
+    if (!newUnitName.trim() || !newUnitAbbreviation.trim()) {
+      return;
+    }
+
+    try {
+      const unit = await api<UnitOfMeasure>("/units", {
+        body: JSON.stringify({
+          abbreviation: newUnitAbbreviation.trim(),
+          name: newUnitName.trim(),
+        }),
+        method: "POST",
+      });
+
+      setAvailableUnits((currentUnits) => [...currentUnits, unit]);
+      setDraft((current) => (current ? { ...current, unitId: unit.id } : current));
+      setNewUnitAbbreviation("");
+      setNewUnitName("");
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error ? caughtError.message : "Falha ao criar unidade.",
+      );
+    }
   }
 
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
@@ -194,13 +279,31 @@ function NewProductInlineDialog({
                   onValueChange={(categoryId) =>
                     setDraft({ ...draft, categoryId })
                   }
-                  options={productCategories.map((category) => ({
+                  options={availableCategories.map((category) => ({
                     label: category.name,
                     value: category.id,
                   }))}
                   placeholder="Selecione"
                   value={draft.categoryId}
                 />
+                {canManageCatalog ? (
+                  <div className="mt-2 flex gap-2">
+                    <Input
+                      aria-label="Nova categoria"
+                      onChange={(event) => setNewCategoryName(event.target.value)}
+                      placeholder="Nova categoria"
+                      value={newCategoryName}
+                    />
+                    <Button
+                      disabled={!newCategoryName.trim()}
+                      onClick={() => void createCategory()}
+                      type="button"
+                      variant="outline"
+                    >
+                      Criar
+                    </Button>
+                  </div>
+                ) : null}
               </FormField>
               <FormField>
                 <Label htmlFor="stock-product-unit">Unidade</Label>
@@ -208,13 +311,41 @@ function NewProductInlineDialog({
                   ariaLabel="Unidade"
                   id="stock-product-unit"
                   onValueChange={(unitId) => setDraft({ ...draft, unitId })}
-                  options={units.map((unit) => ({
+                  options={availableUnits.map((unit) => ({
                     label: `${unit.name} / ${unit.abbreviation}`,
                     value: unit.id,
                   }))}
                   placeholder="Selecione"
                   value={draft.unitId}
                 />
+                {canManageCatalog ? (
+                  <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_5rem_auto]">
+                    <Input
+                      aria-label="Nova unidade"
+                      onChange={(event) => setNewUnitName(event.target.value)}
+                      placeholder="Nova unidade"
+                      value={newUnitName}
+                    />
+                    <Input
+                      aria-label="Sigla da nova unidade"
+                      onChange={(event) =>
+                        setNewUnitAbbreviation(event.target.value)
+                      }
+                      placeholder="Sigla"
+                      value={newUnitAbbreviation}
+                    />
+                    <Button
+                      disabled={
+                        !newUnitName.trim() || !newUnitAbbreviation.trim()
+                      }
+                      onClick={() => void createUnit()}
+                      type="button"
+                      variant="outline"
+                    >
+                      Criar
+                    </Button>
+                  </div>
+                ) : null}
               </FormField>
             </div>
             <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
@@ -732,12 +863,10 @@ function StockMovementsDialog({
   movements: Movement[];
   stock: Stock;
 }) {
-  const { session } = useSession();
   const [open, setOpen] = useState(false);
   const [invoiceOnly, setInvoiceOnly] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const admin = session?.user.role === "ADMIN";
   const stockMovements = movementsForStock(movements, stock);
   const visibleMovements = invoiceOnly
     ? stockMovements.filter(
@@ -806,21 +935,215 @@ function StockMovementsDialog({
           </div>
           {message ? <ResourceError message={message} /> : null}
           <MovementsTable movements={visibleMovements} showInvoiceAction />
-          {admin ? (
-            <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                {visibleMovements.length} movimentacao(oes) no filtro atual.
-              </p>
-              <Button
-                disabled={exporting}
-                onClick={() => void exportMovementsPdf()}
-                type="button"
-              >
-                <FileDown className="h-4 w-4" />
-                {exporting ? "Gerando..." : "Exportar PDF"}
-              </Button>
+          <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {visibleMovements.length} movimentacao(oes) no filtro atual.
+            </p>
+            <Button
+              disabled={exporting}
+              onClick={() => void exportMovementsPdf()}
+              type="button"
+            >
+              <FileDown className="h-4 w-4" />
+              {exporting ? "Gerando..." : "Exportar PDF"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function uniqueProductsForMovements(movements: Movement[], stocks: Stock[]) {
+  const products = new Map<string, Product>();
+
+  stocks.forEach((stock) => products.set(stock.productId, stock.product));
+  movements.forEach((movement) => {
+    if (products.has(movement.productId)) {
+      return;
+    }
+
+    products.set(movement.productId, {
+      ...movement.product,
+      active: true,
+      category: {
+        id: "",
+        name: "",
+      },
+      categoryId: "",
+      unitId: movement.product.unit.id,
+    });
+  });
+
+  return Array.from(products.values()).sort((left, right) =>
+    left.code.localeCompare(right.code),
+  );
+}
+
+function WarehouseMovementsExportDialog({
+  movements,
+  stocks,
+  warehouse,
+}: {
+  movements: Movement[];
+  stocks: Stock[];
+  warehouse: Warehouse;
+}) {
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [invoiceId, setInvoiceId] = useState("");
+  const [productId, setProductId] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const products = uniqueProductsForMovements(movements, stocks);
+  const invoiceOptions = Array.from(
+    movements.reduce<Map<string, NonNullable<Movement["invoice"]>>>(
+      (options, movement) => {
+        if (movement.invoiceId && movement.invoice) {
+          options.set(movement.invoiceId, movement.invoice);
+        }
+
+        return options;
+      },
+      new Map(),
+    ),
+  )
+    .map(([id, invoice]) => ({
+      id,
+      invoice,
+    }))
+    .sort((left, right) => left.invoice.number.localeCompare(right.invoice.number));
+
+  async function exportMovements(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setExporting(true);
+    setMessage(null);
+
+    const params = new URLSearchParams({
+      warehouseIds: warehouse.id,
+    });
+
+    if (from) {
+      params.set("from", from);
+    }
+
+    if (to) {
+      params.set("to", to);
+    }
+
+    if (invoiceId) {
+      params.set("invoiceId", invoiceId);
+    }
+
+    if (productId) {
+      params.set("productId", productId);
+    }
+
+    try {
+      const blob = await apiFile(`/reports/movements?${params.toString()}`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `movimentacoes-${warehouse.name
+        .replace(/[^a-z0-9_-]+/gi, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLocaleLowerCase("pt-BR")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setOpen(false);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao exportar movimentacoes.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={() => setOpen(true)} type="button" variant="outline">
+        <FileDown className="h-4 w-4" />
+        Exportar movimentacoes
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Exportar movimentacoes</DialogTitle>
+            <DialogDescription>
+              Exporte todo o historico ou filtre por periodo, nota e produto.
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={exportMovements}>
+            {message ? <ResourceError message={message} /> : null}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField>
+                <Label htmlFor="warehouse-movement-export-from">Periodo de</Label>
+                <Input
+                  id="warehouse-movement-export-from"
+                  onChange={(event) => setFrom(event.target.value)}
+                  type="date"
+                  value={from}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="warehouse-movement-export-to">Periodo ate</Label>
+                <Input
+                  id="warehouse-movement-export-to"
+                  onChange={(event) => setTo(event.target.value)}
+                  type="date"
+                  value={to}
+                />
+              </FormField>
             </div>
-          ) : null}
+            <FormField>
+              <Label htmlFor="warehouse-movement-export-invoice">Nota fiscal</Label>
+              <SearchSelect
+                ariaLabel="Filtrar nota fiscal"
+                id="warehouse-movement-export-invoice"
+                onValueChange={setInvoiceId}
+                options={[
+                  { label: "Todas as notas", value: "" },
+                  ...invoiceOptions.map(({ id, invoice }) => ({
+                    label: `${invoice.number} - ${invoice.companyName}`,
+                    searchText: invoice.cnpj,
+                    value: id,
+                  })),
+                ]}
+                placeholder="Todas as notas"
+                searchPlaceholder="Buscar por nota, empresa ou CNPJ..."
+                value={invoiceId}
+              />
+            </FormField>
+            <FormField>
+              <Label htmlFor="warehouse-movement-export-product">Produto</Label>
+              <SearchSelect
+                ariaLabel="Filtrar produto"
+                id="warehouse-movement-export-product"
+                onValueChange={setProductId}
+                options={[
+                  { label: "Todos os produtos", value: "" },
+                  ...products.map((product) => ({
+                    label: `${product.code} - ${product.name}`,
+                    searchText: product.unit.abbreviation,
+                    value: product.id,
+                  })),
+                ]}
+                placeholder="Todos os produtos"
+                value={productId}
+              />
+            </FormField>
+            <Button disabled={exporting} type="submit">
+              <FileDown className="h-4 w-4" />
+              {exporting ? "Gerando..." : "Exportar PDF"}
+            </Button>
+          </Form>
         </DialogContent>
       </Dialog>
     </>
@@ -843,6 +1166,7 @@ function BulkStockActionDialog({
   const [saving, setSaving] = useState(false);
   const zeroAction = action === "zero";
   const title = zeroAction ? "Zerar estoques" : "Apagar estoques";
+  const allSelected = stocks.length > 0 && selectedIds.length === stocks.length;
 
   function toggleStock(stockId: string) {
     setSelectedIds((current) =>
@@ -850,6 +1174,10 @@ function BulkStockActionDialog({
         ? current.filter((id) => id !== stockId)
         : [...current, stockId],
     );
+  }
+
+  function toggleAllStocks() {
+    setSelectedIds(allSelected ? [] : stocks.map((stock) => stock.id));
   }
 
   function closeDialog(nextOpen: boolean) {
@@ -909,6 +1237,20 @@ function BulkStockActionDialog({
           </DialogHeader>
           <Form onSubmit={confirmAction}>
             {message ? <ResourceError message={message} /> : null}
+            <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                {selectedIds.length} de {stocks.length} estoque(s) selecionado(s).
+              </p>
+              <Button
+                disabled={!stocks.length}
+                onClick={toggleAllStocks}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {allSelected ? "Limpar selecao" : "Selecionar todos"}
+              </Button>
+            </div>
             <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-2">
               {stocks.map((stock) => (
                 <label
@@ -1026,7 +1368,8 @@ function StockTable({
               <>
                 <div className="flex items-center gap-1">
                   <p>
-                    {stock.currentQuantity}{stock.product.unit.abbreviation}
+                    {stock.currentQuantity}
+                    {stock.product.unit.abbreviation}
                   </p>
                   {stock.currentQuantity <= stock.minimumQuantity && (
                     <p
@@ -1457,43 +1800,64 @@ export function WarehouseTabs({
 }) {
   const { session } = useSession();
   const operator = session?.user.role === "OPERATOR";
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(() =>
+    readStoredWarehouseTab(warehouse.id),
+  );
   const stockedProducts = warehouse.stocks
     .map((stock) => stock.product)
     .sort((left, right) => left.code.localeCompare(right.code));
+  const transferableProducts = warehouse.stocks
+    .filter((stock) => stock.currentQuantity > 0)
+    .map((stock) => stock.product)
+    .sort((left, right) => left.code.localeCompare(right.code));
+
+  useEffect(() => {
+    setActiveTab(readStoredWarehouseTab(warehouse.id));
+  }, [warehouse.id]);
+
+  function selectTab(nextTab: string) {
+    if (!warehouseTabValues.some((tab) => tab === nextTab)) {
+      return;
+    }
+
+    setActiveTab(nextTab);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(`warehouse-tab-${warehouse.id}`, nextTab);
+    }
+  }
 
   return (
-    <Tabs onValueChange={setActiveTab} value={activeTab}>
+    <Tabs onValueChange={selectTab} value={activeTab}>
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <TabsList>
-          <TabsTrigger
-            onClick={() => setActiveTab("overview")}
-            value="overview"
-          >
-            <ChartArea size={15} className="mr-1" />
-            Visao geral
-          </TabsTrigger>
-          <TabsTrigger onClick={() => setActiveTab("stock")} value="stock">
+          <TabsTrigger onClick={() => selectTab("stock")} value="stock">
             <Box size={15} className="mr-1" />
             Estoque
           </TabsTrigger>
-          <TabsTrigger onClick={() => setActiveTab("history")} value="history">
+          <TabsTrigger onClick={() => selectTab("overview")} value="overview">
+            <ChartArea size={15} className="mr-1" />
+            Visao geral
+          </TabsTrigger>
+          <TabsTrigger onClick={() => selectTab("history")} value="history">
             <Clock size={15} className="mr-1" />
             Historico
           </TabsTrigger>
         </TabsList>
         <div className="flex flex-wrap gap-2">
-          <MovementDialog
-            kind="entry"
-            onSaved={onMovementSaved}
-            onProductCreated={onProductCreated}
-            productCategories={productCategories}
-            products={products}
-            units={units}
-            warehouse={warehouse}
-            warehouses={warehouses}
-          />
-          {operator && !warehouse.isGeneral ? (
+          {activeTab === "stock" ? (
+            <MovementDialog
+              kind="entry"
+              onSaved={onMovementSaved}
+              onProductCreated={onProductCreated}
+              productCategories={productCategories}
+              products={products}
+              units={units}
+              warehouse={warehouse}
+              warehouses={warehouses}
+            />
+          ) : null}
+          {operator && activeTab === "stock" && !warehouse.isGeneral ? (
             <MovementDialog
               kind="entryRequest"
               onSaved={onMovementSaved}
@@ -1502,20 +1866,24 @@ export function WarehouseTabs({
               warehouses={warehouses}
             />
           ) : null}
-          {warehouse.isGeneral && !operator ? (
+          {warehouse.isGeneral && activeTab === "stock" && !operator ? (
             <MovementDialog
               kind="transfer"
               onSaved={onMovementSaved}
-              products={products}
+              products={transferableProducts}
               warehouse={warehouse}
               warehouses={warehouses}
             />
           ) : null}
+          {activeTab === "history" ? (
+            <WarehouseMovementsExportDialog
+              movements={movements}
+              stocks={warehouse.stocks}
+              warehouse={warehouse}
+            />
+          ) : null}
         </div>
       </div>
-      <TabsContent value="overview">
-        <WarehouseOverview movements={movements} stocks={warehouse.stocks} />
-      </TabsContent>
       <TabsContent value="stock">
         <StockTable
           movements={movements}
@@ -1526,6 +1894,9 @@ export function WarehouseTabs({
           warehouse={warehouse}
           warehouses={warehouses}
         />
+      </TabsContent>
+      <TabsContent value="overview">
+        <WarehouseOverview movements={movements} stocks={warehouse.stocks} />
       </TabsContent>
       <TabsContent value="history">
         <MovementsTable movements={movements} />

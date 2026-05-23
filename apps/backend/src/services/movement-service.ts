@@ -1,5 +1,7 @@
-import { MovementType, type PrismaClient } from "@prisma/client";
+import { MovementType, Prisma, type PrismaClient } from "@prisma/client";
 import { AppError } from "../lib/errors.js";
+
+type PrismaWriter = PrismaClient | Prisma.TransactionClient;
 
 type BaseMovementInput = {
   movementDate: Date;
@@ -39,10 +41,21 @@ function roundCurrency(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-export async function createEntry(prisma: PrismaClient, input: EntryInput) {
+function writeTransaction<T>(
+  prisma: PrismaWriter,
+  operation: (transaction: Prisma.TransactionClient) => Promise<T>,
+) {
+  if ("$transaction" in prisma) {
+    return prisma.$transaction(operation);
+  }
+
+  return operation(prisma);
+}
+
+export async function createEntry(prisma: PrismaWriter, input: EntryInput) {
   assertPositiveQuantity(input.quantity);
 
-  return prisma.$transaction(async (transaction) => {
+  return writeTransaction(prisma, async (transaction) => {
     const existingStock = await transaction.stock.findUnique({
       where: {
         warehouseId_productId: {
@@ -104,10 +117,10 @@ export async function createEntry(prisma: PrismaClient, input: EntryInput) {
   });
 }
 
-export async function createOutput(prisma: PrismaClient, input: OutputInput) {
+export async function createOutput(prisma: PrismaWriter, input: OutputInput) {
   assertPositiveQuantity(input.quantity);
 
-  return prisma.$transaction(async (transaction) => {
+  return writeTransaction(prisma, async (transaction) => {
     const stock = await transaction.stock.findUnique({
       where: {
         warehouseId_productId: {

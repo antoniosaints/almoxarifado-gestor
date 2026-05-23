@@ -79,22 +79,8 @@ export function App() {
           }
           path="/units"
         />
-        <Route
-          element={
-            <AdminRoute>
-              <InvoicesPage />
-            </AdminRoute>
-          }
-          path="/invoices"
-        />
-        <Route
-          element={
-            <AdminRoute>
-              <ReportsPage />
-            </AdminRoute>
-          }
-          path="/reports"
-        />
+        <Route element={<InvoicesPage />} path="/invoices" />
+        <Route element={<ReportsPage />} path="/reports" />
         <Route element={<MovementsPage />} path="/movements" />
         <Route element={<RequestsPage />} path="/requests" />
         <Route

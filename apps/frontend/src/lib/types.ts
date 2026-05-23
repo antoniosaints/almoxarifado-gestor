@@ -87,12 +87,23 @@ export type Session = {
 
 export type Invoice = {
   cnpj: string;
+  companyAddress?: string | null;
+  companyCity?: string | null;
   companyName: string;
+  companyPhone?: string | null;
+  companyState?: string | null;
+  companyTradeName?: string | null;
+  companyZipCode?: string | null;
   id: string;
+  invoiceKey?: string | null;
   issueDate: string;
+  municipalRegistration?: string | null;
   movements?: Movement[];
   number: string;
   observation?: string | null;
+  series?: string | null;
+  stateRegistration?: string | null;
+  totalValue?: number | string;
 };
 
 export type UserWarehouseAssignment = {

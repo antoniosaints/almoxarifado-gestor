@@ -52,9 +52,39 @@ export const unitInput = z.object({
 export const invoiceInput = z.object({
   cnpj: z.string().trim().min(11, "Informe o CNPJ da empresa."),
   companyName: z.string().trim().min(2, "Informe a empresa."),
+  companyTradeName: optionalText,
+  companyAddress: optionalText,
+  companyCity: optionalText,
+  companyPhone: optionalText,
+  companyState: optionalText,
+  companyZipCode: optionalText,
+  invoiceKey: optionalText,
   issueDate: z.coerce.date(),
+  municipalRegistration: optionalText,
   number: z.string().trim().min(1, "Informe o numero da nota."),
   observation: optionalText,
+  series: optionalText,
+  stateRegistration: optionalText,
+  totalValue: z.coerce.number().min(0).optional(),
+});
+
+export const invoiceXmlImportInput = z.object({
+  categoryId: z.string().min(1).optional().nullable(),
+  minimumQuantity: z.coerce.number().int().min(0).default(0),
+  productMappings: z
+    .array(
+      z.object({
+        itemIndex: z.coerce.number().int().min(0),
+        productId: z.string().min(1).optional().nullable(),
+      }),
+    )
+    .default([]),
+  warehouseId: z.string().min(1, "Escolha um almoxarifado."),
+  xml: z.string().min(1, "Selecione o XML da nota."),
+});
+
+export const invoiceXmlPreviewInput = z.object({
+  xml: z.string().min(1, "Selecione o XML da nota."),
 });
 
 export const loginInput = z.object({

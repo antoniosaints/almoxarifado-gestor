@@ -208,13 +208,24 @@ model TransferRequest {
 }
 
 model Invoice {
-  id          String          @id @default(cuid())
-  companyName String
-  cnpj        String
-  number      String
-  issueDate   DateTime
-  observation String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  movements   StockMovement[]
+  id                    String          @id @default(cuid())
+  companyName           String
+  companyTradeName      String?
+  cnpj                  String
+  stateRegistration     String?
+  municipalRegistration String?
+  companyAddress        String?
+  companyCity           String?
+  companyState          String?
+  companyZipCode        String?
+  companyPhone          String?
+  invoiceKey            String?         @unique
+  number                String
+  series                String?
+  issueDate             DateTime
+  totalValue            Decimal         @default(0)
+  observation           String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  movements             StockMovement[]
 }

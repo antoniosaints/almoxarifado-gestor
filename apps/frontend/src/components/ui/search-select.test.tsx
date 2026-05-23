@@ -72,6 +72,80 @@ describe("SearchSelect", () => {
     getBoundingClientRect.mockRestore();
   });
 
+  it("keeps the dropdown anchored below when there is usable room", () => {
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 920,
+    });
+
+    const getBoundingClientRect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function getRect(this: HTMLElement) {
+        if (this.dataset.testid === "modal-scroll-area") {
+          return {
+            bottom: 720,
+            height: 600,
+            left: 0,
+            right: 720,
+            top: 120,
+            width: 720,
+            x: 0,
+            y: 120,
+          } as DOMRect;
+        }
+
+        if (this.getAttribute("aria-label") === "Categoria") {
+          return {
+            bottom: 580,
+            height: 40,
+            left: 36,
+            right: 291,
+            top: 540,
+            width: 255,
+            x: 36,
+            y: 540,
+          } as DOMRect;
+        }
+
+        return {
+          bottom: 0,
+          height: 0,
+          left: 0,
+          right: 0,
+          top: 0,
+          width: 0,
+          x: 0,
+          y: 0,
+        } as DOMRect;
+      });
+
+    render(
+      <div data-testid="modal-scroll-area" style={{ overflowY: "auto" }}>
+        <SearchSelect
+          ariaLabel="Categoria"
+          onValueChange={() => undefined}
+          options={[
+            { label: "Material de expediente", value: "office" },
+            { label: "Material de limpeza", value: "cleaning" },
+            { label: "Medicamentos", value: "medicine" },
+            { label: "Merenda escolar", value: "food" },
+          ]}
+          placeholder="Selecione"
+          value="office"
+        />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Categoria" }));
+
+    const panel = screen.getByTestId("search-select-panel");
+
+    expect(panel).toHaveAttribute("data-side", "bottom");
+    expect(panel).toHaveStyle({ top: "588px" });
+
+    getBoundingClientRect.mockRestore();
+  });
+
   it("uses the modal scroll area as the dropdown boundary", () => {
     Object.defineProperty(window, "innerHeight", {
       configurable: true,
@@ -133,10 +207,11 @@ describe("SearchSelect", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Unidade" }));
 
-    expect(screen.getByTestId("search-select-panel")).toHaveAttribute(
-      "data-side",
-      "top",
-    );
+    const panel = screen.getByTestId("search-select-panel");
+
+    expect(panel).toHaveAttribute("data-side", "top");
+    expect(panel).toHaveClass("fixed");
+    expect(screen.getByTestId("modal-scroll-area")).not.toContainElement(panel);
 
     getBoundingClientRect.mockRestore();
   });

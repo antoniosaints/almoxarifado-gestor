@@ -117,6 +117,9 @@ export function ProductsPage() {
   const units = useApiResource<UnitOfMeasure[]>("/units", []);
   const [draft, setDraft] = useState<ProductDraft | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newUnitName, setNewUnitName] = useState("");
+  const [newUnitAbbreviation, setNewUnitAbbreviation] = useState("");
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -151,6 +154,50 @@ export function ProductsPage() {
       await products.reload();
     } catch (caughtError) {
       setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao remover.");
+    }
+  }
+
+  async function createCategory() {
+    if (!draft || !newCategoryName.trim()) {
+      return;
+    }
+
+    try {
+      const category = await api<ProductCategory>("/product-categories", {
+        body: JSON.stringify({ description: "", name: newCategoryName }),
+        method: "POST",
+      });
+      await categories.reload();
+      setDraft({ ...draft, categoryId: category.id });
+      setNewCategoryName("");
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error ? caughtError.message : "Falha ao criar categoria.",
+      );
+    }
+  }
+
+  async function createUnit() {
+    if (!draft || !newUnitName.trim() || !newUnitAbbreviation.trim()) {
+      return;
+    }
+
+    try {
+      const unit = await api<UnitOfMeasure>("/units", {
+        body: JSON.stringify({
+          abbreviation: newUnitAbbreviation,
+          name: newUnitName,
+        }),
+        method: "POST",
+      });
+      await units.reload();
+      setDraft({ ...draft, unitId: unit.id });
+      setNewUnitName("");
+      setNewUnitAbbreviation("");
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error ? caughtError.message : "Falha ao criar unidade.",
+      );
     }
   }
 
@@ -272,7 +319,17 @@ export function ProductsPage() {
         }
       />
 
-      <Dialog onOpenChange={(open) => !open && setDraft(null)} open={Boolean(draft)}>
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setDraft(null);
+            setNewCategoryName("");
+            setNewUnitName("");
+            setNewUnitAbbreviation("");
+          }
+        }}
+        open={Boolean(draft)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{draft?.id ? "Editar produto" : "Novo produto"}</DialogTitle>
@@ -323,6 +380,22 @@ export function ProductsPage() {
                     placeholder="Selecione"
                     value={draft.categoryId}
                   />
+                  <div className="flex gap-2">
+                    <Input
+                      aria-label="Nova categoria"
+                      onChange={(event) => setNewCategoryName(event.target.value)}
+                      placeholder="Nova categoria"
+                      value={newCategoryName}
+                    />
+                    <Button
+                      disabled={!newCategoryName.trim()}
+                      onClick={() => void createCategory()}
+                      type="button"
+                      variant="outline"
+                    >
+                      Criar
+                    </Button>
+                  </div>
                 </FormField>
                 <FormField>
                   <Label htmlFor="product-unit">Unidade</Label>
@@ -337,6 +410,30 @@ export function ProductsPage() {
                     placeholder="Selecione"
                     value={draft.unitId}
                   />
+                  <div className="grid gap-2 sm:grid-cols-[1fr_5rem_auto]">
+                    <Input
+                      aria-label="Nova unidade"
+                      onChange={(event) => setNewUnitName(event.target.value)}
+                      placeholder="Nova unidade"
+                      value={newUnitName}
+                    />
+                    <Input
+                      aria-label="Sigla da nova unidade"
+                      onChange={(event) =>
+                        setNewUnitAbbreviation(event.target.value.toLocaleUpperCase("pt-BR"))
+                      }
+                      placeholder="UN"
+                      value={newUnitAbbreviation}
+                    />
+                    <Button
+                      disabled={!newUnitName.trim() || !newUnitAbbreviation.trim()}
+                      onClick={() => void createUnit()}
+                      type="button"
+                      variant="outline"
+                    >
+                      Criar
+                    </Button>
+                  </div>
                 </FormField>
               </div>
               <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
