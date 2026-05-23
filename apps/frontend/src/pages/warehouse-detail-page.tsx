@@ -1010,7 +1010,9 @@ function StockTable({
           {
             cell: (stock) => (
               <>
-                <p className="font-medium">{stock.product.name}</p>
+                <p className="font-medium flex items-center gap-1">
+                  {stock.product.name}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {stock.product.code}
                 </p>
@@ -1020,8 +1022,23 @@ function StockTable({
             key: "product",
           },
           {
-            cell: (stock) =>
-              `${stock.currentQuantity} ${stock.product.unit.abbreviation}`,
+            cell: (stock) => (
+              <>
+                <div className="flex items-center gap-1">
+                  <p>
+                    {stock.currentQuantity}{stock.product.unit.abbreviation}
+                  </p>
+                  {stock.currentQuantity <= stock.minimumQuantity && (
+                    <p
+                      className="text-xs text-red-500"
+                      title={`O estoque está baixo, minimo ${stock.minimumQuantity}${stock.product.unit.abbreviation}`}
+                    >
+                      <TriangleAlert className="h-4 w-4" />
+                    </p>
+                  )}
+                </div>
+              </>
+            ),
             header: "Quantidade",
             key: "quantity",
           },
@@ -1449,7 +1466,10 @@ export function WarehouseTabs({
     <Tabs onValueChange={setActiveTab} value={activeTab}>
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <TabsList>
-          <TabsTrigger onClick={() => setActiveTab("overview")} value="overview">
+          <TabsTrigger
+            onClick={() => setActiveTab("overview")}
+            value="overview"
+          >
             <ChartArea size={15} className="mr-1" />
             Visao geral
           </TabsTrigger>
