@@ -81,6 +81,11 @@ export const minimumStockInput = z.object({
   minimumQuantity: z.coerce.number().int().min(0, "O estoque minimo nao pode ser negativo."),
 });
 
+export const stockBulkAdminInput = z.object({
+  password: z.string().min(1, "Informe sua senha para confirmar."),
+  stockIds: z.array(z.string().min(1)).min(1, "Selecione ao menos um estoque."),
+});
+
 const movementBase = z.object({
   movementDate: z.coerce.date(),
   observation: optionalText,
@@ -90,6 +95,11 @@ const movementBase = z.object({
 
 export const entryInput = movementBase.extend({
   invoiceId: z.string().min(1).optional().nullable(),
+  minimumQuantity: z.coerce
+    .number()
+    .int()
+    .min(0, "O estoque minimo nao pode ser negativo.")
+    .optional(),
   unitPrice: z.coerce
     .number()
     .min(0, "O valor unitario nao pode ser negativo.")

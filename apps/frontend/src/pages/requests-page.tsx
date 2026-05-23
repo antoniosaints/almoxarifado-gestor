@@ -1,5 +1,6 @@
 import { Check, PackagePlus, X } from "lucide-react";
 import { useState } from "react";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -13,14 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, useApiResource } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -242,104 +235,158 @@ export function RequestsPage() {
           <TabsTrigger value="transfers">Recebimentos</TabsTrigger>
         </TabsList>
         <TabsContent value="entries">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Produto</TableHead>
-                <TableHead>Almoxarifado</TableHead>
-                <TableHead>Quantidade</TableHead>
-                <TableHead>Solicitante</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Acoes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entries.data.map((request) => (
-                <TableRow key={request.id}>
-                  <TableCell>
+          <DataTable
+            columns={[
+              {
+                cell: (request) => (
+                  <>
                     <p className="font-medium">{request.product.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {formatDate(request.movementDate)}
                     </p>
-                  </TableCell>
-                  <TableCell>{request.warehouse.name}</TableCell>
-                  <TableCell>
-                    {request.quantity} {request.product.unit.abbreviation}
-                  </TableCell>
-                  <TableCell>{request.requestedBy.name}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={request.status} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-2">
-                      {admin && request.status === "PENDING" ? (
-                        <>
-                          <ApprovalDialog
-                            invoices={invoices.data}
-                            onApprove={approve}
-                            request={request}
-                          />
-                          <Button
-                            onClick={() => void reject(request.id)}
-                            size="sm"
-                            variant="outline"
-                          >
-                            <X className="h-4 w-4" />
-                            Rejeitar
-                          </Button>
-                        </>
-                      ) : (
-                        "-"
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </>
+                ),
+                header: "Produto",
+                key: "product",
+              },
+              {
+                cell: (request) => request.warehouse.name,
+                header: "Almoxarifado",
+                key: "warehouse",
+              },
+              {
+                cell: (request) =>
+                  `${request.quantity} ${request.product.unit.abbreviation}`,
+                header: "Quantidade",
+                key: "quantity",
+              },
+              {
+                cell: (request) => request.requestedBy.name,
+                header: "Solicitante",
+                key: "requester",
+              },
+              {
+                cell: (request) => <StatusBadge status={request.status} />,
+                header: "Status",
+                key: "status",
+              },
+              {
+                cell: (request) => (
+                  <div className="flex justify-end gap-2">
+                    {admin && request.status === "PENDING" ? (
+                      <>
+                        <ApprovalDialog
+                          invoices={invoices.data}
+                          onApprove={approve}
+                          request={request}
+                        />
+                        <Button
+                          onClick={() => void reject(request.id)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <X className="h-4 w-4" />
+                          Rejeitar
+                        </Button>
+                      </>
+                    ) : (
+                      "-"
+                    )}
+                  </div>
+                ),
+                cellClassName: "text-right",
+                header: "Acoes",
+                headerClassName: "text-right",
+                key: "actions",
+              },
+            ]}
+            data={entries.data}
+            emptyMessage="Nenhuma solicitacao de entrada encontrada."
+            getRowId={(request) => request.id}
+            searchPlaceholder="Buscar entrada solicitada..."
+            searchText={(request) =>
+              [
+                request.product.name,
+                request.product.code,
+                request.product.unit.abbreviation,
+                request.warehouse.name,
+                request.requestedBy.name,
+                request.status,
+                formatDate(request.movementDate),
+              ].join(" ")
+            }
+          />
         </TabsContent>
         <TabsContent value="transfers">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Produto</TableHead>
-                <TableHead>Origem</TableHead>
-                <TableHead>Destino</TableHead>
-                <TableHead>Quantidade</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Acoes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transfers.data.map((request) => (
-                <TableRow key={request.id}>
-                  <TableCell>
+          <DataTable
+            columns={[
+              {
+                cell: (request) => (
+                  <>
                     <p className="font-medium">{request.product.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {formatDate(request.createdAt)}
                     </p>
-                  </TableCell>
-                  <TableCell>{request.sourceWarehouse.name}</TableCell>
-                  <TableCell>{request.destinationWarehouse.name}</TableCell>
-                  <TableCell>
-                    {request.quantity} {request.product.unit.abbreviation}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={request.status} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end">
-                      {request.status === "PENDING_RECEIPT" ? (
-                        <ReceiveDialog onReceive={receive} request={request} />
-                      ) : (
-                        "-"
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </>
+                ),
+                header: "Produto",
+                key: "product",
+              },
+              {
+                cell: (request) => request.sourceWarehouse.name,
+                header: "Origem",
+                key: "source",
+              },
+              {
+                cell: (request) => request.destinationWarehouse.name,
+                header: "Destino",
+                key: "destination",
+              },
+              {
+                cell: (request) =>
+                  `${request.quantity} ${request.product.unit.abbreviation}`,
+                header: "Quantidade",
+                key: "quantity",
+              },
+              {
+                cell: (request) => <StatusBadge status={request.status} />,
+                header: "Status",
+                key: "status",
+              },
+              {
+                cell: (request) => (
+                  <div className="flex justify-end">
+                    {request.status === "PENDING_RECEIPT" ? (
+                      <ReceiveDialog onReceive={receive} request={request} />
+                    ) : (
+                      "-"
+                    )}
+                  </div>
+                ),
+                cellClassName: "text-right",
+                header: "Acoes",
+                headerClassName: "text-right",
+                key: "actions",
+              },
+            ]}
+            data={transfers.data}
+            emptyMessage="Nenhum recebimento encontrado."
+            getRowId={(request) => request.id}
+            searchPlaceholder="Buscar recebimento..."
+            searchText={(request) =>
+              [
+                request.product.name,
+                request.product.code,
+                request.product.unit.abbreviation,
+                request.sourceWarehouse.name,
+                request.destinationWarehouse.name,
+                request.status,
+                request.createdBy.name,
+                request.receivedBy?.name,
+                formatDate(request.createdAt),
+              ].join(" ")
+            }
+          />
         </TabsContent>
       </Tabs>
     </section>

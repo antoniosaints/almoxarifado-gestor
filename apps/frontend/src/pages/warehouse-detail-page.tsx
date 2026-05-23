@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { StockBadge } from "@/components/domain/stock-badge";
 import { SummaryCard } from "@/components/domain/summary-card";
@@ -27,23 +28,23 @@ import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import type { Invoice, Movement, Product, Stock, Warehouse } from "@/lib/types";
+import type {
+  Invoice,
+  Movement,
+  Product,
+  Stock,
+  Warehouse,
+} from "@/lib/types";
 import { formatDate, todayInputValue } from "@/lib/utils";
 import { MovementsTable } from "./movements-page";
 
 type MovementFormProps = {
+  initialProductId?: string;
   kind: "entry" | "entryRequest" | "output" | "transfer";
   onSaved: () => Promise<void>;
   products: Product[];
@@ -64,7 +65,7 @@ function movementLabel(kind: MovementFormProps["kind"]) {
     return "Saida avulsa";
   }
 
-  return "Transferir para outro almoxarifado";
+  return "Transferir";
 }
 
 function InvoiceFields({
@@ -87,6 +88,7 @@ function InvoiceFields({
 
   async function saveInvoice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    event.stopPropagation();
     setMessage(null);
 
     try {
@@ -200,21 +202,29 @@ function InvoiceFields({
 }
 
 function MovementForm({
+  initialProductId = "",
   kind,
   onSaved,
   products,
   warehouse,
   warehouses,
 }: MovementFormProps) {
-  const [productId, setProductId] = useState("");
+  const { session } = useSession();
+  const admin = session?.user.role === "ADMIN";
+  const [productId, setProductId] = useState(initialProductId);
   const [quantity, setQuantity] = useState("1");
   const [observation, setObservation] = useState("");
   const [destinationNote, setDestinationNote] = useState("");
   const [destinationWarehouseId, setDestinationWarehouseId] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
+  const [minimumQuantity, setMinimumQuantity] = useState("0");
   const [movementDate, setMovementDate] = useState(todayInputValue());
   const [message, setMessage] = useState<string | null>(null);
+  const createsNewStock =
+    kind === "entry" &&
+    Boolean(productId) &&
+    !warehouse.stocks.some((stock) => stock.productId === productId);
 
   const endpoint = {
     entry: "/movements/entry",
@@ -240,6 +250,7 @@ function MovementForm({
         : {
             destinationNote,
             invoiceId: kind === "entry" ? invoiceId || null : undefined,
+            minimumQuantity: createsNewStock ? minimumQuantity : undefined,
             movementDate,
             observation,
             productId,
@@ -261,6 +272,7 @@ function MovementForm({
       setDestinationNote("");
       setDestinationWarehouseId("");
       setUnitPrice("");
+      setMinimumQuantity("0");
       setMessage(
         kind === "entryRequest"
           ? "Solicitacao enviada."
@@ -303,6 +315,7 @@ function MovementForm({
               <Label htmlFor={`${kind}-product`}>Produto</Label>
               <SearchSelect
                 ariaLabel="Produto"
+                emptyMessage="Nenhum produto disponivel."
                 id={`${kind}-product`}
                 onValueChange={setProductId}
                 options={products
@@ -328,6 +341,20 @@ function MovementForm({
               />
             </FormField>
           </div>
+
+          {createsNewStock ? (
+            <FormField>
+              <Label htmlFor="entry-minimum-stock">Estoque minimo inicial</Label>
+              <Input
+                id="entry-minimum-stock"
+                min="0"
+                onChange={(event) => setMinimumQuantity(event.target.value)}
+                required
+                type="number"
+                value={minimumQuantity}
+              />
+            </FormField>
+          ) : null}
 
           {kind === "output" ? (
             <FormField>
@@ -361,11 +388,11 @@ function MovementForm({
             </FormField>
           ) : null}
 
-          {kind === "entry" ? (
+          {kind === "entry" && admin ? (
             <InvoiceFields invoiceId={invoiceId} onChange={setInvoiceId} />
           ) : null}
 
-          {kind === "entry" && warehouse.isGeneral ? (
+          {kind === "entry" && admin && warehouse.isGeneral ? (
             <FormField>
               <Label htmlFor="entry-unit-price">Valor unitario</Label>
               <Input
@@ -415,21 +442,33 @@ function MovementForm({
   );
 }
 
-function MovementDialog(props: MovementFormProps) {
+function MovementDialog({
+  compact,
+  disabled,
+  ...props
+}: MovementFormProps & { compact?: boolean; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const label = movementLabel(props.kind);
+  const icon =
+    props.kind === "entry" || props.kind === "entryRequest" ? (
+      <PackagePlus className="h-4 w-4" />
+    ) : props.kind === "output" ? (
+      <PackageMinus className="h-4 w-4" />
+    ) : (
+      <ArrowRightLeft className="h-4 w-4" />
+    );
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
-        {props.kind === "entry" || props.kind === "entryRequest" ? (
-          <PackagePlus className="h-4 w-4" />
-        ) : props.kind === "output" ? (
-          <PackageMinus className="h-4 w-4" />
-        ) : (
-          <ArrowRightLeft className="h-4 w-4" />
-        )}
-        {label}
+      <Button
+        aria-label={compact ? label : undefined}
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+        size={compact ? "icon" : "default"}
+        variant={compact ? "outline" : "default"}
+      >
+        {icon}
+        {compact ? null : label}
       </Button>
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -444,19 +483,162 @@ function MovementDialog(props: MovementFormProps) {
   );
 }
 
-function StockTable({
-  onMinimumChange,
-  onStockDeleted,
+type BulkStockAction = "delete" | "zero";
+
+function isLowStock(stock: Stock) {
+  return stock.currentQuantity <= stock.minimumQuantity;
+}
+
+function BulkStockActionDialog({
+  action,
+  onChanged,
   stocks,
 }: {
-  onMinimumChange: (stockId: string, minimumQuantity: number) => Promise<void>;
-  onStockDeleted: (stockId: string) => Promise<void>;
+  action: BulkStockAction;
+  onChanged: () => Promise<void>;
   stocks: Stock[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const zeroAction = action === "zero";
+  const title = zeroAction ? "Zerar estoques" : "Apagar estoques";
+
+  function toggleStock(stockId: string) {
+    setSelectedIds((current) =>
+      current.includes(stockId)
+        ? current.filter((id) => id !== stockId)
+        : [...current, stockId],
+    );
+  }
+
+  function closeDialog(nextOpen: boolean) {
+    setOpen(nextOpen);
+
+    if (!nextOpen) {
+      setPassword("");
+      setSelectedIds([]);
+      setMessage(null);
+      setSaving(false);
+    }
+  }
+
+  async function confirmAction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage(null);
+    setSaving(true);
+
+    try {
+      await api(zeroAction ? "/stocks/bulk-zero" : "/stocks/bulk-delete", {
+        body: JSON.stringify({ password, stockIds: selectedIds }),
+        method: "POST",
+      });
+      await onChanged();
+      closeDialog(false);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error ? caughtError.message : "Falha ao concluir acao.",
+      );
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        onClick={() => setOpen(true)}
+        type="button"
+        variant={zeroAction ? "outline" : "destructive"}
+      >
+        {zeroAction ? <TriangleAlert className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+        {title}
+      </Button>
+      <Dialog onOpenChange={closeDialog} open={open}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>
+              Selecione os estoques e confirme com a senha do usuario admin.
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={confirmAction}>
+            {message ? <ResourceError message={message} /> : null}
+            <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-2">
+              {stocks.map((stock) => (
+                <label
+                  className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"
+                  key={stock.id}
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <input
+                      checked={selectedIds.includes(stock.id)}
+                      onChange={() => toggleStock(stock.id)}
+                      type="checkbox"
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{stock.product.name}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {stock.currentQuantity} {stock.product.unit.abbreviation} | minimo{" "}
+                        {stock.minimumQuantity}
+                      </span>
+                    </span>
+                  </span>
+                  <StockBadge stock={stock} />
+                </label>
+              ))}
+              {!stocks.length ? (
+                <p className="p-3 text-sm text-muted-foreground">
+                  Nenhum estoque disponivel.
+                </p>
+              ) : null}
+            </div>
+            <FormField>
+              <Label htmlFor={`${action}-stock-password`}>Senha do admin</Label>
+              <Input
+                id={`${action}-stock-password`}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                type="password"
+                value={password}
+              />
+            </FormField>
+            <Button disabled={!selectedIds.length || saving} type="submit">
+              {saving ? "Confirmando..." : title}
+            </Button>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function StockTable({
+  onMinimumChange,
+  onMovementSaved,
+  onStockDeleted,
+  products,
+  stocks,
+  warehouse,
+  warehouses,
+}: {
+  onMinimumChange: (stockId: string, minimumQuantity: number) => Promise<void>;
+  onMovementSaved: () => Promise<void>;
+  onStockDeleted: (stockId: string) => Promise<void>;
+  products: Product[];
+  stocks: Stock[];
+  warehouse: Warehouse;
+  warehouses: Warehouse[];
 }) {
   const { session } = useSession();
   const [editingStock, setEditingStock] = useState<Stock | null>(null);
+  const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [minimum, setMinimum] = useState("");
   const admin = session?.user.role === "ADMIN";
+  const filteredStocks = showLowStockOnly
+    ? stocks.filter((stock) => isLowStock(stock))
+    : stocks;
 
   function editStock(stock: Stock) {
     setEditingStock(stock);
@@ -476,60 +658,161 @@ function StockTable({
 
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Produto</TableHead>
-            <TableHead>Quantidade atual</TableHead>
-            <TableHead>Estado</TableHead>
-            <TableHead>Estoque minimo</TableHead>
-            <TableHead>Ultima movimentacao</TableHead>
-            {admin ? <TableHead className="text-right">Acoes</TableHead> : null}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {stocks.map((stock) => (
-            <TableRow key={stock.id}>
-              <TableCell>
+      <DataTable
+        columns={[
+          {
+            cell: (stock) => (
+              <>
                 <p className="font-medium">{stock.product.name}</p>
                 <p className="text-xs text-muted-foreground">{stock.product.code}</p>
-              </TableCell>
-              <TableCell>
-                {stock.currentQuantity} {stock.product.unit.abbreviation}
-              </TableCell>
-              <TableCell>
-                <StockBadge stock={stock} />
-              </TableCell>
-              <TableCell>{stock.minimumQuantity}</TableCell>
-              <TableCell>{formatDate(stock.lastMovementAt)}</TableCell>
-              {admin ? (
-                <TableCell>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      aria-label={`Editar estoque de ${stock.product.name}`}
-                      onClick={() => editStock(stock)}
-                      size="icon"
-                      variant="outline"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    {!stock.lastMovementAt ? (
+              </>
+            ),
+            header: "Produto",
+            key: "product",
+          },
+          {
+            cell: (stock) =>
+              `${stock.currentQuantity} ${stock.product.unit.abbreviation}`,
+            header: "Quantidade atual",
+            key: "quantity",
+          },
+          {
+            cell: (stock) => <StockBadge stock={stock} />,
+            header: "Estado",
+            key: "state",
+          },
+          {
+            cell: (stock) => stock.minimumQuantity,
+            header: "Estoque minimo",
+            key: "minimum",
+          },
+          {
+            cell: (stock) => formatDate(stock.lastMovementAt),
+            header: "Ultima movimentacao",
+            key: "last-movement",
+          },
+          ...(admin
+            ? [
+                {
+                  cell: (stock: Stock) => (
+                    <div className="flex justify-end gap-2">
+                      <MovementDialog
+                        compact
+                        initialProductId={stock.productId}
+                        kind="entry"
+                        onSaved={onMovementSaved}
+                        products={products}
+                        warehouse={warehouse}
+                        warehouses={warehouses}
+                      />
+                      <MovementDialog
+                        compact
+                        disabled={stock.currentQuantity <= 0}
+                        initialProductId={stock.productId}
+                        kind="output"
+                        onSaved={onMovementSaved}
+                        products={[stock.product]}
+                        warehouse={warehouse}
+                        warehouses={warehouses}
+                      />
                       <Button
-                        aria-label={`Remover estoque de ${stock.product.name}`}
-                        onClick={() => void onStockDeleted(stock.id)}
+                        aria-label={`Editar estoque de ${stock.product.name}`}
+                        onClick={() => editStock(stock)}
                         size="icon"
                         variant="outline"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
                       </Button>
-                    ) : null}
-                  </div>
-                </TableCell>
-              ) : null}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                      {!stock.lastMovementAt ? (
+                        <Button
+                          aria-label={`Remover estoque de ${stock.product.name}`}
+                          onClick={() => void onStockDeleted(stock.id)}
+                          size="icon"
+                          variant="outline"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  ),
+                  cellClassName: "text-right",
+                  header: "Acoes",
+                  headerClassName: "text-right",
+                  key: "actions",
+                },
+              ]
+            : [
+                {
+                  cell: (stock: Stock) => (
+                    <div className="flex justify-end gap-2">
+                      <MovementDialog
+                        compact
+                        initialProductId={stock.productId}
+                        kind="entry"
+                        onSaved={onMovementSaved}
+                        products={products}
+                        warehouse={warehouse}
+                        warehouses={warehouses}
+                      />
+                      <MovementDialog
+                        compact
+                        disabled={stock.currentQuantity <= 0}
+                        initialProductId={stock.productId}
+                        kind="output"
+                        onSaved={onMovementSaved}
+                        products={[stock.product]}
+                        warehouse={warehouse}
+                        warehouses={warehouses}
+                      />
+                    </div>
+                  ),
+                  cellClassName: "text-right",
+                  header: "Acoes",
+                  headerClassName: "text-right",
+                  key: "actions",
+                },
+              ]),
+        ]}
+        data={filteredStocks}
+        emptyMessage="Nenhum estoque cadastrado."
+        getRowId={(stock) => stock.id}
+        searchPlaceholder="Buscar produto no estoque..."
+        searchText={(stock) =>
+          [
+            stock.product.name,
+            stock.product.code,
+            stock.product.unit.abbreviation,
+            stock.currentQuantity,
+            stock.minimumQuantity,
+            formatDate(stock.lastMovementAt),
+          ].join(" ")
+        }
+        toolbar={
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Switch
+                checked={showLowStockOnly}
+                onCheckedChange={setShowLowStockOnly}
+              />
+              Estoques baixos
+            </label>
+            {admin ? (
+              <>
+                <BulkStockActionDialog
+                  action="zero"
+                  onChanged={onMovementSaved}
+                  stocks={stocks}
+                />
+                <BulkStockActionDialog
+                  action="delete"
+                  onChanged={onMovementSaved}
+                  stocks={stocks}
+                />
+              </>
+            ) : null}
+          </div>
+        }
+      />
 
       <Dialog
         onOpenChange={(open) => !open && setEditingStock(null)}
@@ -583,6 +866,9 @@ export function WarehouseTabs({
 }) {
   const { session } = useSession();
   const operator = session?.user.role === "OPERATOR";
+  const stockProducts = warehouse.stocks
+    .filter((stock) => stock.currentQuantity > 0)
+    .map((stock) => stock.product);
   const lowStock = warehouse.stocks.filter(
     (stock) => stock.currentQuantity > 0 && stock.currentQuantity <= stock.minimumQuantity,
   );
@@ -597,16 +883,25 @@ export function WarehouseTabs({
         </TabsList>
         <div className="flex flex-wrap gap-2">
           <MovementDialog
-            kind={operator ? "entryRequest" : "entry"}
+            kind="entry"
             onSaved={onMovementSaved}
-            products={operator ? entryRequestProducts ?? products : products}
+            products={products}
             warehouse={warehouse}
             warehouses={warehouses}
           />
+          {operator && !warehouse.isGeneral ? (
+            <MovementDialog
+              kind="entryRequest"
+              onSaved={onMovementSaved}
+              products={entryRequestProducts ?? products}
+              warehouse={warehouse}
+              warehouses={warehouses}
+            />
+          ) : null}
           <MovementDialog
             kind="output"
             onSaved={onMovementSaved}
-            products={products}
+            products={stockProducts}
             warehouse={warehouse}
             warehouses={warehouses}
           />
@@ -640,16 +935,24 @@ export function WarehouseTabs({
           )}
           <StockTable
             onMinimumChange={onMinimumChange}
+            onMovementSaved={onMovementSaved}
             onStockDeleted={onStockDeleted}
+            products={products}
             stocks={warehouse.stocks}
+            warehouse={warehouse}
+            warehouses={warehouses}
           />
         </div>
       </TabsContent>
       <TabsContent value="stock">
         <StockTable
           onMinimumChange={onMinimumChange}
+          onMovementSaved={onMovementSaved}
           onStockDeleted={onStockDeleted}
+          products={products}
           stocks={warehouse.stocks}
+          warehouse={warehouse}
+          warehouses={warehouses}
         />
       </TabsContent>
       <TabsContent value="history">

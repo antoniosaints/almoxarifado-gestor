@@ -1,5 +1,6 @@
 import { Boxes, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { StockBadge } from "@/components/domain/stock-badge";
 import { Badge } from "@/components/ui/badge";
@@ -15,14 +16,6 @@ import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
 import type { Product, ProductCategory, Stock, UnitOfMeasure } from "@/lib/types";
@@ -73,37 +66,44 @@ export function ProductStocksDialog({
             <DialogTitle>Estoques de {product.name}</DialogTitle>
             <DialogDescription>Quantidades do produto por almoxarifado.</DialogDescription>
           </DialogHeader>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Almoxarifado</TableHead>
-                <TableHead>Quantidade</TableHead>
-                <TableHead>Estoque minimo</TableHead>
-                <TableHead>Estado</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {productStocks.map((stock) => (
-                <TableRow key={stock.id}>
-                  <TableCell className="font-medium">
-                    {stock.warehouse?.name ?? "Almoxarifado"}
-                  </TableCell>
-                  <TableCell>
-                    {stock.currentQuantity} {product.unit.abbreviation}
-                  </TableCell>
-                  <TableCell>{stock.minimumQuantity}</TableCell>
-                  <TableCell>
-                    <StockBadge stock={stock} />
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!productStocks.length ? (
-                <TableRow>
-                  <TableCell colSpan={4}>Nenhum estoque cadastrado.</TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+          <DataTable
+            columns={[
+              {
+                cell: (stock) => stock.warehouse?.name ?? "Almoxarifado",
+                cellClassName: "font-medium",
+                header: "Almoxarifado",
+                key: "warehouse",
+              },
+              {
+                cell: (stock) => `${stock.currentQuantity} ${product.unit.abbreviation}`,
+                header: "Quantidade",
+                key: "quantity",
+              },
+              {
+                cell: (stock) => stock.minimumQuantity,
+                header: "Estoque minimo",
+                key: "minimum",
+              },
+              {
+                cell: (stock) => <StockBadge stock={stock} />,
+                header: "Estado",
+                key: "state",
+              },
+            ]}
+            data={productStocks}
+            emptyMessage="Nenhum estoque cadastrado."
+            getRowId={(stock) => stock.id}
+            initialPageSize={5}
+            searchPlaceholder="Buscar almoxarifado..."
+            searchText={(stock) =>
+              [
+                stock.warehouse?.name,
+                stock.currentQuantity,
+                stock.minimumQuantity,
+                product.name,
+              ].join(" ")
+            }
+          />
         </DialogContent>
       </Dialog>
     </>
@@ -181,67 +181,96 @@ export function ProductsPage() {
 
       {message ? <ResourceError message={message} /> : null}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Codigo</TableHead>
-            <TableHead>Produto</TableHead>
-            <TableHead>Categoria</TableHead>
-            <TableHead>Unidade</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {products.data.map((product) => (
-            <TableRow key={product.id}>
-              <TableCell className="font-mono">{product.code}</TableCell>
-              <TableCell>
+      <DataTable
+        columns={[
+          {
+            cell: (product) => product.code,
+            cellClassName: "font-mono",
+            header: "Codigo",
+            key: "code",
+          },
+          {
+            cell: (product) => (
+              <>
                 <p className="font-medium">{product.name}</p>
                 <p className="text-xs text-muted-foreground">{product.description}</p>
-              </TableCell>
-              <TableCell>{product.category.name}</TableCell>
-              <TableCell>{product.unit.abbreviation}</TableCell>
-              <TableCell>
-                <Badge variant={product.active ? "success" : "zero"}>
-                  {product.active ? "Ativo" : "Inativo"}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex justify-end gap-2">
-                  <ProductStocksDialog product={product} stocks={stocks.data} />
-                  <Button
-                    aria-label={`Editar ${product.name}`}
-                    onClick={() =>
-                      setDraft({
-                        active: product.active,
-                        categoryId: product.categoryId,
-                        code: product.code,
-                        description: product.description ?? "",
-                        id: product.id,
-                        name: product.name,
-                        unitId: product.unitId,
-                      })
-                    }
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    aria-label={`Remover ${product.name}`}
-                    onClick={() => void remove(product.id)}
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+              </>
+            ),
+            header: "Produto",
+            key: "product",
+          },
+          {
+            cell: (product) => product.category.name,
+            header: "Categoria",
+            key: "category",
+          },
+          {
+            cell: (product) => product.unit.abbreviation,
+            header: "Unidade",
+            key: "unit",
+          },
+          {
+            cell: (product) => (
+              <Badge variant={product.active ? "success" : "zero"}>
+                {product.active ? "Ativo" : "Inativo"}
+              </Badge>
+            ),
+            header: "Status",
+            key: "status",
+          },
+          {
+            cell: (product) => (
+              <div className="flex justify-end gap-2">
+                <ProductStocksDialog product={product} stocks={stocks.data} />
+                <Button
+                  aria-label={`Editar ${product.name}`}
+                  onClick={() =>
+                    setDraft({
+                      active: product.active,
+                      categoryId: product.categoryId,
+                      code: product.code,
+                      description: product.description ?? "",
+                      id: product.id,
+                      name: product.name,
+                      unitId: product.unitId,
+                    })
+                  }
+                  size="icon"
+                  variant="outline"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  aria-label={`Remover ${product.name}`}
+                  onClick={() => void remove(product.id)}
+                  size="icon"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ),
+            cellClassName: "text-right",
+            header: "Acoes",
+            headerClassName: "text-right",
+            key: "actions",
+          },
+        ]}
+        data={products.data}
+        emptyMessage="Nenhum produto cadastrado."
+        getRowId={(product) => product.id}
+        searchPlaceholder="Buscar por codigo, produto ou categoria..."
+        searchText={(product) =>
+          [
+            product.code,
+            product.name,
+            product.description,
+            product.category.name,
+            product.unit.abbreviation,
+            product.active ? "ativo" : "inativo",
+          ].join(" ")
+        }
+      />
 
       <Dialog onOpenChange={(open) => !open && setDraft(null)} open={Boolean(draft)}>
         <DialogContent>

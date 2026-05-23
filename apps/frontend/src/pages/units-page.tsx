@@ -1,5 +1,6 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,14 +13,6 @@ import {
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { api, useApiResource } from "@/lib/api";
 import type { UnitOfMeasure } from "@/lib/types";
 
@@ -83,43 +76,52 @@ export function UnitsPage() {
         </Button>
       </div>
       {message ? <ResourceError message={message} /> : null}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Nome</TableHead>
-            <TableHead>Sigla</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {units.data.map((unit) => (
-            <TableRow key={unit.id}>
-              <TableCell className="font-medium">{unit.name}</TableCell>
-              <TableCell>{unit.abbreviation}</TableCell>
-              <TableCell>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    aria-label={`Editar ${unit.name}`}
-                    onClick={() => setDraft(unit)}
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    aria-label={`Remover ${unit.name}`}
-                    onClick={() => void remove(unit.id)}
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        columns={[
+          {
+            cell: (unit) => unit.name,
+            cellClassName: "font-medium",
+            header: "Nome",
+            key: "name",
+          },
+          {
+            cell: (unit) => unit.abbreviation,
+            header: "Sigla",
+            key: "abbreviation",
+          },
+          {
+            cell: (unit) => (
+              <div className="flex justify-end gap-2">
+                <Button
+                  aria-label={`Editar ${unit.name}`}
+                  onClick={() => setDraft(unit)}
+                  size="icon"
+                  variant="outline"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  aria-label={`Remover ${unit.name}`}
+                  onClick={() => void remove(unit.id)}
+                  size="icon"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ),
+            cellClassName: "text-right",
+            header: "Acoes",
+            headerClassName: "text-right",
+            key: "actions",
+          },
+        ]}
+        data={units.data}
+        emptyMessage="Nenhuma unidade cadastrada."
+        getRowId={(unit) => unit.id}
+        searchPlaceholder="Buscar unidade ou sigla..."
+        searchText={(unit) => [unit.name, unit.abbreviation].join(" ")}
+      />
 
       <Dialog onOpenChange={(open) => !open && setDraft(null)} open={Boolean(draft)}>
         <DialogContent>

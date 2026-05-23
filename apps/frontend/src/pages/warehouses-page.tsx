@@ -1,6 +1,7 @@
 import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,16 +16,9 @@ import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import type { Warehouse, WarehouseCategory } from "@/lib/types";
 
 type WarehouseDraft = {
@@ -47,10 +41,12 @@ function emptyDraft(categoryId = ""): WarehouseDraft {
 }
 
 export function WarehousesPage() {
+  const { session } = useSession();
   const warehouses = useApiResource<Warehouse[]>("/warehouses", []);
   const categories = useApiResource<WarehouseCategory[]>("/warehouse-categories", []);
   const [draft, setDraft] = useState<WarehouseDraft | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const admin = session?.user.role === "ADMIN";
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,83 +91,111 @@ export function WarehousesPage() {
           <p className="text-sm text-muted-foreground">Cadastros</p>
           <h2 className="text-2xl font-semibold">Almoxarifados</h2>
         </div>
-        <Button onClick={() => setDraft(emptyDraft(categories.data[0]?.id))}>
-          <Plus className="h-4 w-4" />
-          Novo almoxarifado
-        </Button>
+        {admin ? (
+          <Button onClick={() => setDraft(emptyDraft(categories.data[0]?.id))}>
+            <Plus className="h-4 w-4" />
+            Novo almoxarifado
+          </Button>
+        ) : null}
       </div>
 
       {message ? <ResourceError message={message} /> : null}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Nome</TableHead>
-            <TableHead>Categoria</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Produtos</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {warehouses.data.map((warehouse) => (
-            <TableRow key={warehouse.id}>
-              <TableCell>
-                <div className="flex flex-wrap items-center gap-2 font-medium">
-                  {warehouse.name}
-                  {warehouse.isGeneral ? <Badge>Geral</Badge> : null}
-                </div>
-              </TableCell>
-              <TableCell>{warehouse.category.name}</TableCell>
-              <TableCell>
-                <Badge variant={warehouse.active ? "success" : "zero"}>
-                  {warehouse.active ? "Ativo" : "Inativo"}
-                </Badge>
-              </TableCell>
-              <TableCell>{warehouse.summary.stockedProducts}</TableCell>
-              <TableCell>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    aria-label={`Acessar ${warehouse.name}`}
-                    asChild
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Link to={`/warehouses/${warehouse.id}`}>
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                  <Button
-                    aria-label={`Editar ${warehouse.name}`}
-                    onClick={() =>
-                      setDraft({
-                        active: warehouse.active,
-                        categoryId: warehouse.categoryId,
-                        description: warehouse.description ?? "",
-                        id: warehouse.id,
-                        isGeneral: warehouse.isGeneral,
-                        name: warehouse.name,
-                      })
-                    }
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    aria-label={`Remover ${warehouse.name}`}
-                    onClick={() => void remove(warehouse.id)}
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        columns={[
+          {
+            cell: (warehouse) => (
+              <div className="flex flex-wrap items-center gap-2 font-medium">
+                {warehouse.name}
+                {warehouse.isGeneral ? <Badge>Geral</Badge> : null}
+              </div>
+            ),
+            header: "Nome",
+            key: "name",
+          },
+          {
+            cell: (warehouse) => warehouse.category.name,
+            header: "Categoria",
+            key: "category",
+          },
+          {
+            cell: (warehouse) => (
+              <Badge variant={warehouse.active ? "success" : "zero"}>
+                {warehouse.active ? "Ativo" : "Inativo"}
+              </Badge>
+            ),
+            header: "Status",
+            key: "status",
+          },
+          {
+            cell: (warehouse) => warehouse.summary.stockedProducts,
+            header: "Produtos",
+            key: "products",
+          },
+          {
+            cell: (warehouse) => (
+              <div className="flex justify-end gap-2">
+                <Button
+                  aria-label={`Acessar ${warehouse.name}`}
+                  asChild
+                  size="icon"
+                  variant="outline"
+                >
+                  <Link to={`/warehouses/${warehouse.id}`}>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                {admin ? (
+                  <>
+                    <Button
+                      aria-label={`Editar ${warehouse.name}`}
+                      onClick={() =>
+                        setDraft({
+                          active: warehouse.active,
+                          categoryId: warehouse.categoryId,
+                          description: warehouse.description ?? "",
+                          id: warehouse.id,
+                          isGeneral: warehouse.isGeneral,
+                          name: warehouse.name,
+                        })
+                      }
+                      size="icon"
+                      variant="outline"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      aria-label={`Remover ${warehouse.name}`}
+                      onClick={() => void remove(warehouse.id)}
+                      size="icon"
+                      variant="outline"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            ),
+            cellClassName: "text-right",
+            header: "Acoes",
+            headerClassName: "text-right",
+            key: "actions",
+          },
+        ]}
+        data={warehouses.data}
+        emptyMessage="Nenhum almoxarifado cadastrado."
+        getRowId={(warehouse) => warehouse.id}
+        searchPlaceholder="Buscar almoxarifado ou categoria..."
+        searchText={(warehouse) =>
+          [
+            warehouse.name,
+            warehouse.description,
+            warehouse.category.name,
+            warehouse.isGeneral ? "geral" : "",
+            warehouse.active ? "ativo" : "inativo",
+          ].join(" ")
+        }
+      />
 
       <Dialog onOpenChange={(open) => !open && setDraft(null)} open={Boolean(draft)}>
         <DialogContent>

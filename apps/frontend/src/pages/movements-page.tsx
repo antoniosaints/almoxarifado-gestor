@@ -1,18 +1,11 @@
 import { useMemo, useState } from "react";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useApiResource } from "@/lib/api";
 import type { Movement, MovementType, Product, Warehouse } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -26,61 +19,100 @@ export const movementLabels: Record<MovementType, string> = {
 
 export function MovementsTable({ movements }: { movements: Movement[] }) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Data</TableHead>
-          <TableHead>Tipo</TableHead>
-          <TableHead>Produto</TableHead>
-          <TableHead>Almoxarifado</TableHead>
-          <TableHead>Origem / destino</TableHead>
-          <TableHead>Quantidade</TableHead>
-          <TableHead>Valor unitario</TableHead>
-          <TableHead>Valor total</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {movements.map((movement) => {
-          const unitPrice =
-            movement.unitPrice === null || movement.unitPrice === undefined
-              ? null
-              : Number(movement.unitPrice);
+    <DataTable
+      columns={[
+        {
+          cell: (movement) => formatDate(movement.movementDate),
+          header: "Data",
+          key: "date",
+        },
+        {
+          cell: (movement) => (
+            <Badge variant={movement.type.includes("ENTRADA") ? "success" : "outline"}>
+              {movementLabels[movement.type]}
+            </Badge>
+          ),
+          header: "Tipo",
+          key: "type",
+        },
+        {
+          cell: (movement) => (
+            <>
+              <p className="font-medium">{movement.product.name}</p>
+              <p className="text-xs text-muted-foreground">{movement.product.code}</p>
+            </>
+          ),
+          header: "Produto",
+          key: "product",
+        },
+        {
+          cell: (movement) => movement.warehouse.name,
+          header: "Almoxarifado",
+          key: "warehouse",
+        },
+        {
+          cell: (movement) =>
+            `${movement.sourceWarehouse?.name ?? "-"} / ${
+              movement.destinationWarehouse?.name ?? movement.destinationNote ?? "-"
+            }`,
+          header: "Origem / destino",
+          key: "source-destination",
+        },
+        {
+          cell: (movement) =>
+            `${movement.quantity} ${movement.product.unit.abbreviation}`,
+          header: "Quantidade",
+          key: "quantity",
+        },
+        {
+          cell: (movement) => {
+            const unitPrice =
+              movement.unitPrice === null || movement.unitPrice === undefined
+                ? null
+                : Number(movement.unitPrice);
 
-          return (
-            <TableRow key={movement.id}>
-              <TableCell>{formatDate(movement.movementDate)}</TableCell>
-              <TableCell>
-                <Badge variant={movement.type.includes("ENTRADA") ? "success" : "outline"}>
-                  {movementLabels[movement.type]}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <p className="font-medium">{movement.product.name}</p>
-                <p className="text-xs text-muted-foreground">{movement.product.code}</p>
-              </TableCell>
-              <TableCell>{movement.warehouse.name}</TableCell>
-              <TableCell>
-                {movement.sourceWarehouse?.name ?? "-"} /{" "}
-                {movement.destinationWarehouse?.name ?? movement.destinationNote ?? "-"}
-              </TableCell>
-              <TableCell>
-                {movement.quantity} {movement.product.unit.abbreviation}
-              </TableCell>
-              <TableCell>
-                {unitPrice === null || Number.isNaN(unitPrice)
-                  ? "-"
-                  : formatCurrency(unitPrice)}
-              </TableCell>
-              <TableCell>
-                {unitPrice === null || Number.isNaN(unitPrice)
-                  ? "-"
-                  : formatCurrency(unitPrice * movement.quantity)}
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+            return unitPrice === null || Number.isNaN(unitPrice)
+              ? "-"
+              : formatCurrency(unitPrice);
+          },
+          header: "Valor unitario",
+          key: "unit-price",
+        },
+        {
+          cell: (movement) => {
+            const unitPrice =
+              movement.unitPrice === null || movement.unitPrice === undefined
+                ? null
+                : Number(movement.unitPrice);
+
+            return unitPrice === null || Number.isNaN(unitPrice)
+              ? "-"
+              : formatCurrency(unitPrice * movement.quantity);
+          },
+          header: "Valor total",
+          key: "total",
+        },
+      ]}
+      data={movements}
+      emptyMessage="Nenhuma movimentacao encontrada."
+      getRowId={(movement) => movement.id}
+      searchPlaceholder="Buscar movimentacao..."
+      searchText={(movement) =>
+        [
+          formatDate(movement.movementDate),
+          movementLabels[movement.type],
+          movement.product.name,
+          movement.product.code,
+          movement.product.unit.abbreviation,
+          movement.warehouse.name,
+          movement.sourceWarehouse?.name,
+          movement.destinationWarehouse?.name,
+          movement.destinationNote,
+          movement.observation,
+          movement.quantity,
+        ].join(" ")
+      }
+    />
   );
 }
 

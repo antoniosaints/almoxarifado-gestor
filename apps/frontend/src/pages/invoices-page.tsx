@@ -1,5 +1,6 @@
 import { FileSearch } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,14 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { FormField } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { useApiResource } from "@/lib/api";
 import type { Invoice } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -61,6 +58,34 @@ export function InvoiceMovementsDialog({ invoice }: { invoice: Invoice }) {
 
 export function InvoicesPage() {
   const invoices = useApiResource<Invoice[]>("/invoices", []);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [movementFilter, setMovementFilter] = useState("all");
+
+  const filteredInvoices = useMemo(
+    () =>
+      invoices.data.filter((invoice) => {
+        const issueDate = new Date(invoice.issueDate);
+        const fromDate = from ? new Date(`${from}T00:00:00`) : null;
+        const toDate = to ? new Date(`${to}T23:59:59.999`) : null;
+        const movementCount = invoice.movements?.length ?? 0;
+
+        return (
+          (!fromDate || issueDate >= fromDate) &&
+          (!toDate || issueDate <= toDate) &&
+          (movementFilter === "all" ||
+            (movementFilter === "linked" && movementCount > 0) ||
+            (movementFilter === "unlinked" && movementCount === 0))
+        );
+      }),
+    [from, invoices.data, movementFilter, to],
+  );
+
+  function clearFilters() {
+    setFrom("");
+    setTo("");
+    setMovementFilter("all");
+  }
 
   if (invoices.loading) {
     return <LoadingLine />;
@@ -77,48 +102,111 @@ export function InvoicesPage() {
         <h2 className="text-2xl font-semibold">Notas fiscais</h2>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Nota fiscal</TableHead>
-            <TableHead>Empresa</TableHead>
-            <TableHead>CNPJ</TableHead>
-            <TableHead>Data da nota</TableHead>
-            <TableHead>Movimentacoes</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {invoices.data.map((invoice) => (
-            <TableRow key={invoice.id}>
-              <TableCell>
+      <div className="grid gap-4 rounded-lg border bg-card p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto]">
+        <FormField>
+          <Label htmlFor="invoice-from">Emissao de</Label>
+          <Input
+            id="invoice-from"
+            onChange={(event) => setFrom(event.target.value)}
+            type="date"
+            value={from}
+          />
+        </FormField>
+        <FormField>
+          <Label htmlFor="invoice-to">Emissao ate</Label>
+          <Input
+            id="invoice-to"
+            onChange={(event) => setTo(event.target.value)}
+            type="date"
+            value={to}
+          />
+        </FormField>
+        <FormField>
+          <Label htmlFor="invoice-movements">Movimentacoes</Label>
+          <Select
+            id="invoice-movements"
+            onChange={(event) => setMovementFilter(event.target.value)}
+            value={movementFilter}
+          >
+            <option value="all">Todas</option>
+            <option value="linked">Com movimentacoes</option>
+            <option value="unlinked">Sem movimentacoes</option>
+          </Select>
+        </FormField>
+        <Button className="self-end" onClick={clearFilters} type="button" variant="outline">
+          Limpar filtros
+        </Button>
+      </div>
+
+      <DataTable
+        columns={[
+          {
+            cell: (invoice) => (
+              <>
                 <p className="font-medium">{invoice.number}</p>
                 {invoice.observation ? (
                   <p className="text-xs text-muted-foreground">{invoice.observation}</p>
                 ) : null}
-              </TableCell>
-              <TableCell>{invoice.companyName}</TableCell>
-              <TableCell>{invoice.cnpj}</TableCell>
-              <TableCell>{formatDate(invoice.issueDate)}</TableCell>
-              <TableCell>
-                <Badge variant={(invoice.movements?.length ?? 0) ? "success" : "outline"}>
-                  {invoice.movements?.length ?? 0}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex justify-end">
-                  <InvoiceMovementsDialog invoice={invoice} />
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-          {!invoices.data.length ? (
-            <TableRow>
-              <TableCell colSpan={6}>Nenhuma nota fiscal cadastrada.</TableCell>
-            </TableRow>
-          ) : null}
-        </TableBody>
-      </Table>
+              </>
+            ),
+            header: "Nota fiscal",
+            key: "invoice",
+          },
+          {
+            cell: (invoice) => invoice.companyName,
+            header: "Empresa",
+            key: "company",
+          },
+          {
+            cell: (invoice) => invoice.cnpj,
+            header: "CNPJ",
+            key: "cnpj",
+          },
+          {
+            cell: (invoice) => formatDate(invoice.issueDate),
+            header: "Data da nota",
+            key: "issue-date",
+          },
+          {
+            cell: (invoice) => (
+              <Badge variant={(invoice.movements?.length ?? 0) ? "success" : "outline"}>
+                {invoice.movements?.length ?? 0}
+              </Badge>
+            ),
+            header: "Movimentacoes",
+            key: "movements",
+          },
+          {
+            cell: (invoice) => (
+              <div className="flex justify-end">
+                <InvoiceMovementsDialog invoice={invoice} />
+              </div>
+            ),
+            cellClassName: "text-right",
+            header: "Acoes",
+            headerClassName: "text-right",
+            key: "actions",
+          },
+        ]}
+        data={filteredInvoices}
+        emptyMessage="Nenhuma nota fiscal cadastrada."
+        getRowId={(invoice) => invoice.id}
+        searchPlaceholder="Buscar nota, empresa ou CNPJ..."
+        searchText={(invoice) =>
+          [
+            invoice.number,
+            invoice.companyName,
+            invoice.cnpj,
+            invoice.observation,
+            formatDate(invoice.issueDate),
+            ...(invoice.movements ?? []).flatMap((movement) => [
+              movement.product.name,
+              movement.product.code,
+              movement.warehouse.name,
+            ]),
+          ].join(" ")
+        }
+      />
     </section>
   );
 }

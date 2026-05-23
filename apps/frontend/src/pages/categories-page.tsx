@@ -1,5 +1,6 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,14 +13,6 @@ import {
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
@@ -96,51 +89,61 @@ function CategoryPanel<T extends { description?: string | null; id: string; name
         </Button>
       </div>
       {message ? <ResourceError message={message} /> : null}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Nome</TableHead>
-            <TableHead>Descricao</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((item) => (
-            <TableRow key={item.id}>
-              <TableCell className="font-medium">{item.name}</TableCell>
-              <TableCell>{item.description || "-"}</TableCell>
-              <TableCell>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    aria-label={`Editar ${item.name}`}
-                    onClick={() =>
-                      setDraft({
-                        color: "color" in item ? String(item.color ?? "") : "",
-                        description: item.description ?? "",
-                        icon: "icon" in item ? String(item.icon ?? "") : "",
-                        id: item.id,
-                        name: item.name,
-                      })
-                    }
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    aria-label={`Remover ${item.name}`}
-                    onClick={() => void remove(item.id)}
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        columns={[
+          {
+            cell: (item) => item.name,
+            cellClassName: "font-medium",
+            header: "Nome",
+            key: "name",
+          },
+          {
+            cell: (item) => item.description || "-",
+            header: "Descricao",
+            key: "description",
+          },
+          {
+            cell: (item) => (
+              <div className="flex justify-end gap-2">
+                <Button
+                  aria-label={`Editar ${item.name}`}
+                  onClick={() =>
+                    setDraft({
+                      color: "color" in item ? String(item.color ?? "") : "",
+                      description: item.description ?? "",
+                      icon: "icon" in item ? String(item.icon ?? "") : "",
+                      id: item.id,
+                      name: item.name,
+                    })
+                  }
+                  size="icon"
+                  variant="outline"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  aria-label={`Remover ${item.name}`}
+                  onClick={() => void remove(item.id)}
+                  size="icon"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ),
+            cellClassName: "text-right",
+            header: "Acoes",
+            headerClassName: "text-right",
+            key: "actions",
+          },
+        ]}
+        data={items}
+        emptyMessage="Nenhuma categoria cadastrada."
+        getRowId={(item) => item.id}
+        initialPageSize={10}
+        searchPlaceholder="Buscar categoria..."
+        searchText={(item) => [item.name, item.description].join(" ")}
+      />
 
       <Dialog onOpenChange={(open) => !open && setDraft(null)} open={Boolean(draft)}>
         <DialogContent>

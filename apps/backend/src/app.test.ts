@@ -195,7 +195,7 @@ describe("api", () => {
     expect(response.body.map((item: { id: string }) => item.id)).toEqual([product.id]);
   });
 
-  it("blocks operators from product creation", async () => {
+  it("lets operators create products for local stock entries", async () => {
     const { productCategory, unit } = await createBaseFixture(prisma);
     const operator = await prisma.user.create({
       data: {
@@ -216,7 +216,56 @@ describe("api", () => {
         active: true,
       });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      code: "0000002",
+      name: "Caneta preta",
+    });
+  });
+
+  it("lets operators create direct stock entries in assigned warehouses", async () => {
+    const { product, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+        warehouseAssignments: {
+          create: {
+            warehouseId: warehouse.id,
+          },
+        },
+      },
+    });
+
+    const response = await request(app)
+      .post("/movements/entry")
+      .set("Authorization", authorizationFor(operator))
+      .send({
+        invoiceId: "ignored-for-operator",
+        minimumQuantity: 2,
+        movementDate: "2026-05-22T12:00:00.000Z",
+        productId: product.id,
+        quantity: 4,
+        unitPrice: 99,
+        warehouseId: warehouse.id,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.stock).toMatchObject({
+      currentQuantity: 4,
+      minimumQuantity: 2,
+      productId: product.id,
+      warehouseId: warehouse.id,
+    });
+    expect(response.body.movement.invoiceId).toBeNull();
+    expect(response.body.movement.unitPrice).toBeNull();
   });
 
   it("lets admins create operators assigned to warehouses", async () => {
@@ -285,6 +334,91 @@ describe("api", () => {
     );
   });
 
+  it("zeros selected stocks after admin password confirmation", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await hashPassword("admin123"),
+        role: UserRole.ADMIN,
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const stock = await prisma.stock.create({
+      data: {
+        currentQuantity: 7,
+        minimumQuantity: 2,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+
+    const response = await request(app)
+      .post("/stocks/bulk-zero")
+      .set("Authorization", authorizationFor(admin))
+      .send({
+        password: "admin123",
+        stockIds: [stock.id],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.stocks[0]).toMatchObject({
+      currentQuantity: 0,
+      id: stock.id,
+    });
+    await expect(
+      prisma.stockMovement.findFirstOrThrow({
+        where: {
+          productId: product.id,
+          quantity: 7,
+          type: "SAIDA",
+          warehouseId: warehouse.id,
+        },
+      }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("deletes selected stocks after admin password confirmation", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await hashPassword("admin123"),
+        role: UserRole.ADMIN,
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const stock = await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+
+    const response = await request(app)
+      .post("/stocks/bulk-delete")
+      .set("Authorization", authorizationFor(admin))
+      .send({
+        password: "admin123",
+        stockIds: [stock.id],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.count).toBe(1);
+    await expect(prisma.stock.findUnique({ where: { id: stock.id } })).resolves.toBeNull();
+  });
+
   it("lists invoice movements for fiscal note management", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const warehouse = await prisma.warehouse.create({
@@ -332,5 +466,44 @@ describe("api", () => {
         },
       ],
     });
+  });
+
+  it("returns admin insights for KPI dashboard", async () => {
+    const { user } = await createBaseFixture(prisma);
+
+    const response = await request(app)
+      .get("/insights")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.totals.products).toBe(1);
+    expect(response.body.topProducts).toEqual([]);
+  });
+
+  it("exports stock balance report as a PDF", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 8,
+        minimumQuantity: 2,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+
+    const response = await request(app)
+      .get("/reports/stocks")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/pdf");
+    expect(response.headers["content-disposition"]).toContain("relatorio-saldos.pdf");
   });
 });

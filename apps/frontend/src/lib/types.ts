@@ -156,3 +156,53 @@ export type Movement = {
   warehouse: Pick<Warehouse, "id" | "name">;
   warehouseId: string;
 };
+
+export type InsightsSummary = {
+  activeProducts: number;
+  activeWarehouses: number;
+  invoices: number;
+  lowStockItems: number;
+  monthlyEntries: number;
+  monthlyMovements: number;
+  monthlyOutputs: number;
+  monthlyTransfers: number;
+  monthlyValue: number;
+  outOfStockItems: number;
+  pendingRequests: number;
+  products: number;
+  stockItems: number;
+  stockQuantity: number;
+  warehouses: number;
+};
+
+export type WarehouseRiskInsight = {
+  category: string;
+  lowStockItems: number;
+  name: string;
+  outOfStockItems: number;
+  totalItems: number;
+  warehouseId: string;
+};
+
+export type TopProductInsight = {
+  code: string;
+  name: string;
+  productId: string;
+  quantityMoved: number;
+  unit: string;
+};
+
+export type RecentInvoiceInsight = {
+  companyName: string;
+  id: string;
+  issueDate: string;
+  movementCount: number;
+  number: string;
+};
+
+export type Insights = {
+  recentInvoices: RecentInvoiceInsight[];
+  topProducts: TopProductInsight[];
+  totals: InsightsSummary;
+  warehouseRisk: WarehouseRiskInsight[];
+};

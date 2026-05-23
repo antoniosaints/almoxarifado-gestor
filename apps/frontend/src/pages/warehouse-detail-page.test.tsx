@@ -85,12 +85,10 @@ describe("WarehouseTabs", () => {
       </MemoryRouter>,
     );
 
-    expect(
-      screen.queryByText("Transferir para outro almoxarifado"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Transferir")).not.toBeInTheDocument();
   });
 
-  it("shows entry requests instead of direct entries to operators", () => {
+  it("shows direct entries and entry requests to operators outside the general warehouse", () => {
     render(
       <MemoryRouter>
         <SessionProvider
@@ -117,11 +115,11 @@ describe("WarehouseTabs", () => {
       </MemoryRouter>,
     );
 
+    expect(screen.getByText("Entrada de estoque")).toBeInTheDocument();
     expect(screen.getByText("Solicitar entrada")).toBeInTheDocument();
     expect(
       screen.queryByRole("tab", { name: "Solicitar entrada" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Entrada de estoque")).not.toBeInTheDocument();
   });
 
   it("uses row actions instead of inline minimum stock inputs", () => {
@@ -143,7 +141,7 @@ describe("WarehouseTabs", () => {
             onMinimumChange={() => Promise.resolve()}
             onMovementSaved={() => Promise.resolve()}
             onStockDeleted={() => Promise.resolve()}
-            products={[]}
+            products={[warehouseWithStock.stocks[0].product]}
             warehouse={warehouseWithStock}
             warehouses={[warehouseWithStock]}
           />

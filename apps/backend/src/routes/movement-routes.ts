@@ -61,13 +61,16 @@ movementRoutes.get(
 
 movementRoutes.post(
   "/entry",
-  requireRole(UserRole.ADMIN),
   asyncHandler(async (request, response) => {
+    const user = currentUser(response);
     const input = entryInput.parse(request.body);
+    await assertWarehouseAccess(prisma, user, input.warehouseId);
     response.status(201).json(
       await createEntry(prisma, {
         ...input,
-        userId: currentUser(response).id,
+        invoiceId: user.role === UserRole.ADMIN ? input.invoiceId : null,
+        unitPrice: user.role === UserRole.ADMIN ? input.unitPrice : null,
+        userId: user.id,
       }),
     );
   }),

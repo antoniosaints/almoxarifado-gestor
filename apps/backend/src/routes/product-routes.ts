@@ -40,7 +40,6 @@ productRoutes.get(
 
 productRoutes.post(
   "/",
-  requireRole(UserRole.ADMIN),
   asyncHandler(async (request, response) => {
     const data = productInput.parse(request.body);
     response.status(201).json(await createProduct(prisma, data));

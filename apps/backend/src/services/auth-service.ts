@@ -23,7 +23,7 @@ export async function hashPassword(password: string) {
   return `${salt}:${hash}`;
 }
 
-function passwordMatches(password: string, passwordHash: string) {
+export function passwordMatches(password: string, passwordHash: string) {
   const [salt, hash] = passwordHash.split(":");
 
   if (!salt || !hash) {

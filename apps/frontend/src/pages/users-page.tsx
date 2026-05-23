@@ -1,5 +1,6 @@
 import { Pencil, Plus, Trash2, UsersRound } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,14 +15,6 @@ import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { api, useApiResource } from "@/lib/api";
 import type { ManagedUser, UserRole, Warehouse } from "@/lib/types";
 
@@ -126,76 +119,99 @@ export function UsersPage() {
 
       {message ? <ResourceError message={message} /> : null}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Usuario</TableHead>
-            <TableHead>Permissao</TableHead>
-            <TableHead>Almoxarifados</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Acoes</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.data.map((user) => (
-            <TableRow key={user.id}>
-              <TableCell>
+      <DataTable
+        columns={[
+          {
+            cell: (user) => (
+              <>
                 <p className="font-medium">{user.name}</p>
                 <p className="text-xs text-muted-foreground">{user.email}</p>
-              </TableCell>
-              <TableCell>
-                <Badge variant={user.role === "ADMIN" ? "default" : "outline"}>
-                  {user.role === "ADMIN" ? "Admin" : "Operador"}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                {user.role === "ADMIN"
-                  ? "Todos"
-                  : user.warehouseAssignments
-                      .map((assignment) => assignment.warehouse.name)
-                      .join(", ") || "-"}
-              </TableCell>
-              <TableCell>
-                <Badge variant={user.active ? "success" : "zero"}>
-                  {user.active ? "Ativo" : "Inativo"}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    aria-label={`Editar ${user.name}`}
-                    onClick={() =>
-                      setDraft({
-                        active: user.active,
-                        email: user.email,
-                        id: user.id,
-                        name: user.name,
-                        password: "",
-                        role: user.role,
-                        warehouseIds: user.warehouseAssignments.map(
-                          (assignment) => assignment.warehouseId,
-                        ),
-                      })
-                    }
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    aria-label={`Remover ${user.name}`}
-                    onClick={() => void remove(user.id)}
-                    size="icon"
-                    variant="outline"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+              </>
+            ),
+            header: "Usuario",
+            key: "user",
+          },
+          {
+            cell: (user) => (
+              <Badge variant={user.role === "ADMIN" ? "default" : "outline"}>
+                {user.role === "ADMIN" ? "Admin" : "Operador"}
+              </Badge>
+            ),
+            header: "Permissao",
+            key: "role",
+          },
+          {
+            cell: (user) =>
+              user.role === "ADMIN"
+                ? "Todos"
+                : user.warehouseAssignments
+                    .map((assignment) => assignment.warehouse.name)
+                    .join(", ") || "-",
+            header: "Almoxarifados",
+            key: "warehouses",
+          },
+          {
+            cell: (user) => (
+              <Badge variant={user.active ? "success" : "zero"}>
+                {user.active ? "Ativo" : "Inativo"}
+              </Badge>
+            ),
+            header: "Status",
+            key: "status",
+          },
+          {
+            cell: (user) => (
+              <div className="flex justify-end gap-2">
+                <Button
+                  aria-label={`Editar ${user.name}`}
+                  onClick={() =>
+                    setDraft({
+                      active: user.active,
+                      email: user.email,
+                      id: user.id,
+                      name: user.name,
+                      password: "",
+                      role: user.role,
+                      warehouseIds: user.warehouseAssignments.map(
+                        (assignment) => assignment.warehouseId,
+                      ),
+                    })
+                  }
+                  size="icon"
+                  variant="outline"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button
+                  aria-label={`Remover ${user.name}`}
+                  onClick={() => void remove(user.id)}
+                  size="icon"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ),
+            cellClassName: "text-right",
+            header: "Acoes",
+            headerClassName: "text-right",
+            key: "actions",
+          },
+        ]}
+        data={users.data}
+        emptyMessage="Nenhum usuario cadastrado."
+        getRowId={(user) => user.id}
+        searchPlaceholder="Buscar usuario, email ou almoxarifado..."
+        searchText={(user) =>
+          [
+            user.name,
+            user.email,
+            user.role === "ADMIN" ? "admin" : "operador",
+            user.active ? "ativo" : "inativo",
+            ...user.warehouseAssignments.map((assignment) => assignment.warehouse.name),
+          ].join(" ")
+        }
+      />
 
       <Dialog onOpenChange={(open) => !open && setDraft(null)} open={Boolean(draft)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">

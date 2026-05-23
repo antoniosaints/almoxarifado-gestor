@@ -11,6 +11,7 @@ type BaseMovementInput = {
 
 export type EntryInput = BaseMovementInput & {
   invoiceId?: string | null;
+  minimumQuantity?: number;
   unitPrice?: number | null;
   warehouseId: string;
 };
@@ -46,6 +47,7 @@ export async function createEntry(prisma: PrismaClient, input: EntryInput) {
       create: {
         currentQuantity: input.quantity,
         lastMovementAt: input.movementDate,
+        minimumQuantity: input.minimumQuantity ?? 0,
         productId: input.productId,
         warehouseId: input.warehouseId,
       },

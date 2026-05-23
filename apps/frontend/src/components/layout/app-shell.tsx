@@ -1,8 +1,10 @@
 import {
+  BarChart3,
   Bell,
   Boxes,
   ClipboardCheck,
   ClipboardList,
+  FileDown,
   FileText,
   Layers3,
   Menu,
@@ -12,7 +14,7 @@ import {
   UserRound,
   UsersRound,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,11 +32,13 @@ import { cn } from "@/lib/utils";
 
 const items = [
   { icon: Layers3, label: "Dashboard", to: "/dashboard" },
+  { icon: BarChart3, label: "Insights", role: "ADMIN", to: "/insights" },
   { icon: Boxes, label: "Almoxarifados", to: "/warehouses" },
   { icon: PackageSearch, label: "Produtos", role: "ADMIN", to: "/products" },
   { icon: Tags, label: "Categorias", role: "ADMIN", to: "/categories" },
   { icon: Ruler, label: "Unidades", role: "ADMIN", to: "/units" },
   { icon: FileText, label: "Notas fiscais", role: "ADMIN", to: "/invoices" },
+  { icon: FileDown, label: "Relatorios", role: "ADMIN", to: "/reports" },
   { icon: ClipboardList, label: "Solicitacoes", to: "/requests" },
   { icon: ClipboardCheck, label: "Movimentacoes", to: "/movements" },
   { icon: UsersRound, label: "Usuarios", role: "ADMIN", to: "/users" },
@@ -76,6 +80,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const role = session?.user.role ?? "OPERATOR";
+  const notificationSeenKey = `almoxarifado-notifications-seen-${session?.user.id ?? "anon"}`;
+  const [seenNotificationTotal, setSeenNotificationTotal] = useState(() =>
+    Number(localStorage.getItem(notificationSeenKey) ?? 0),
+  );
   const title =
     navigationItems(role).find((item) => location.pathname.startsWith(item.to))
       ?.label ?? "Almoxarifado";
@@ -88,10 +96,23 @@ export function AppShell({ children }: { children: ReactNode }) {
     pendingReceipts: 0,
     total: 0,
   });
+  const notificationCount =
+    summary.data.total > 0 && summary.data.total !== seenNotificationTotal
+      ? summary.data.total
+      : 0;
+
+  useEffect(() => {
+    setSeenNotificationTotal(Number(localStorage.getItem(notificationSeenKey) ?? 0));
+  }, [notificationSeenKey]);
 
   function logout() {
     clearSession();
     navigate("/login");
+  }
+
+  function markNotificationsSeen() {
+    localStorage.setItem(notificationSeenKey, String(summary.data.total));
+    setSeenNotificationTotal(summary.data.total);
   }
 
   return (
@@ -138,13 +159,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(open) => open && markNotificationsSeen()}>
               <DropdownMenuTrigger asChild>
                 <Button aria-label="Notificacoes internas" size="icon" variant="outline">
                   <Bell className="h-4 w-4" />
-                  {summary.data.total ? (
+                  {notificationCount ? (
                     <span className="absolute -mr-7 -mt-7 grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[11px] font-semibold text-white">
-                      {summary.data.total}
+                      {notificationCount}
                     </span>
                   ) : null}
                 </Button>

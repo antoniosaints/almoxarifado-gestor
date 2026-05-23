@@ -2,10 +2,12 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
 import { CategoriesPage } from "@/pages/categories-page";
 import { DashboardPage } from "@/pages/dashboard-page";
+import { InsightsPage } from "@/pages/insights-page";
 import { InvoicesPage } from "@/pages/invoices-page";
 import { LoginPage } from "@/pages/login-page";
 import { MovementsPage } from "@/pages/movements-page";
 import { ProductsPage } from "@/pages/products-page";
+import { ReportsPage } from "@/pages/reports-page";
 import { RequestsPage } from "@/pages/requests-page";
 import { UnitsPage } from "@/pages/units-page";
 import { UsersPage } from "@/pages/users-page";
@@ -43,6 +45,14 @@ export function App() {
       <Route element={<LoginPage />} path="/login" />
       <Route element={<ProtectedLayout />}>
         <Route element={<DashboardPage />} path="/dashboard" />
+        <Route
+          element={
+            <AdminRoute>
+              <InsightsPage />
+            </AdminRoute>
+          }
+          path="/insights"
+        />
         <Route element={<WarehousesPage />} path="/warehouses" />
         <Route element={<WarehouseDetailPage />} path="/warehouses/:warehouseId" />
         <Route
@@ -76,6 +86,14 @@ export function App() {
             </AdminRoute>
           }
           path="/invoices"
+        />
+        <Route
+          element={
+            <AdminRoute>
+              <ReportsPage />
+            </AdminRoute>
+          }
+          path="/reports"
         />
         <Route element={<MovementsPage />} path="/movements" />
         <Route element={<RequestsPage />} path="/requests" />
