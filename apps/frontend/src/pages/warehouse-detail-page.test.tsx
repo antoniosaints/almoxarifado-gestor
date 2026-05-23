@@ -77,6 +77,31 @@ const createdProduct: Product = {
   unitId: "box",
 };
 
+const outsideProduct: Product = {
+  active: true,
+  category: {
+    id: "cleaning",
+    name: "Limpeza",
+  },
+  categoryId: "cleaning",
+  code: "0000003",
+  id: "detergent",
+  name: "Detergente",
+  unit: {
+    abbreviation: "UN",
+    id: "unit",
+    name: "Unidade",
+  },
+  unitId: "unit",
+};
+
+function openStockTab() {
+  const stockTab = screen.getByRole("tab", { name: "Estoque" });
+
+  fireEvent.pointerDown(stockTab, { button: 0, ctrlKey: false });
+  fireEvent.click(stockTab);
+}
+
 describe("WarehouseTabs", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -140,10 +165,44 @@ describe("WarehouseTabs", () => {
     );
 
     expect(screen.getByText("Incluir Estoque")).toBeInTheDocument();
-    expect(screen.getByText("Solicitar entrada")).toBeInTheDocument();
+    expect(screen.getByText("Solicitar")).toBeInTheDocument();
     expect(
-      screen.queryByRole("tab", { name: "Solicitar entrada" }),
+      screen.queryByRole("tab", { name: "Solicitar" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("only offers products already stocked in the warehouse for operator requests", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "operator-token",
+            user: {
+              email: "operador@prefeitura.local",
+              id: "operator",
+              name: "Operador",
+              role: "OPERATOR",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product, outsideProduct]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Solicitar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Produto" }));
+
+    expect(screen.getByText("0000001 - Papel A4")).toBeInTheDocument();
+    expect(screen.queryByText("0000003 - Detergente")).not.toBeInTheDocument();
   });
 
   it("uses row actions instead of inline minimum stock inputs", () => {
@@ -173,12 +232,14 @@ describe("WarehouseTabs", () => {
       </MemoryRouter>,
     );
 
+    openStockTab();
+
     expect(screen.queryByLabelText("Estoque minimo de Papel A4")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Editar estoque de Papel A4")).toBeInTheDocument();
     expect(screen.getByLabelText("Remover estoque de Papel A4")).toBeInTheDocument();
   });
 
-  it("shows stock value columns and movement action without the state column", () => {
+  it("shows stock total value and movement action without state or unit price columns", () => {
     render(
       <MemoryRouter>
         <SessionProvider
@@ -202,6 +263,14 @@ describe("WarehouseTabs", () => {
                 quantity: 8,
                 type: "ENTRADA",
                 unitPrice: 23.33,
+                invoice: {
+                  cnpj: "12345678000190",
+                  companyName: "Fornecedor Municipal",
+                  id: "invoice-1",
+                  issueDate: "2026-05-23T12:00:00.000Z",
+                  number: "NF-1",
+                },
+                invoiceId: "invoice-1",
                 warehouse: {
                   id: "health",
                   name: "Almoxarifado da Saude",
@@ -220,16 +289,54 @@ describe("WarehouseTabs", () => {
       </MemoryRouter>,
     );
 
+    openStockTab();
+
     expect(screen.queryByRole("columnheader", { name: "Estado" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("columnheader", { name: "Valor unitario" })[0]).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Valor unitario" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("columnheader", { name: "Valor total" })[0]).toBeInTheDocument();
-    expect(screen.getAllByText("R$ 23,33")[0]).toBeInTheDocument();
     expect(screen.getAllByText("R$ 186,64")[0]).toBeInTheDocument();
     expect(screen.getByLabelText("Ver movimentacoes de Papel A4")).toBeInTheDocument();
     expect(screen.getAllByText("Entrada - 23/05/2026, 09:00")[0]).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Ver movimentacoes de Papel A4"));
+    expect(screen.getByRole("link", { name: "Abrir nota NF-1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exportar PDF" })).toBeInTheDocument();
+  });
+
+  it("shows statistical overview instead of duplicating the stock table", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByLabelText("Buscar produto no estoque...")).not.toBeInTheDocument();
+    expect(screen.getByText("Valor total em estoque")).toBeInTheDocument();
+    expect(screen.getByText("Distribuicao por categoria")).toBeInTheDocument();
   });
 
   it("keeps the include stock modal open after creating a new product", async () => {
+    let movementEntryCalls = 0;
     let productListCalls = 0;
     let resolvePendingProductsReload: ((response: Response) => void) | undefined;
     const pendingProductsReload = new Promise<Response>((resolve) => {
@@ -246,6 +353,15 @@ describe("WarehouseTabs", () => {
           return new Response(JSON.stringify(createdProduct), {
             headers: { "Content-Type": "application/json" },
             status: 201,
+          });
+        }
+
+        if (method === "POST" && url.pathname === "/movements/entry") {
+          movementEntryCalls += 1;
+
+          return new Response(JSON.stringify({ message: "Escolha um produto." }), {
+            headers: { "Content-Type": "application/json" },
+            status: 400,
           });
         }
 
@@ -314,6 +430,8 @@ describe("WarehouseTabs", () => {
     expect(screen.getByRole("button", { name: "Produto" })).toHaveTextContent(
       "0000002 - Clips galvanizado",
     );
+    expect(screen.queryByText("Escolha um produto.")).not.toBeInTheDocument();
+    expect(movementEntryCalls).toBe(0);
 
     resolvePendingProductsReload?.(
       new Response(JSON.stringify([createdProduct]), {

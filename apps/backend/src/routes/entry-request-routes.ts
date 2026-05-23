@@ -45,19 +45,26 @@ const entryRequestInclude = {
 
 entryRequestRoutes.get(
   "/available-products",
-  asyncHandler(async (_request, response) => {
+  asyncHandler(async (request, response) => {
+    const warehouseId =
+      typeof request.query.warehouseId === "string" && request.query.warehouseId
+        ? request.query.warehouseId
+        : undefined;
+
     response.json(
       await prisma.product.findMany({
         where: {
           active: true,
           stocks: {
-            some: {
-              currentQuantity: { gt: 0 },
-              warehouse: {
-                active: true,
-                isGeneral: true,
-              },
-            },
+            some: warehouseId
+              ? { warehouseId }
+              : {
+                  currentQuantity: { gt: 0 },
+                  warehouse: {
+                    active: true,
+                    isGeneral: true,
+                  },
+                },
           },
         },
         include: {

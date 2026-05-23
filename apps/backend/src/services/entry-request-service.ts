@@ -32,6 +32,25 @@ export async function createEntryRequest(
 ) {
   assertPositiveQuantity(input.quantity);
 
+  const stock = await prisma.stock.findUnique({
+    where: {
+      warehouseId_productId: {
+        productId: input.productId,
+        warehouseId: input.warehouseId,
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!stock) {
+    throw new AppError(
+      400,
+      "Solicite apenas produtos ja cadastrados no estoque deste almoxarifado.",
+    );
+  }
+
   return prisma.entryRequest.create({
     data: {
       movementDate: input.movementDate,

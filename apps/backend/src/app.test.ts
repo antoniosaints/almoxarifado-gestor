@@ -146,14 +146,13 @@ describe("api", () => {
     ]);
   });
 
-  it("lists only products stocked in the general warehouse for entry requests", async () => {
+  it("lists only products stocked in the selected warehouse for entry requests", async () => {
     const { product, productCategory, unit, warehouseCategory } =
       await createBaseFixture(prisma);
-    const generalWarehouse = await prisma.warehouse.create({
+    const warehouse = await prisma.warehouse.create({
       data: {
-        name: "Almoxarifado Central",
+        name: "Almoxarifado da Saude",
         categoryId: warehouseCategory.id,
-        isGeneral: true,
       },
     });
     const unavailableProduct = await prisma.product.create({
@@ -174,21 +173,13 @@ describe("api", () => {
 
     await prisma.stock.create({
       data: {
-        currentQuantity: 9,
-        productId: product.id,
-        warehouseId: generalWarehouse.id,
-      },
-    });
-    await prisma.stock.create({
-      data: {
         currentQuantity: 0,
-        productId: unavailableProduct.id,
-        warehouseId: generalWarehouse.id,
+        productId: product.id,
+        warehouseId: warehouse.id,
       },
     });
-
     const response = await request(app)
-      .get("/entry-requests/available-products")
+      .get(`/entry-requests/available-products?warehouseId=${warehouse.id}`)
       .set("Authorization", authorizationFor(operator));
 
     expect(response.status).toBe(200);

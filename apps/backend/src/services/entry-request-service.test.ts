@@ -32,6 +32,13 @@ describe("entry request service", () => {
         role: UserRole.OPERATOR,
       },
     });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
 
     const request = await createEntryRequest(prisma, {
       movementDate: new Date("2026-05-22T12:00:00.000Z"),
@@ -43,8 +50,46 @@ describe("entry request service", () => {
     });
 
     expect(request.status).toBe(RequestStatus.PENDING);
-    expect(await prisma.stock.count()).toBe(0);
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+      },
+    });
+    expect(stock.currentQuantity).toBe(0);
     expect(await prisma.stockMovement.count()).toBe(0);
+  });
+
+  it("rejects an entry request when the product has no stock record in the warehouse", async () => {
+    const { product, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        name: "Almoxarifado da Saude",
+        categoryId: warehouseCategory.id,
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+
+    await expect(
+      createEntryRequest(prisma, {
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 5,
+        requestedById: operator.id,
+        warehouseId: warehouse.id,
+      }),
+    ).rejects.toMatchObject({
+      message: "Solicite apenas produtos ja cadastrados no estoque deste almoxarifado.",
+      status: 400,
+    });
   });
 
   it("approves a request by moving stock from the general warehouse", async () => {
@@ -74,6 +119,13 @@ describe("entry request service", () => {
         currentQuantity: 13,
         productId: product.id,
         warehouseId: generalWarehouse.id,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: warehouse.id,
       },
     });
     const invoice = await prisma.invoice.create({

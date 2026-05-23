@@ -1,5 +1,6 @@
-import { Check, PackagePlus, X } from "lucide-react";
+import { Check, PackagePlus, Warehouse, X } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -148,6 +149,7 @@ export function RequestsPage() {
   const entries = useApiResource<EntryRequest[]>("/entry-requests", []);
   const transfers = useApiResource<TransferRequest[]>("/transfer-requests", []);
   const invoices = useApiResource<Invoice[]>("/invoices", []);
+  const [activeTab, setActiveTab] = useState("entries");
   const [message, setMessage] = useState<{
     error: boolean;
     text: string;
@@ -229,10 +231,14 @@ export function RequestsPage() {
         </Alert>
       ) : null}
 
-      <Tabs defaultValue="entries">
+      <Tabs onValueChange={setActiveTab} value={activeTab}>
         <TabsList>
-          <TabsTrigger value="entries">Entradas solicitadas</TabsTrigger>
-          <TabsTrigger value="transfers">Recebimentos</TabsTrigger>
+          <TabsTrigger onClick={() => setActiveTab("entries")} value="entries">
+            Entradas solicitadas
+          </TabsTrigger>
+          <TabsTrigger onClick={() => setActiveTab("transfers")} value="transfers">
+            Recebimentos
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="entries">
           <DataTable
@@ -273,6 +279,15 @@ export function RequestsPage() {
               {
                 cell: (request) => (
                   <div className="flex justify-end gap-2">
+                    <Button asChild size="sm" variant="outline">
+                      <Link
+                        aria-label={`Abrir almoxarifado ${request.warehouse.name}`}
+                        to={`/warehouses/${request.warehouse.id}`}
+                      >
+                        <Warehouse className="h-4 w-4" />
+                        Almoxarifado
+                      </Link>
+                    </Button>
                     {admin && request.status === "PENDING" ? (
                       <>
                         <ApprovalDialog
@@ -289,9 +304,7 @@ export function RequestsPage() {
                           Rejeitar
                         </Button>
                       </>
-                    ) : (
-                      "-"
-                    )}
+                    ) : null}
                   </div>
                 ),
                 cellClassName: "text-right",
@@ -355,12 +368,19 @@ export function RequestsPage() {
               },
               {
                 cell: (request) => (
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    <Button asChild size="sm" variant="outline">
+                      <Link
+                        aria-label={`Abrir destino ${request.destinationWarehouse.name}`}
+                        to={`/warehouses/${request.destinationWarehouse.id}`}
+                      >
+                        <Warehouse className="h-4 w-4" />
+                        Destino
+                      </Link>
+                    </Button>
                     {request.status === "PENDING_RECEIPT" ? (
                       <ReceiveDialog onReceive={receive} request={request} />
-                    ) : (
-                      "-"
-                    )}
+                    ) : null}
                   </div>
                 ),
                 cellClassName: "text-right",

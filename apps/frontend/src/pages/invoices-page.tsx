@@ -1,5 +1,6 @@
 import { FileSearch } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
@@ -57,10 +58,12 @@ export function InvoiceMovementsDialog({ invoice }: { invoice: Invoice }) {
 }
 
 export function InvoicesPage() {
+  const [searchParams] = useSearchParams();
   const invoices = useApiResource<Invoice[]>("/invoices", []);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [movementFilter, setMovementFilter] = useState("all");
+  const selectedInvoiceId = searchParams.get("invoiceId");
 
   const filteredInvoices = useMemo(
     () =>
@@ -71,6 +74,7 @@ export function InvoicesPage() {
         const movementCount = invoice.movements?.length ?? 0;
 
         return (
+          (!selectedInvoiceId || invoice.id === selectedInvoiceId) &&
           (!fromDate || issueDate >= fromDate) &&
           (!toDate || issueDate <= toDate) &&
           (movementFilter === "all" ||
@@ -78,7 +82,7 @@ export function InvoicesPage() {
             (movementFilter === "unlinked" && movementCount === 0))
         );
       }),
-    [from, invoices.data, movementFilter, to],
+    [from, invoices.data, movementFilter, selectedInvoiceId, to],
   );
 
   function clearFilters() {

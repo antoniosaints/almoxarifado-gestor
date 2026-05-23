@@ -1,7 +1,12 @@
 import {
   ArrowLeft,
   ArrowRightLeft,
+  BarChart3,
+  Box,
   Boxes,
+  ChartArea,
+  Clock,
+  FileDown,
   History,
   PackageMinus,
   PackagePlus,
@@ -33,7 +38,7 @@ import { SearchSelect } from "@/components/ui/search-select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { api, useApiResource } from "@/lib/api";
+import { api, apiFile, useApiResource } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import type {
   Invoice,
@@ -66,7 +71,7 @@ function movementLabel(kind: MovementFormProps["kind"]) {
   }
 
   if (kind === "entryRequest") {
-    return "Solicitar entrada";
+    return "Solicitar";
   }
 
   if (kind === "output") {
@@ -120,6 +125,7 @@ function NewProductInlineDialog({
 
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    event.stopPropagation();
     setMessage(null);
 
     try {
@@ -726,14 +732,53 @@ function StockMovementsDialog({
   movements: Movement[];
   stock: Stock;
 }) {
+  const { session } = useSession();
   const [open, setOpen] = useState(false);
   const [invoiceOnly, setInvoiceOnly] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const admin = session?.user.role === "ADMIN";
   const stockMovements = movementsForStock(movements, stock);
   const visibleMovements = invoiceOnly
     ? stockMovements.filter(
         (movement) => movement.invoiceId || movement.invoice,
       )
     : stockMovements;
+
+  async function exportMovementsPdf() {
+    setExporting(true);
+    setMessage(null);
+
+    const params = new URLSearchParams({
+      productId: stock.productId,
+      warehouseIds: stock.warehouseId,
+    });
+
+    if (invoiceOnly) {
+      params.set("invoiceOnly", "1");
+    }
+
+    try {
+      const blob = await apiFile(`/reports/movements?${params.toString()}`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `movimentacoes-${stock.product.code}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao exportar movimentacoes.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <>
@@ -759,7 +804,23 @@ function StockMovementsDialog({
             </span>
             <Switch checked={invoiceOnly} onCheckedChange={setInvoiceOnly} />
           </div>
-          <MovementsTable movements={visibleMovements} />
+          {message ? <ResourceError message={message} /> : null}
+          <MovementsTable movements={visibleMovements} showInvoiceAction />
+          {admin ? (
+            <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                {visibleMovements.length} movimentacao(oes) no filtro atual.
+              </p>
+              <Button
+                disabled={exporting}
+                onClick={() => void exportMovementsPdf()}
+                type="button"
+              >
+                <FileDown className="h-4 w-4" />
+                {exporting ? "Gerando..." : "Exportar PDF"}
+              </Button>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>
@@ -970,11 +1031,6 @@ function StockTable({
             key: "category",
           },
           {
-            cell: (stock) => stockCurrency(stock.unitPriceAverage),
-            header: "Valor unitario",
-            key: "unit-price",
-          },
-          {
             cell: (stock) => stockCurrency(stock.totalValue),
             header: "Valor total",
             key: "total-value",
@@ -1097,7 +1153,6 @@ function StockTable({
             stock.product.unit.abbreviation,
             stock.currentQuantity,
             stock.minimumQuantity,
-            stockCurrency(stock.unitPriceAverage),
             stockCurrency(stock.totalValue),
             movementSummary(latestMovementForStock(movements, stock)),
           ].join(" ")
@@ -1160,13 +1215,212 @@ function StockTable({
   );
 }
 
+function WarehouseOverview({
+  movements,
+  stocks,
+}: {
+  movements: Movement[];
+  stocks: Stock[];
+}) {
+  const lowStock = stocks.filter(
+    (stock) => stock.currentQuantity > 0 && isLowStock(stock),
+  );
+  const outOfStock = stocks.filter((stock) => stock.currentQuantity === 0);
+  const totalQuantity = stocks.reduce(
+    (total, stock) => total + stock.currentQuantity,
+    0,
+  );
+  const totalValue = stocks.reduce(
+    (total, stock) => total + Number(stock.totalValue ?? 0),
+    0,
+  );
+  const categoryStats = Object.values(
+    stocks.reduce<
+      Record<
+        string,
+        {
+          itemCount: number;
+          name: string;
+          quantity: number;
+          totalValue: number;
+        }
+      >
+    >((groups, stock) => {
+      const name = stock.product.category.name;
+      const group =
+        groups[name] ??
+        (groups[name] = {
+          itemCount: 0,
+          name,
+          quantity: 0,
+          totalValue: 0,
+        });
+
+      group.itemCount += 1;
+      group.quantity += stock.currentQuantity;
+      group.totalValue += Number(stock.totalValue ?? 0);
+
+      return groups;
+    }, {}),
+  ).sort((left, right) => right.totalValue - left.totalValue);
+  const maxCategoryValue = Math.max(
+    1,
+    ...categoryStats.map((category) => category.totalValue),
+  );
+  const recentMovements = [...movements]
+    .sort(
+      (left, right) =>
+        new Date(right.movementDate).getTime() -
+        new Date(left.movementDate).getTime(),
+    )
+    .slice(0, 5);
+
+  return (
+    <div className="space-y-4">
+      {lowStock.length ? (
+        <Alert>
+          <AlertTitle>Produtos em baixo estoque</AlertTitle>
+          <AlertDescription>
+            {lowStock.map((stock) => stock.product.name).join(", ")}
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
+          <AlertTitle>Estoque acompanhado</AlertTitle>
+          <AlertDescription className="text-emerald-900">
+            Nenhum item deste almoxarifado esta abaixo do minimo.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          icon={<Boxes className="h-4 w-4" />}
+          label="Itens monitorados"
+          value={stocks.length}
+        />
+        <SummaryCard
+          icon={<PackagePlus className="h-4 w-4" />}
+          label="Quantidade total"
+          value={totalQuantity}
+        />
+        <SummaryCard
+          icon={<TriangleAlert className="h-4 w-4" />}
+          label="Baixo estoque"
+          value={lowStock.length}
+        />
+        <SummaryCard
+          icon={<BarChart3 className="h-4 w-4" />}
+          label="Valor total em estoque"
+          value={stockCurrency(totalValue)}
+        />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,420px)]">
+        <section className="rounded-lg border bg-card p-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="font-semibold">Distribuicao por categoria</h3>
+              <p className="text-sm text-muted-foreground">
+                Participacao por valor total em estoque.
+              </p>
+            </div>
+            <Badge variant="outline">{categoryStats.length} categorias</Badge>
+          </div>
+
+          {categoryStats.length ? (
+            <div className="space-y-4">
+              {categoryStats.map((category) => (
+                <div className="space-y-2" key={category.name}>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <span className="font-medium">{category.name}</span>
+                    <span className="text-muted-foreground">
+                      {category.itemCount} item(ns) - {category.quantity} un.
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{
+                        width: `${Math.max(
+                          6,
+                          (category.totalValue / maxCategoryValue) * 100,
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {stockCurrency(category.totalValue)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+              Nenhum estoque cadastrado para analisar.
+            </p>
+          )}
+        </section>
+
+        <section className="rounded-lg border bg-card p-4">
+          <div className="mb-4">
+            <h3 className="font-semibold">Ultimas movimentacoes</h3>
+            <p className="text-sm text-muted-foreground">
+              Atividade recente deste almoxarifado.
+            </p>
+          </div>
+
+          {recentMovements.length ? (
+            <div className="space-y-3">
+              {recentMovements.map((movement) => (
+                <div
+                  className="rounded-md border bg-background p-3"
+                  key={movement.id}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Badge
+                      variant={
+                        movement.type.includes("ENTRADA")
+                          ? "success"
+                          : "outline"
+                      }
+                    >
+                      {movementLabels[movement.type]}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDate(movement.movementDate)}
+                    </span>
+                  </div>
+                  <p className="mt-2 font-medium">{movement.product.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {movement.quantity} {movement.product.unit.abbreviation}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+              Nenhuma movimentacao registrada no periodo.
+            </p>
+          )}
+        </section>
+      </div>
+
+      {outOfStock.length ? (
+        <p className="text-sm text-muted-foreground">
+          {outOfStock.length} produto(s) sem saldo precisam de acompanhamento.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function WarehouseTabs({
   movements,
   onMinimumChange,
   onMovementSaved,
   onProductCreated,
   onStockDeleted,
-  entryRequestProducts,
   productCategories,
   products,
   units,
@@ -1178,7 +1432,6 @@ export function WarehouseTabs({
   onMovementSaved: () => Promise<void>;
   onProductCreated?: (product: Product) => Promise<void> | void;
   onStockDeleted: (stockId: string) => Promise<void>;
-  entryRequestProducts?: Product[];
   productCategories?: ProductCategory[];
   products: Product[];
   units?: UnitOfMeasure[];
@@ -1187,19 +1440,27 @@ export function WarehouseTabs({
 }) {
   const { session } = useSession();
   const operator = session?.user.role === "OPERATOR";
-  const lowStock = warehouse.stocks.filter(
-    (stock) =>
-      stock.currentQuantity > 0 &&
-      stock.currentQuantity <= stock.minimumQuantity,
-  );
+  const [activeTab, setActiveTab] = useState("overview");
+  const stockedProducts = warehouse.stocks
+    .map((stock) => stock.product)
+    .sort((left, right) => left.code.localeCompare(right.code));
 
   return (
-    <Tabs defaultValue="overview">
+    <Tabs onValueChange={setActiveTab} value={activeTab}>
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <TabsList>
-          <TabsTrigger value="overview">Visao geral</TabsTrigger>
-          <TabsTrigger value="stock">Estoque</TabsTrigger>
-          <TabsTrigger value="history">Historico</TabsTrigger>
+          <TabsTrigger onClick={() => setActiveTab("overview")} value="overview">
+            <ChartArea size={15} className="mr-1" />
+            Visao geral
+          </TabsTrigger>
+          <TabsTrigger onClick={() => setActiveTab("stock")} value="stock">
+            <Box size={15} className="mr-1" />
+            Estoque
+          </TabsTrigger>
+          <TabsTrigger onClick={() => setActiveTab("history")} value="history">
+            <Clock size={15} className="mr-1" />
+            Historico
+          </TabsTrigger>
         </TabsList>
         <div className="flex flex-wrap gap-2">
           <MovementDialog
@@ -1216,7 +1477,7 @@ export function WarehouseTabs({
             <MovementDialog
               kind="entryRequest"
               onSaved={onMovementSaved}
-              products={entryRequestProducts ?? products}
+              products={stockedProducts}
               warehouse={warehouse}
               warehouses={warehouses}
             />
@@ -1233,32 +1494,7 @@ export function WarehouseTabs({
         </div>
       </div>
       <TabsContent value="overview">
-        <div className="space-y-4">
-          {lowStock.length ? (
-            <Alert>
-              <AlertTitle>Produtos em baixo estoque</AlertTitle>
-              <AlertDescription>
-                {lowStock.map((stock) => stock.product.name).join(", ")}
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
-              <AlertTitle>Estoque acompanhado</AlertTitle>
-              <AlertDescription className="text-emerald-900">
-                Nenhum item deste almoxarifado esta abaixo do minimo.
-              </AlertDescription>
-            </Alert>
-          )}
-          <StockTable
-            movements={movements}
-            onMinimumChange={onMinimumChange}
-            onMovementSaved={onMovementSaved}
-            onStockDeleted={onStockDeleted}
-            stocks={warehouse.stocks}
-            warehouse={warehouse}
-            warehouses={warehouses}
-          />
-        </div>
+        <WarehouseOverview movements={movements} stocks={warehouse.stocks} />
       </TabsContent>
       <TabsContent value="stock">
         <StockTable
@@ -1291,10 +1527,6 @@ export function WarehouseDetailPage() {
     [],
   );
   const units = useApiResource<UnitOfMeasure[]>("/units", []);
-  const entryRequestProducts = useApiResource<Product[]>(
-    "/entry-requests/available-products",
-    [],
-  );
   const movements = useApiResource<Movement[]>(
     `/movements?warehouseId=${warehouseId}`,
     [],
@@ -1357,7 +1589,6 @@ export function WarehouseDetailPage() {
     products.loading ||
     productCategories.loading ||
     units.loading ||
-    entryRequestProducts.loading ||
     movements.loading
   ) {
     return <LoadingLine />;
@@ -1369,7 +1600,6 @@ export function WarehouseDetailPage() {
     products.error ||
     productCategories.error ||
     units.error ||
-    entryRequestProducts.error ||
     movements.error
   ) {
     return (
@@ -1380,7 +1610,6 @@ export function WarehouseDetailPage() {
           products.error ??
           productCategories.error ??
           units.error ??
-          entryRequestProducts.error ??
           movements.error ??
           ""
         }
@@ -1474,7 +1703,6 @@ export function WarehouseDetailPage() {
         onMovementSaved={reloadOperations}
         onProductCreated={addProductToOptions}
         onStockDeleted={deleteStock}
-        entryRequestProducts={entryRequestProducts.data}
         productCategories={productCategories.data}
         products={products.data}
         units={units.data}

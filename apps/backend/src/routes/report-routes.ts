@@ -46,6 +46,19 @@ function reportDateRange(query: Record<string, unknown>) {
   return { from, to };
 }
 
+function queryString(query: Record<string, unknown>, key: string) {
+  const value = query[key];
+
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function queryList(query: Record<string, unknown>, key: string) {
+  return (queryString(query, key) ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 function ensureSpace(document: PDFKit.PDFDocument, height: number) {
   if (document.y + height > document.page.height - document.page.margins.bottom) {
     document.addPage();
@@ -145,8 +158,12 @@ reportRoutes.get(
   "/movements",
   asyncHandler(async (request, response) => {
     const { from, to } = reportDateRange(request.query);
+    const warehouseIds = queryList(request.query, "warehouseIds");
+    const productId = queryString(request.query, "productId");
+    const invoiceOnly = queryString(request.query, "invoiceOnly") === "1";
     const movements = await prisma.stockMovement.findMany({
       where: {
+        invoiceId: invoiceOnly ? { not: null } : undefined,
         movementDate:
           from || to
             ? {
@@ -154,6 +171,8 @@ reportRoutes.get(
                 lte: to,
               }
             : undefined,
+        productId,
+        warehouseId: warehouseIds.length ? { in: warehouseIds } : undefined,
       },
       include: {
         destinationWarehouse: true,
@@ -215,7 +234,8 @@ reportRoutes.get(
 
 reportRoutes.get(
   "/stocks",
-  asyncHandler(async (_request, response) => {
+  asyncHandler(async (request, response) => {
+    const warehouseIds = queryList(request.query, "warehouseIds");
     const stocks = await prisma.stock.findMany({
       include: {
         product: {
@@ -230,6 +250,9 @@ reportRoutes.get(
         },
       },
       orderBy: [{ warehouse: { name: "asc" } }, { product: { name: "asc" } }],
+      where: {
+        warehouseId: warehouseIds.length ? { in: warehouseIds } : undefined,
+      },
     });
 
     const buffer = await buildPdf(
@@ -270,6 +293,9 @@ reportRoutes.get(
   "/invoices",
   asyncHandler(async (request, response) => {
     const { from, to } = reportDateRange(request.query);
+    const companyName = queryString(request.query, "companyName");
+    const cnpj = queryString(request.query, "cnpj");
+    const number = queryString(request.query, "number");
     const invoices = await prisma.invoice.findMany({
       include: {
         movements: {
@@ -286,6 +312,8 @@ reportRoutes.get(
       },
       orderBy: [{ issueDate: "desc" }, { number: "asc" }],
       where: {
+        cnpj: cnpj ? { contains: cnpj } : undefined,
+        companyName: companyName ? { contains: companyName } : undefined,
         issueDate:
           from || to
             ? {
@@ -293,6 +321,7 @@ reportRoutes.get(
                 lte: to,
               }
             : undefined,
+        number: number ? { contains: number } : undefined,
       },
     });
 

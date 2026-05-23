@@ -1,7 +1,10 @@
+import { FileText } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +20,13 @@ export const movementLabels: Record<MovementType, string> = {
   TRANSFERENCIA_SAIDA: "Transferencia enviada",
 };
 
-export function MovementsTable({ movements }: { movements: Movement[] }) {
+export function MovementsTable({
+  movements,
+  showInvoiceAction = false,
+}: {
+  movements: Movement[];
+  showInvoiceAction?: boolean;
+}) {
   return (
     <DataTable
       columns={[
@@ -92,6 +101,32 @@ export function MovementsTable({ movements }: { movements: Movement[] }) {
           header: "Valor total",
           key: "total",
         },
+        ...(showInvoiceAction
+          ? [
+              {
+                cell: (movement: Movement) =>
+                  movement.invoiceId ? (
+                    <Button asChild size="sm" variant="outline">
+                      <Link
+                        aria-label={`Abrir nota ${
+                          movement.invoice?.number ?? "fiscal"
+                        }`}
+                        to={`/invoices?invoiceId=${movement.invoiceId}`}
+                      >
+                        <FileText className="h-4 w-4" />
+                        NF
+                      </Link>
+                    </Button>
+                  ) : (
+                    "-"
+                  ),
+                cellClassName: "text-right",
+                header: "NF",
+                headerClassName: "text-right",
+                key: "invoice-action",
+              },
+            ]
+          : []),
       ]}
       data={movements}
       emptyMessage="Nenhuma movimentacao encontrada."

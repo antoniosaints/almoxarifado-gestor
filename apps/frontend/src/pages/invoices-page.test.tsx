@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Invoice } from "@/lib/types";
-import { InvoiceMovementsDialog } from "./invoices-page";
+import { InvoiceMovementsDialog, InvoicesPage } from "./invoices-page";
 
 const invoice: Invoice = {
   cnpj: "12.345.678/0001-90",
@@ -36,6 +37,10 @@ const invoice: Invoice = {
 };
 
 describe("InvoiceMovementsDialog", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("shows the stock movements linked to an invoice", () => {
     render(<InvoiceMovementsDialog invoice={invoice} />);
 
@@ -45,5 +50,39 @@ describe("InvoiceMovementsDialog", () => {
     expect(screen.getByText("Papel A4")).toBeInTheDocument();
     expect(screen.getByText("Almoxarifado da Saude")).toBeInTheDocument();
     expect(screen.getByText("3 PCT")).toBeInTheDocument();
+  });
+
+  it("filters the list by invoiceId from the query string", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify([
+            invoice,
+            {
+              ...invoice,
+              id: "invoice-other",
+              number: "NF-202",
+            },
+          ]),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          },
+        ),
+      ),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/invoices?invoiceId=invoice-paper"]}>
+        <InvoicesPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("NF-101")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("NF-202")).not.toBeInTheDocument();
   });
 });
