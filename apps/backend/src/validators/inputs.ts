@@ -87,6 +87,24 @@ export const invoiceXmlPreviewInput = z.object({
   xml: z.string().min(1, "Selecione o XML da nota."),
 });
 
+const optionalUrl = optionalText.refine(
+  (value) => !value || /^https?:\/\//i.test(value) || value.startsWith("data:image/"),
+  "Informe uma URL valida.",
+);
+
+export const systemSettingsInput = z.object({
+  loginBackgroundUrl: optionalUrl,
+  loginImageUrl: optionalUrl,
+  loginSubtitle: z.string().trim().min(2, "Informe o subtitulo do login."),
+  loginTitle: z.string().trim().min(2, "Informe o titulo do login."),
+  logoUrl: optionalUrl,
+  primaryColor: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Informe uma cor hexadecimal valida."),
+  systemName: z.string().trim().min(2, "Informe o nome do sistema."),
+});
+
 export const loginInput = z.object({
   email: z.string().trim().email("Informe um email valido.").transform((value) => value.toLowerCase()),
   password: z.string().min(1, "Informe a senha."),

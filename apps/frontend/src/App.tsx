@@ -11,6 +11,7 @@ import { ReportsPage } from "@/pages/reports-page";
 import { RequestsPage } from "@/pages/requests-page";
 import { UnitsPage } from "@/pages/units-page";
 import { UsersPage } from "@/pages/users-page";
+import { SettingsPage } from "@/pages/settings-page";
 import { WarehouseDetailPage } from "@/pages/warehouse-detail-page";
 import { WarehousesPage } from "@/pages/warehouses-page";
 import { useSession } from "@/lib/session";
@@ -90,6 +91,14 @@ export function App() {
             </AdminRoute>
           }
           path="/users"
+        />
+        <Route
+          element={
+            <AdminRoute>
+              <SettingsPage />
+            </AdminRoute>
+          }
+          path="/settings"
         />
       </Route>
       <Route element={<Navigate replace to="/dashboard" />} path="*" />

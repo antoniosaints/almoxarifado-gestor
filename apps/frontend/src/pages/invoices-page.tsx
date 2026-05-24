@@ -1,4 +1,4 @@
-import { FileDown, FileSearch, Upload } from "lucide-react";
+import { FileDown, FileSearch, Trash2, Upload } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api, apiFile, useApiResource } from "@/lib/api";
+import { getStoredSession } from "@/lib/session";
 import type { Invoice, Product, ProductCategory, Warehouse } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { MovementsTable } from "./movements-page";
@@ -699,6 +700,7 @@ export function InvoicesPage() {
   const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const selectedInvoiceId = searchParams.get("invoiceId");
+  const canDeleteInvoices = getStoredSession()?.user.role === "ADMIN";
 
   const filteredInvoices = useMemo(
     () =>
@@ -755,6 +757,30 @@ export function InvoicesPage() {
   async function reloadAfterImport() {
     setMessage("Nota importada e estoque atualizado.");
     await Promise.all([invoices.reload(), products.reload()]);
+  }
+
+  async function removeInvoice(invoice: Invoice) {
+    const confirmed = window.confirm(
+      `Excluir nota ${invoice.number}? As movimentacoes vinculadas serao mantidas sem nota fiscal.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setMessage(null);
+
+    try {
+      await api<void>(`/invoices/${invoice.id}`, { method: "DELETE" });
+      setMessage("Nota fiscal removida.");
+      await invoices.reload();
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao remover nota fiscal.",
+      );
+    }
   }
 
   if (invoices.loading || warehouses.loading || categories.loading || products.loading) {
@@ -894,6 +920,17 @@ export function InvoicesPage() {
                   invoice={invoice}
                   onExport={downloadReport}
                 />
+                {canDeleteInvoices ? (
+                  <Button
+                    aria-label={`Remover nota ${invoice.number}`}
+                    onClick={() => void removeInvoice(invoice)}
+                    size="icon"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : null}
               </div>
             ),
             cellClassName: "text-right",

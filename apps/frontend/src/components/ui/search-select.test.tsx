@@ -146,7 +146,7 @@ describe("SearchSelect", () => {
     getBoundingClientRect.mockRestore();
   });
 
-  it("uses the modal scroll area as the dropdown boundary", () => {
+  it("renders inside modal content with absolute positioning", () => {
     Object.defineProperty(window, "innerHeight", {
       configurable: true,
       value: 920,
@@ -194,7 +194,11 @@ describe("SearchSelect", () => {
       });
 
     render(
-      <div data-testid="modal-scroll-area" style={{ overflowY: "auto" }}>
+      <div
+        data-dialog-content=""
+        data-testid="modal-scroll-area"
+        style={{ overflowY: "auto", position: "relative" }}
+      >
         <SearchSelect
           ariaLabel="Unidade"
           onValueChange={() => undefined}
@@ -210,8 +214,9 @@ describe("SearchSelect", () => {
     const panel = screen.getByTestId("search-select-panel");
 
     expect(panel).toHaveAttribute("data-side", "top");
-    expect(panel).toHaveClass("fixed");
-    expect(screen.getByTestId("modal-scroll-area")).not.toContainElement(panel);
+    expect(panel).toHaveClass("absolute");
+    expect(panel).toHaveStyle({ top: "116px" });
+    expect(screen.getByTestId("modal-scroll-area")).toContainElement(panel);
 
     getBoundingClientRect.mockRestore();
   });

@@ -31,6 +31,7 @@ insightRoutes.get(
           include: {
             product: {
               include: {
+                category: true,
                 unit: true,
               },
             },
@@ -50,6 +51,7 @@ insightRoutes.get(
           include: {
             product: {
               include: {
+                category: true,
                 unit: true,
               },
             },
@@ -60,7 +62,18 @@ insightRoutes.get(
         prisma.invoice.findMany({
           include: {
             movements: {
-              select: { id: true },
+              include: {
+                destinationWarehouse: true,
+                product: {
+                  include: {
+                    unit: true,
+                  },
+                },
+                responsibleUser: true,
+                sourceWarehouse: true,
+                warehouse: true,
+              },
+              orderBy: { movementDate: "desc" },
             },
           },
           orderBy: [{ issueDate: "desc" }, { number: "asc" }],
@@ -122,13 +135,21 @@ insightRoutes.get(
 
     const productMovement = new Map<
       string,
-      { code: string; name: string; productId: string; quantityMoved: number; unit: string }
+      {
+        code: string;
+        name: string;
+        product: (typeof monthlyMovements)[number]["product"];
+        productId: string;
+        quantityMoved: number;
+        unit: string;
+      }
     >();
 
     for (const movement of monthlyMovements) {
       const current = productMovement.get(movement.productId) ?? {
         code: movement.product.code,
         name: movement.product.name,
+        product: movement.product,
         productId: movement.productId,
         quantityMoved: 0,
         unit: movement.product.unit.abbreviation,
@@ -149,6 +170,7 @@ insightRoutes.get(
 
     response.json({
       recentInvoices: invoices.map((invoice) => ({
+        ...invoice,
         companyName: invoice.companyName,
         id: invoice.id,
         issueDate: invoice.issueDate,
@@ -157,7 +179,26 @@ insightRoutes.get(
       })),
       topProducts: [...productMovement.values()]
         .sort((left, right) => right.quantityMoved - left.quantityMoved)
+        .map((product) => ({
+          ...product,
+          stocks: stocks.filter((stock) => stock.productId === product.productId),
+        }))
         .slice(0, 5),
+      alertStocks: [...lowStockItems, ...outOfStockItems]
+        .sort((left, right) => {
+          const leftSeverity = left.currentQuantity === 0 ? 1 : 0;
+          const rightSeverity = right.currentQuantity === 0 ? 1 : 0;
+
+          return (
+            rightSeverity - leftSeverity ||
+            left.currentQuantity - right.currentQuantity ||
+            left.product.name.localeCompare(right.product.name)
+          );
+        })
+        .map((stock) => ({
+          ...stock,
+          state: stock.currentQuantity === 0 ? "ZERO" : "LOW",
+        })),
       totals: {
         activeProducts: products.filter((product) => product.active).length,
         activeWarehouses: warehouses.filter((warehouse) => warehouse.active).length,

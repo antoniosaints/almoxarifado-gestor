@@ -85,6 +85,17 @@ export type Session = {
   user: User;
 };
 
+export type SystemSettings = {
+  id: string;
+  loginBackgroundUrl?: string | null;
+  loginImageUrl?: string | null;
+  loginSubtitle: string;
+  loginTitle: string;
+  logoUrl?: string | null;
+  primaryColor: string;
+  systemName: string;
+};
+
 export type Invoice = {
   cnpj: string;
   companyAddress?: string | null;
@@ -202,20 +213,23 @@ export type WarehouseRiskInsight = {
 export type TopProductInsight = {
   code: string;
   name: string;
+  product: Product;
   productId: string;
   quantityMoved: number;
+  stocks: Stock[];
   unit: string;
 };
 
-export type RecentInvoiceInsight = {
-  companyName: string;
-  id: string;
-  issueDate: string;
+export type RecentInvoiceInsight = Invoice & {
   movementCount: number;
-  number: string;
+};
+
+export type AlertStockInsight = Stock & {
+  state: "LOW" | "ZERO";
 };
 
 export type Insights = {
+  alertStocks: AlertStockInsight[];
   recentInvoices: RecentInvoiceInsight[];
   topProducts: TopProductInsight[];
   totals: InsightsSummary;

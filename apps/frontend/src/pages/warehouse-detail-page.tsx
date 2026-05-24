@@ -17,6 +17,10 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
+import {
+  CategoryCreateDialog,
+  UnitCreateDialog,
+} from "@/components/domain/catalog-quick-create-dialog";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { StockBadge } from "@/components/domain/stock-badge";
@@ -137,9 +141,6 @@ function NewProductInlineDialog({
     emptyProductDraft(productCategories, units),
   );
   const [message, setMessage] = useState<string | null>(null);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [newUnitAbbreviation, setNewUnitAbbreviation] = useState("");
-  const [newUnitName, setNewUnitName] = useState("");
 
   useEffect(() => {
     setAvailableCategories(productCategories);
@@ -152,60 +153,17 @@ function NewProductInlineDialog({
   function openDialog() {
     setDraft(emptyProductDraft(availableCategories, availableUnits));
     setMessage(null);
-    setNewCategoryName("");
-    setNewUnitAbbreviation("");
-    setNewUnitName("");
     setOpen(true);
   }
 
-  async function createCategory() {
-    if (!newCategoryName.trim()) {
-      return;
-    }
-
-    try {
-      const category = await api<ProductCategory>("/product-categories", {
-        body: JSON.stringify({ description: "", name: newCategoryName.trim() }),
-        method: "POST",
-      });
-
-      setAvailableCategories((categories) => [...categories, category]);
-      setDraft((current) =>
-        current ? { ...current, categoryId: category.id } : current,
-      );
-      setNewCategoryName("");
-    } catch (caughtError) {
-      setMessage(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Falha ao criar categoria.",
-      );
-    }
+  function selectCreatedCategory(category: ProductCategory) {
+    setAvailableCategories((categories) => [...categories, category]);
+    setDraft((current) => (current ? { ...current, categoryId: category.id } : current));
   }
 
-  async function createUnit() {
-    if (!newUnitName.trim() || !newUnitAbbreviation.trim()) {
-      return;
-    }
-
-    try {
-      const unit = await api<UnitOfMeasure>("/units", {
-        body: JSON.stringify({
-          abbreviation: newUnitAbbreviation.trim(),
-          name: newUnitName.trim(),
-        }),
-        method: "POST",
-      });
-
-      setAvailableUnits((currentUnits) => [...currentUnits, unit]);
-      setDraft((current) => (current ? { ...current, unitId: unit.id } : current));
-      setNewUnitAbbreviation("");
-      setNewUnitName("");
-    } catch (caughtError) {
-      setMessage(
-        caughtError instanceof Error ? caughtError.message : "Falha ao criar unidade.",
-      );
-    }
+  function selectCreatedUnit(unit: UnitOfMeasure) {
+    setAvailableUnits((currentUnits) => [...currentUnits, unit]);
+    setDraft((current) => (current ? { ...current, unitId: unit.id } : current));
   }
 
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
@@ -273,79 +231,43 @@ function NewProductInlineDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField>
                 <Label htmlFor="stock-product-category">Categoria</Label>
-                <SearchSelect
-                  ariaLabel="Categoria"
-                  id="stock-product-category"
-                  onValueChange={(categoryId) =>
-                    setDraft({ ...draft, categoryId })
-                  }
-                  options={availableCategories.map((category) => ({
-                    label: category.name,
-                    value: category.id,
-                  }))}
-                  placeholder="Selecione"
-                  value={draft.categoryId}
-                />
-                {canManageCatalog ? (
-                  <div className="mt-2 flex gap-2">
-                    <Input
-                      aria-label="Nova categoria"
-                      onChange={(event) => setNewCategoryName(event.target.value)}
-                      placeholder="Nova categoria"
-                      value={newCategoryName}
-                    />
-                    <Button
-                      disabled={!newCategoryName.trim()}
-                      onClick={() => void createCategory()}
-                      type="button"
-                      variant="outline"
-                    >
-                      Criar
-                    </Button>
-                  </div>
-                ) : null}
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <SearchSelect
+                    ariaLabel="Categoria"
+                    id="stock-product-category"
+                    onValueChange={(categoryId) =>
+                      setDraft({ ...draft, categoryId })
+                    }
+                    options={availableCategories.map((category) => ({
+                      label: category.name,
+                      value: category.id,
+                    }))}
+                    placeholder="Selecione"
+                    value={draft.categoryId}
+                  />
+                  {canManageCatalog ? (
+                    <CategoryCreateDialog onCreated={selectCreatedCategory} />
+                  ) : null}
+                </div>
               </FormField>
               <FormField>
                 <Label htmlFor="stock-product-unit">Unidade</Label>
-                <SearchSelect
-                  ariaLabel="Unidade"
-                  id="stock-product-unit"
-                  onValueChange={(unitId) => setDraft({ ...draft, unitId })}
-                  options={availableUnits.map((unit) => ({
-                    label: `${unit.name} / ${unit.abbreviation}`,
-                    value: unit.id,
-                  }))}
-                  placeholder="Selecione"
-                  value={draft.unitId}
-                />
-                {canManageCatalog ? (
-                  <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_5rem_auto]">
-                    <Input
-                      aria-label="Nova unidade"
-                      onChange={(event) => setNewUnitName(event.target.value)}
-                      placeholder="Nova unidade"
-                      value={newUnitName}
-                    />
-                    <Input
-                      aria-label="Sigla da nova unidade"
-                      onChange={(event) =>
-                        setNewUnitAbbreviation(event.target.value)
-                      }
-                      placeholder="Sigla"
-                      value={newUnitAbbreviation}
-                    />
-                    <Button
-                      disabled={
-                        !newUnitName.trim() || !newUnitAbbreviation.trim()
-                      }
-                      onClick={() => void createUnit()}
-                      type="button"
-                      variant="outline"
-                    >
-                      Criar
-                    </Button>
-                  </div>
-                ) : null}
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <SearchSelect
+                    ariaLabel="Unidade"
+                    id="stock-product-unit"
+                    onValueChange={(unitId) => setDraft({ ...draft, unitId })}
+                    options={availableUnits.map((unit) => ({
+                      label: `${unit.name} / ${unit.abbreviation}`,
+                      value: unit.id,
+                    }))}
+                    placeholder="Selecione"
+                    value={draft.unitId}
+                  />
+                  {canManageCatalog ? (
+                    <UnitCreateDialog onCreated={selectCreatedUnit} />
+                  ) : null}
+                </div>
               </FormField>
             </div>
             <label className="flex items-center gap-2 rounded-md border p-3 text-sm">

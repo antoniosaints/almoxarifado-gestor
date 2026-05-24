@@ -17,12 +17,12 @@ const buttonVariants = cva(
         sm: "h-8 px-3",
       },
       variant: {
-        default: "bg-primary text-primary-foreground shadow-sm hover:bg-teal-800",
+        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
         destructive:
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-red-700",
         ghost: "hover:bg-muted hover:text-foreground",
         outline: "border bg-card text-foreground shadow-sm hover:bg-muted",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-slate-200",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
       },
     },
   },

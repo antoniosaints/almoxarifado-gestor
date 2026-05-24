@@ -46,6 +46,7 @@ model User {
   reviewedEntries          EntryRequest[]    @relation("EntryReviewer")
   createdTransfers         TransferRequest[] @relation("TransferCreator")
   receivedTransfers        TransferRequest[] @relation("TransferReceiver")
+  auditLogs                AuditLog[]
 }
 
 model WarehouseCategory {
@@ -139,6 +140,7 @@ model Stock {
   updatedAt       DateTime  @updatedAt
   warehouse       Warehouse @relation(fields: [warehouseId], references: [id])
   product         Product   @relation(fields: [productId], references: [id])
+  movements       StockMovement[]
 
   @@unique([warehouseId, productId])
 }
@@ -155,6 +157,7 @@ model StockMovement {
   destinationNote        String?
   observation            String?
   invoiceId              String?
+  stockId                String?
   movementDate           DateTime
   responsibleUserId      String
   createdAt              DateTime     @default(now())
@@ -164,7 +167,10 @@ model StockMovement {
   destinationWarehouse   Warehouse?   @relation("MovementDestinationWarehouse", fields: [destinationWarehouseId], references: [id])
   product                Product      @relation(fields: [productId], references: [id])
   responsibleUser        User         @relation(fields: [responsibleUserId], references: [id])
-  invoice                Invoice?     @relation(fields: [invoiceId], references: [id])
+  invoice                Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  stock                  Stock?       @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@index([stockId])
 }
 
 model EntryRequest {
@@ -228,4 +234,30 @@ model Invoice {
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
   movements             StockMovement[]
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String
+  details   String?
+  userId    String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+}
+
+model SystemSettings {
+  id                 String   @id @default("system")
+  systemName         String   @default("Prefeitura")
+  logoUrl            String?
+  primaryColor       String   @default("#0f766e")
+  loginBackgroundUrl String?
+  loginTitle         String   @default("Almoxarifado Municipal")
+  loginSubtitle      String   @default("Entre com seu usuario para acompanhar o estoque municipal.")
+  loginImageUrl      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }

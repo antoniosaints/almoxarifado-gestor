@@ -27,6 +27,21 @@ const stockInclude = {
   },
 } as const;
 
+type StockForDeletion = {
+  currentQuantity: number;
+  id: string;
+  minimumQuantity: number;
+  productId: string;
+  warehouseId: string;
+  product?: {
+    code: string;
+    name: string;
+  };
+  warehouse?: {
+    name: string;
+  };
+};
+
 async function assertCurrentAdminPassword(userId: string, password: string) {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
@@ -36,6 +51,73 @@ async function assertCurrentAdminPassword(userId: string, password: string) {
   if (!passwordMatches(password, user.passwordHash)) {
     throw new AppError(401, "Senha do admin invalida.");
   }
+}
+
+function movementWhereForStocks(stocks: StockForDeletion[]) {
+  return {
+    OR: stocks.flatMap((stock) => [
+      { stockId: stock.id },
+      {
+        productId: stock.productId,
+        stockId: null,
+        warehouseId: stock.warehouseId,
+      },
+    ]),
+  };
+}
+
+function movementBelongsToStock(
+  movement: { productId: string; stockId: string | null; warehouseId: string },
+  stock: StockForDeletion,
+) {
+  return (
+    movement.stockId === stock.id ||
+    (!movement.stockId &&
+      movement.productId === stock.productId &&
+      movement.warehouseId === stock.warehouseId)
+  );
+}
+
+function stockDeletionDetails(
+  stock: StockForDeletion,
+  movements: Array<{
+    id: string;
+    invoiceId: string | null;
+    productId: string;
+    stockId: string | null;
+    warehouseId: string;
+  }>,
+) {
+  const stockMovements = movements.filter((movement) =>
+    movementBelongsToStock(movement, stock),
+  );
+
+  return JSON.stringify({
+    currentQuantity: stock.currentQuantity,
+    invoiceIds: [
+      ...new Set(
+        stockMovements
+          .map((movement) => movement.invoiceId)
+          .filter((invoiceId): invoiceId is string => Boolean(invoiceId)),
+      ),
+    ],
+    minimumQuantity: stock.minimumQuantity,
+    movementCount: stockMovements.length,
+    movementIds: stockMovements.map((movement) => movement.id),
+    product: stock.product
+      ? {
+          code: stock.product.code,
+          id: stock.productId,
+          name: stock.product.name,
+        }
+      : { id: stock.productId },
+    warehouse: stock.warehouse
+      ? {
+          id: stock.warehouseId,
+          name: stock.warehouse.name,
+        }
+      : { id: stock.warehouseId },
+  });
 }
 
 stockRoutes.get(
@@ -93,6 +175,19 @@ stockRoutes.post(
     await prisma.$transaction(
       stocks.flatMap((stock) => {
         const operations: Prisma.PrismaPromise<unknown>[] = [
+          prisma.auditLog.create({
+            data: {
+              action: "ZERO",
+              details: JSON.stringify({
+                previousQuantity: stock.currentQuantity,
+                productId: stock.productId,
+                warehouseId: stock.warehouseId,
+              }),
+              entity: "Stock",
+              entityId: stock.id,
+              userId: user.id,
+            },
+          }),
           prisma.stock.update({
             where: { id: stock.id },
             data: {
@@ -113,6 +208,7 @@ stockRoutes.post(
                 productId: stock.productId,
                 quantity: stock.currentQuantity,
                 responsibleUserId: user.id,
+                stockId: stock.id,
                 type: MovementType.SAIDA,
                 warehouseId: stock.warehouseId,
               },
@@ -143,23 +239,53 @@ stockRoutes.post(
     const input = stockBulkAdminInput.parse(request.body);
     await assertCurrentAdminPassword(user.id, input.password);
 
-    const found = await prisma.stock.count({
+    const stocks = await prisma.stock.findMany({
       where: {
         id: { in: input.stockIds },
       },
+      include: stockInclude,
     });
 
-    if (found !== new Set(input.stockIds).size) {
+    if (stocks.length !== new Set(input.stockIds).size) {
       throw new AppError(404, "Um ou mais estoques selecionados nao foram encontrados.");
     }
 
-    await prisma.stock.deleteMany({
-      where: {
-        id: { in: input.stockIds },
+    const movements = await prisma.stockMovement.findMany({
+      where: movementWhereForStocks(stocks),
+      select: {
+        id: true,
+        invoiceId: true,
+        productId: true,
+        stockId: true,
+        warehouseId: true,
       },
     });
 
-    response.json({ count: found });
+    await prisma.$transaction(async (transaction) => {
+      await transaction.auditLog.createMany({
+        data: stocks.map((stock) => ({
+          action: "DELETE",
+          details: stockDeletionDetails(stock, movements),
+          entity: "Stock",
+          entityId: stock.id,
+          userId: user.id,
+        })),
+      });
+
+      await transaction.stockMovement.deleteMany({
+        where: {
+          id: { in: movements.map((movement) => movement.id) },
+        },
+      });
+
+      await transaction.stock.deleteMany({
+        where: {
+          id: { in: input.stockIds },
+        },
+      });
+    });
+
+    response.json({ count: stocks.length, movementCount: movements.length });
   }),
 );
 
@@ -168,24 +294,42 @@ stockRoutes.delete(
   requireRole(UserRole.ADMIN),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
+    const user = currentUser(response);
     const stock = await prisma.stock.findUniqueOrThrow({
       where: { id },
+      include: stockInclude,
     });
-    const movementCount = await prisma.stockMovement.count({
-      where: {
-        productId: stock.productId,
-        warehouseId: stock.warehouseId,
+    const movements = await prisma.stockMovement.findMany({
+      where: movementWhereForStocks([stock]),
+      select: {
+        id: true,
+        invoiceId: true,
+        productId: true,
+        stockId: true,
+        warehouseId: true,
       },
     });
 
-    if (movementCount) {
-      response.status(409).json({
-        message: "Este estoque possui movimentacoes e nao pode ser removido.",
+    await prisma.$transaction(async (transaction) => {
+      await transaction.auditLog.create({
+        data: {
+          action: "DELETE",
+          details: stockDeletionDetails(stock, movements),
+          entity: "Stock",
+          entityId: stock.id,
+          userId: user.id,
+        },
       });
-      return;
-    }
 
-    await prisma.stock.delete({ where: { id } });
+      await transaction.stockMovement.deleteMany({
+        where: {
+          id: { in: movements.map((movement) => movement.id) },
+        },
+      });
+
+      await transaction.stock.delete({ where: { id } });
+    });
+
     response.status(204).send();
   }),
 );

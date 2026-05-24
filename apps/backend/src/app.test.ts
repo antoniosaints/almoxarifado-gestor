@@ -289,7 +289,7 @@ describe("api", () => {
     });
   });
 
-  it("refuses to delete a stock item that already has movements", async () => {
+  it("deletes a stock item with its movements and audit trail", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const warehouse = await prisma.warehouse.create({
       data: {
@@ -305,12 +305,22 @@ describe("api", () => {
         warehouseId: warehouse.id,
       },
     });
+    const invoice = await prisma.invoice.create({
+      data: {
+        cnpj: "12345678000190",
+        companyName: "Fornecedor Municipal",
+        issueDate: new Date("2026-05-20T12:00:00.000Z"),
+        number: "NF-2026-001",
+      },
+    });
     await prisma.stockMovement.create({
       data: {
+        invoiceId: invoice.id,
         movementDate: new Date("2026-05-22T12:00:00.000Z"),
         productId: product.id,
         quantity: 2,
         responsibleUserId: user.id,
+        stockId: stock.id,
         type: "ENTRADA",
         warehouseId: warehouse.id,
       },
@@ -320,10 +330,22 @@ describe("api", () => {
       .delete(`/stocks/${stock.id}`)
       .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
 
-    expect(response.status).toBe(409);
-    expect(response.body.message).toBe(
-      "Este estoque possui movimentacoes e nao pode ser removido.",
-    );
+    expect(response.status).toBe(204);
+    await expect(prisma.stock.findUnique({ where: { id: stock.id } })).resolves.toBeNull();
+    await expect(
+      prisma.stockMovement.findMany({ where: { stockId: stock.id } }),
+    ).resolves.toEqual([]);
+    await expect(
+      prisma.auditLog.findFirst({
+        where: {
+          action: "DELETE",
+          entity: "Stock",
+          entityId: stock.id,
+        },
+      }),
+    ).resolves.toMatchObject({
+      userId: user.id,
+    });
   });
 
   it("zeros selected stocks after admin password confirmation", async () => {
@@ -397,6 +419,17 @@ describe("api", () => {
         warehouseId: warehouse.id,
       },
     });
+    await prisma.stockMovement.create({
+      data: {
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 1,
+        responsibleUserId: admin.id,
+        stockId: stock.id,
+        type: "ENTRADA",
+        warehouseId: warehouse.id,
+      },
+    });
 
     const response = await request(app)
       .post("/stocks/bulk-delete")
@@ -408,7 +441,61 @@ describe("api", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.count).toBe(1);
+    expect(response.body.movementCount).toBe(1);
     await expect(prisma.stock.findUnique({ where: { id: stock.id } })).resolves.toBeNull();
+    await expect(
+      prisma.stockMovement.findMany({ where: { stockId: stock.id } }),
+    ).resolves.toEqual([]);
+  });
+
+  it("deletes invoices without deleting stock movements", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const invoice = await prisma.invoice.create({
+      data: {
+        cnpj: "12345678000190",
+        companyName: "Fornecedor Municipal",
+        issueDate: new Date("2026-05-20T12:00:00.000Z"),
+        number: "NF-2026-003",
+      },
+    });
+    const movement = await prisma.stockMovement.create({
+      data: {
+        invoiceId: invoice.id,
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 3,
+        responsibleUserId: user.id,
+        type: "ENTRADA",
+        warehouseId: warehouse.id,
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/invoices/${invoice.id}`)
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
+
+    expect(response.status).toBe(204);
+    await expect(
+      prisma.invoice.findUnique({ where: { id: invoice.id } }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.stockMovement.findUnique({ where: { id: movement.id } }),
+    ).resolves.toMatchObject({ invoiceId: null });
+    await expect(
+      prisma.auditLog.findFirst({
+        where: {
+          action: "DELETE",
+          entity: "Invoice",
+          entityId: invoice.id,
+        },
+      }),
+    ).resolves.toMatchObject({ userId: user.id });
   });
 
   it("lists invoice movements for fiscal note management", async () => {

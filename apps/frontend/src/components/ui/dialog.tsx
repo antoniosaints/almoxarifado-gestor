@@ -19,6 +19,7 @@ export function DialogContent({
           "fixed left-1/2 top-1/2 z-50 grid max-h-[92vh] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border bg-card p-6 shadow-xl",
           className,
         )}
+        data-dialog-content=""
         {...props}
       >
         {children}

@@ -10,6 +10,10 @@ import { productCategoryRoutes } from "./routes/product-category-routes.js";
 import { productRoutes } from "./routes/product-routes.js";
 import { reportRoutes } from "./routes/report-routes.js";
 import { requestSummaryRoutes } from "./routes/request-summary-routes.js";
+import {
+  publicSettingsRoutes,
+  settingsRoutes,
+} from "./routes/settings-routes.js";
 import { stockRoutes } from "./routes/stock-routes.js";
 import { transferRequestRoutes } from "./routes/transfer-request-routes.js";
 import { unitRoutes } from "./routes/unit-routes.js";
@@ -31,6 +35,7 @@ app.get("/health", (_request, response) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/settings", publicSettingsRoutes);
 app.use(authenticate);
 app.use("/entry-requests", entryRequestRoutes);
 app.use("/insights", insightRoutes);
@@ -46,4 +51,5 @@ app.use("/units", unitRoutes);
 app.use("/stocks", stockRoutes);
 app.use("/movements", movementRoutes);
 app.use("/reports", reportRoutes);
+app.use("/settings", settingsRoutes);
 app.use(errorHandler);

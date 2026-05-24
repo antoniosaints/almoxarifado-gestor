@@ -220,7 +220,7 @@ async function main() {
     const unitPriceAverage = [28.5, 36.9, 7.25, 18.4, 5.8][index];
     const totalValue = Math.round(currentQuantity * unitPriceAverage * 100) / 100;
 
-    await prisma.stock.upsert({
+    const stock = await prisma.stock.upsert({
       where: {
         warehouseId_productId: {
           warehouseId: central.id,
@@ -260,6 +260,7 @@ async function main() {
           type: MovementType.ENTRADA,
           warehouseId: central.id,
           productId: product.id,
+          stockId: stock.id,
           quantity: currentQuantity,
           unitPrice: unitPriceAverage,
           observation: "Saldo inicial da seed",

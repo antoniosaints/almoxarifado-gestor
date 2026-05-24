@@ -8,8 +8,11 @@ import {
   FileText,
   Layers3,
   Menu,
+  Moon,
   PackageSearch,
   Ruler,
+  Settings,
+  Sun,
   Tags,
   UserRound,
   UsersRound,
@@ -25,8 +28,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
 import { useApiResource } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { useSystemSettings } from "@/lib/system-settings";
 import type { UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +47,7 @@ const items = [
   { icon: ClipboardList, label: "Solicitacoes", to: "/requests" },
   { icon: ClipboardCheck, label: "Movimentacoes", to: "/movements" },
   { icon: UsersRound, label: "Usuarios", role: "ADMIN", to: "/users" },
+  { icon: Settings, label: "Configuracoes", role: "ADMIN", to: "/settings" },
 ] satisfies Array<{
   icon: typeof Boxes;
   label: string;
@@ -60,7 +66,7 @@ function Navigation({ role }: { role: UserRole }) {
         <NavLink
           className={({ isActive }) =>
             cn(
-              "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-slate-700 transition hover:bg-muted",
+              "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-foreground/75 transition hover:bg-muted hover:text-foreground",
               isActive && "bg-primary text-primary-foreground hover:bg-primary",
             )
           }
@@ -75,8 +81,23 @@ function Navigation({ role }: { role: UserRole }) {
   );
 }
 
+function BrandLogo({ logoUrl }: { logoUrl?: string | null }) {
+  if (logoUrl) {
+    return (
+      <img
+        alt=""
+        className="h-full w-full rounded-lg object-cover"
+        src={logoUrl}
+      />
+    );
+  }
+
+  return <Boxes className="h-5 w-5" />;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { clearSession, session } = useSession();
+  const { darkMode, setDarkMode, settings } = useSystemSettings();
   const location = useLocation();
   const navigate = useNavigate();
   const role = session?.user.role ?? "OPERATOR";
@@ -121,10 +142,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-5 py-6">
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Boxes className="h-5 w-5" />
+              <BrandLogo logoUrl={settings.logoUrl} />
             </div>
             <div>
-              <p className="text-sm font-semibold">Prefeitura</p>
+              <p className="text-sm font-semibold">{settings.systemName}</p>
               <p className="text-xs text-muted-foreground">Almoxarifado</p>
             </div>
           </div>
@@ -146,7 +167,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </SheetTrigger>
               <SheetContent>
                 <div className="mb-5 pr-8">
-                  <p className="font-semibold">Almoxarifado Municipal</p>
+                  <p className="font-semibold">{settings.systemName}</p>
                   <p className="text-sm text-muted-foreground">Operacao de estoque</p>
                 </div>
                 <Navigation role={role} />
@@ -159,6 +180,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
+            <label className="flex h-10 items-center gap-2 rounded-md border bg-card px-3 text-sm text-muted-foreground">
+              {darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              <Switch checked={darkMode} onCheckedChange={setDarkMode} />
+              <span className="sr-only">Alternar tema</span>
+            </label>
             <DropdownMenu onOpenChange={(open) => open && markNotificationsSeen()}>
               <DropdownMenuTrigger asChild>
                 <Button aria-label="Notificacoes internas" size="icon" variant="outline">

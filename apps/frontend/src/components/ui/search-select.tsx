@@ -28,6 +28,7 @@ type PanelPosition = {
   left: number;
   maxHeight: number;
   side: "bottom" | "top";
+  strategy: "absolute" | "fixed";
   top: number;
   width: number;
 };
@@ -64,6 +65,14 @@ function getVerticalBoundary(trigger: HTMLButtonElement) {
   };
 }
 
+function getDialogContent(trigger: HTMLButtonElement) {
+  return trigger.closest<HTMLElement>("[data-dialog-content]");
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
 function normalizeSearch(value: string) {
   return value
     .normalize("NFD")
@@ -88,6 +97,7 @@ export function SearchSelect({
     left: 0,
     maxHeight: panelPreferredHeight,
     side: "bottom",
+    strategy: "fixed",
     top: 0,
     width: 0,
   });
@@ -139,7 +149,17 @@ export function SearchSelect({
       }
 
       const rect = trigger.getBoundingClientRect();
-      const boundary = getVerticalBoundary(trigger);
+      const dialogContent = getDialogContent(trigger);
+      const dialogRect = dialogContent?.getBoundingClientRect();
+      const boundary = dialogRect
+        ? {
+            bottom: Math.min(
+              window.innerHeight - viewportPadding,
+              dialogRect.bottom - viewportPadding,
+            ),
+            top: Math.max(viewportPadding, dialogRect.top + viewportPadding),
+          }
+        : getVerticalBoundary(trigger);
       const spaceBelow = boundary.bottom - rect.bottom;
       const spaceAbove = rect.top - boundary.top;
       const side =
@@ -150,19 +170,28 @@ export function SearchSelect({
         Math.max(72, availableSpace - panelGap),
       );
       const width = Math.max(rect.width, 240);
-      const left = Math.min(
-        Math.max(viewportPadding, rect.left),
-        Math.max(viewportPadding, window.innerWidth - viewportPadding - width),
-      );
+      const minLeft = dialogRect ? dialogRect.left + viewportPadding : viewportPadding;
+      const maxLeft = dialogRect
+        ? dialogRect.right - viewportPadding - width
+        : window.innerWidth - viewportPadding - width;
+      const left = clamp(rect.left, minLeft, maxLeft);
+      const top =
+        side === "top"
+          ? Math.max(boundary.top, rect.top - panelGap - maxHeight)
+          : rect.bottom + panelGap;
 
       setPanelPosition({
-        left,
+        left:
+          dialogContent && dialogRect
+            ? left - dialogRect.left + dialogContent.scrollLeft
+            : left,
         maxHeight,
         side,
+        strategy: dialogContent ? "absolute" : "fixed",
         top:
-          side === "top"
-            ? Math.max(boundary.top, rect.top - panelGap - maxHeight)
-            : rect.bottom + panelGap,
+          dialogContent && dialogRect
+            ? top - dialogRect.top + dialogContent.scrollTop
+            : top,
         width,
       });
     }
@@ -185,10 +214,15 @@ export function SearchSelect({
 
   const panel = open ? (
     <div
-      className="pointer-events-auto fixed z-[1000] flex min-w-60 flex-col overflow-hidden rounded-md border bg-card p-2 text-foreground shadow-xl"
+      className={cn(
+        "pointer-events-auto z-[1000] flex min-w-60 flex-col overflow-hidden rounded-md border bg-card p-2 text-foreground shadow-xl",
+        panelPosition.strategy === "absolute" ? "absolute" : "fixed",
+      )}
       data-side={panelPosition.side}
       data-testid="search-select-panel"
       onMouseDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onWheel={(event) => event.stopPropagation()}
       ref={panelRef}
       style={{
         left: panelPosition.left,
@@ -254,7 +288,12 @@ export function SearchSelect({
       </Button>
 
       {panel && typeof document !== "undefined"
-        ? createPortal(panel, document.body)
+        ? createPortal(
+            panel,
+            triggerRef.current
+              ? getDialogContent(triggerRef.current) ?? document.body
+              : document.body,
+          )
         : null}
     </div>
   );
