@@ -96,6 +96,7 @@ export type SystemSettings = {
   reportFooterText: string;
   reportLogoUrl?: string | null;
   reportPrimaryColor: string;
+  reportTitle: string;
   systemName: string;
 };
 

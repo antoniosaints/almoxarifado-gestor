@@ -393,6 +393,15 @@ export function SettingsPage() {
                   </FormField>
                 </div>
                 <FormField>
+                  <Label htmlFor="settings-report-title">Titulo do cabecalho</Label>
+                  <Input
+                    id="settings-report-title"
+                    onChange={(event) => updateDraft("reportTitle", event.target.value)}
+                    required
+                    value={draft.reportTitle}
+                  />
+                </FormField>
+                <FormField>
                   <Label htmlFor="settings-report-logo-url">Logo do relatorio</Label>
                   <Input
                     id="settings-report-logo-url"
@@ -436,7 +445,7 @@ export function SettingsPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs font-medium uppercase text-muted-foreground">
-                        {draft.systemName}
+                        {draft.reportTitle}
                       </p>
                       <p className="font-semibold">Relatorio de saldos de estoque</p>
                       <p className="text-xs text-muted-foreground">

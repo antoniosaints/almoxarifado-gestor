@@ -62,7 +62,6 @@ export function CategoryCreateDialog({
     <>
       <Button onClick={() => setOpen(true)} type="button" variant="outline">
         <Plus className="h-4 w-4" />
-        Nova
       </Button>
       <Dialog onOpenChange={closeDialog} open={open}>
         <DialogContent>
@@ -142,7 +141,6 @@ export function UnitCreateDialog({
     <>
       <Button onClick={() => setOpen(true)} type="button" variant="outline">
         <Plus className="h-4 w-4" />
-        Nova
       </Button>
       <Dialog onOpenChange={closeDialog} open={open}>
         <DialogContent>

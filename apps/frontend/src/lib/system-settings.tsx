@@ -23,6 +23,7 @@ export const defaultSystemSettings: SystemSettings = {
   reportFooterText: "Documento gerado pelo sistema de almoxarifado municipal.",
   reportLogoUrl: null,
   reportPrimaryColor: "#0f766e",
+  reportTitle: "GEMA - Gestao Municipal de Almoxarifado",
   systemName: "Prefeitura",
 };
 

@@ -113,6 +113,11 @@ export const systemSettingsInput = z.object({
     .trim()
     .regex(/^#[0-9a-fA-F]{6}$/, "Informe uma cor hexadecimal valida.")
     .default("#0f766e"),
+  reportTitle: z
+    .string()
+    .trim()
+    .min(2, "Informe o titulo do cabecalho do relatorio.")
+    .default("GEMA - Gestao Municipal de Almoxarifado"),
   systemName: z.string().trim().min(2, "Informe o nome do sistema."),
 });
 

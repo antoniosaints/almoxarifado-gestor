@@ -260,6 +260,7 @@ model SystemSettings {
   loginSubtitle         String   @default("Entre com seu usuario para acompanhar o estoque municipal.")
   loginImageUrl         String?
   reportLogoUrl         String?
+  reportTitle           String   @default("GEMA - Gestao Municipal de Almoxarifado")
   reportPrimaryColor    String   @default("#0f766e")
   reportFooterText      String   @default("Documento gerado pelo sistema de almoxarifado municipal.")
   createdAt             DateTime @default(now())

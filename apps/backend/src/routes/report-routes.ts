@@ -206,7 +206,7 @@ function drawReportChrome(
       .font("Helvetica-Bold")
       .fontSize(7)
       .fillColor("#64748b")
-      .text(meta.settings.systemName.toUpperCase(), titleX, 24, {
+      .text(meta.settings.reportTitle.toUpperCase(), titleX, 24, {
         width: right - titleX,
       });
     document
