@@ -93,6 +93,9 @@ export type SystemSettings = {
   loginTitle: string;
   logoUrl?: string | null;
   primaryColor: string;
+  reportFooterText: string;
+  reportLogoUrl?: string | null;
+  reportPrimaryColor: string;
   systemName: string;
 };
 
@@ -125,6 +128,7 @@ export type UserWarehouseAssignment = {
 
 export type ManagedUser = User & {
   active: boolean;
+  isDefaultAdmin: boolean;
   warehouseAssignments: UserWarehouseAssignment[];
 };
 

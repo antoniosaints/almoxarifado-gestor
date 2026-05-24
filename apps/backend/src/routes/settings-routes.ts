@@ -2,33 +2,16 @@ import { UserRole } from "@prisma/client";
 import { Router } from "express";
 import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
+import { defaultSettings, getSystemSettings, settingsId } from "../services/settings-service.js";
 import { systemSettingsInput } from "../validators/inputs.js";
 
 export const publicSettingsRoutes = Router();
 export const settingsRoutes = Router();
 
-const settingsId = "system";
-
-const defaultSettings = {
-  id: settingsId,
-  loginSubtitle: "Entre com seu usuario para acompanhar o estoque municipal.",
-  loginTitle: "Almoxarifado Municipal",
-  primaryColor: "#0f766e",
-  systemName: "Prefeitura",
-};
-
-function getSettings() {
-  return prisma.systemSettings.upsert({
-    where: { id: settingsId },
-    update: {},
-    create: defaultSettings,
-  });
-}
-
 publicSettingsRoutes.get(
   "/public",
   asyncHandler(async (_request, response) => {
-    response.json(await getSettings());
+    response.json(await getSystemSettings(prisma));
   }),
 );
 
@@ -36,7 +19,7 @@ settingsRoutes.get(
   "/",
   requireRole(UserRole.ADMIN),
   asyncHandler(async (_request, response) => {
-    response.json(await getSettings());
+    response.json(await getSystemSettings(prisma));
   }),
 );
 

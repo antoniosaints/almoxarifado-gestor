@@ -16,12 +16,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
 import { api, useApiResource } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import type { ManagedUser, UserRole, Warehouse } from "@/lib/types";
 
 type UserDraft = {
   active: boolean;
   email: string;
   id?: string;
+  isDefaultAdmin: boolean;
   name: string;
   password: string;
   role: UserRole;
@@ -32,6 +34,7 @@ function emptyDraft(): UserDraft {
   return {
     active: true,
     email: "",
+    isDefaultAdmin: false,
     name: "",
     password: "",
     role: "OPERATOR",
@@ -40,6 +43,7 @@ function emptyDraft(): UserDraft {
 }
 
 export function UsersPage() {
+  const { session } = useSession();
   const users = useApiResource<ManagedUser[]>("/users", []);
   const warehouses = useApiResource<Warehouse[]>("/warehouses", []);
   const [draft, setDraft] = useState<UserDraft | null>(null);
@@ -53,12 +57,13 @@ export function UsersPage() {
     }
 
     const payload = {
-      active: draft.active,
+      active: draft.isDefaultAdmin ? true : draft.active,
       email: draft.email,
       name: draft.name,
       ...(draft.password ? { password: draft.password } : {}),
-      role: draft.role,
-      warehouseIds: draft.role === "OPERATOR" ? draft.warehouseIds : [],
+      role: draft.isDefaultAdmin ? "ADMIN" : draft.role,
+      warehouseIds:
+        !draft.isDefaultAdmin && draft.role === "OPERATOR" ? draft.warehouseIds : [],
     };
 
     try {
@@ -96,6 +101,10 @@ export function UsersPage() {
     });
   }
 
+  function canRemove(user: ManagedUser) {
+    return !user.isDefaultAdmin && user.id !== session?.user.id;
+  }
+
   if (users.loading || warehouses.loading) {
     return <LoadingLine />;
   }
@@ -124,7 +133,10 @@ export function UsersPage() {
           {
             cell: (user) => (
               <>
-                <p className="font-medium">{user.name}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium">{user.name}</p>
+                  {user.isDefaultAdmin ? <Badge variant="low">Padrao</Badge> : null}
+                </div>
                 <p className="text-xs text-muted-foreground">{user.email}</p>
               </>
             ),
@@ -169,6 +181,7 @@ export function UsersPage() {
                       active: user.active,
                       email: user.email,
                       id: user.id,
+                      isDefaultAdmin: user.isDefaultAdmin,
                       name: user.name,
                       password: "",
                       role: user.role,
@@ -184,6 +197,7 @@ export function UsersPage() {
                 </Button>
                 <Button
                   aria-label={`Remover ${user.name}`}
+                  disabled={!canRemove(user)}
                   onClick={() => void remove(user.id)}
                   size="icon"
                   variant="outline"
@@ -206,6 +220,7 @@ export function UsersPage() {
           [
             user.name,
             user.email,
+            user.isDefaultAdmin ? "padrao" : "",
             user.role === "ADMIN" ? "admin" : "operador",
             user.active ? "ativo" : "inativo",
             ...user.warehouseAssignments.map((assignment) => assignment.warehouse.name),
@@ -249,6 +264,7 @@ export function UsersPage() {
                   <Label htmlFor="user-role">Permissao</Label>
                   <SearchSelect
                     ariaLabel="Permissao"
+                    disabled={draft.isDefaultAdmin}
                     id="user-role"
                     onValueChange={(role) =>
                       setDraft({ ...draft, role: role as UserRole })
@@ -308,6 +324,7 @@ export function UsersPage() {
               <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
                 <input
                   checked={draft.active}
+                  disabled={draft.isDefaultAdmin}
                   onChange={(event) => setDraft({ ...draft, active: event.target.checked })}
                   type="checkbox"
                 />

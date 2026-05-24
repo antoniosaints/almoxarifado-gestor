@@ -1,8 +1,14 @@
 import { UserRole } from "@prisma/client";
 import { Router } from "express";
-import { asyncHandler, requireRole } from "../lib/http.js";
+import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
-import { createUser, listUsers, safeUser, updateUser } from "../services/user-service.js";
+import {
+  createUser,
+  deleteUser,
+  listUsers,
+  safeUser,
+  updateUser,
+} from "../services/user-service.js";
 import {
   idParam,
   userCreateInput,
@@ -64,7 +70,9 @@ userRoutes.delete(
   "/:id",
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
-    await prisma.user.delete({ where: { id } });
+    const user = currentUser(response);
+
+    await deleteUser(prisma, id, user.id);
     response.status(204).send();
   }),
 );

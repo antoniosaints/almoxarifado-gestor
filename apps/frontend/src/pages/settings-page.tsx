@@ -1,4 +1,4 @@
-import { Building2, Image, Moon, Palette, Save, Sun } from "lucide-react";
+import { Building2, FileText, Image, Moon, Palette, Save, Sun } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,14 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   defaultSystemSettings,
   useSystemSettings,
 } from "@/lib/system-settings";
 import type { SystemSettings } from "@/lib/types";
 
-function normalizeColor(color: string) {
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : defaultSystemSettings.primaryColor;
+function normalizeColor(color: string, fallback = defaultSystemSettings.primaryColor) {
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
 }
 
 export function SettingsPage() {
@@ -51,6 +52,10 @@ export function SettingsPage() {
       const savedSettings = await saveSettings({
         ...draft,
         primaryColor: normalizeColor(draft.primaryColor),
+        reportPrimaryColor: normalizeColor(
+          draft.reportPrimaryColor,
+          defaultSystemSettings.reportPrimaryColor,
+        ),
       });
 
       setDraft(savedSettings);
@@ -111,6 +116,10 @@ export function SettingsPage() {
             <TabsTrigger value="login">
               <Image className="mr-1 h-4 w-4" />
               Login
+            </TabsTrigger>
+            <TabsTrigger value="reports">
+              <FileText className="mr-1 h-4 w-4" />
+              Relatorios
             </TabsTrigger>
           </TabsList>
 
@@ -260,6 +269,97 @@ export function SettingsPage() {
                 <div className="space-y-1 p-4">
                   <p className="text-lg font-semibold">{draft.loginTitle}</p>
                   <p className="text-sm text-muted-foreground">{draft.loginSubtitle}</p>
+                </div>
+              </div>
+            </section>
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <section className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-[7rem_minmax(0,1fr)] md:items-end">
+                  <FormField>
+                    <Label htmlFor="settings-report-color">Cor</Label>
+                    <Input
+                      className="h-10 p-1"
+                      id="settings-report-color"
+                      onChange={(event) =>
+                        updateDraft("reportPrimaryColor", event.target.value)
+                      }
+                      type="color"
+                      value={normalizeColor(
+                        draft.reportPrimaryColor,
+                        defaultSystemSettings.reportPrimaryColor,
+                      )}
+                    />
+                  </FormField>
+                  <FormField>
+                    <Label htmlFor="settings-report-color-text">Cor do relatorio</Label>
+                    <Input
+                      id="settings-report-color-text"
+                      onChange={(event) =>
+                        updateDraft("reportPrimaryColor", event.target.value)
+                      }
+                      pattern="^#[0-9a-fA-F]{6}$"
+                      value={draft.reportPrimaryColor}
+                    />
+                  </FormField>
+                </div>
+                <FormField>
+                  <Label htmlFor="settings-report-logo-url">Logo do relatorio</Label>
+                  <Input
+                    id="settings-report-logo-url"
+                    onChange={(event) => updateDraft("reportLogoUrl", event.target.value)}
+                    placeholder="https://..."
+                    value={draft.reportLogoUrl ?? ""}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="settings-report-footer">Rodape</Label>
+                  <Textarea
+                    id="settings-report-footer"
+                    onChange={(event) => updateDraft("reportFooterText", event.target.value)}
+                    required
+                    value={draft.reportFooterText}
+                  />
+                </FormField>
+              </div>
+              <div className="overflow-hidden rounded-lg border bg-background">
+                <div
+                  className="h-2"
+                  style={{
+                    backgroundColor: normalizeColor(
+                      draft.reportPrimaryColor,
+                      defaultSystemSettings.reportPrimaryColor,
+                    ),
+                  }}
+                />
+                <div className="space-y-4 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                      {draft.reportLogoUrl ? (
+                        <img
+                          alt=""
+                          className="h-full w-full object-cover"
+                          src={draft.reportLogoUrl}
+                        />
+                      ) : (
+                        <Building2 className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium uppercase text-muted-foreground">
+                        {draft.systemName}
+                      </p>
+                      <p className="font-semibold">Relatorio de saldos de estoque</p>
+                      <p className="text-xs text-muted-foreground">
+                        Emitido por Usuario do sistema
+                      </p>
+                    </div>
+                  </div>
+                  <div className="border-t pt-3 text-xs text-muted-foreground">
+                    {draft.reportFooterText}
+                  </div>
                 </div>
               </div>
             </section>

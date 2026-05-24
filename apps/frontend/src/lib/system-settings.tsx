@@ -20,6 +20,9 @@ export const defaultSystemSettings: SystemSettings = {
   loginTitle: "Almoxarifado Municipal",
   logoUrl: null,
   primaryColor: "#0f766e",
+  reportFooterText: "Documento gerado pelo sistema de almoxarifado municipal.",
+  reportLogoUrl: null,
+  reportPrimaryColor: "#0f766e",
   systemName: "Prefeitura",
 };
 

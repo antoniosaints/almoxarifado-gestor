@@ -102,6 +102,17 @@ export const systemSettingsInput = z.object({
     .string()
     .trim()
     .regex(/^#[0-9a-fA-F]{6}$/, "Informe uma cor hexadecimal valida."),
+  reportFooterText: z
+    .string()
+    .trim()
+    .min(2, "Informe o rodape do relatorio.")
+    .default("Documento gerado pelo sistema de almoxarifado municipal."),
+  reportLogoUrl: optionalUrl,
+  reportPrimaryColor: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Informe uma cor hexadecimal valida.")
+    .default("#0f766e"),
   systemName: z.string().trim().min(2, "Informe o nome do sistema."),
 });
 

@@ -1,4 +1,5 @@
 import { UserRole, type Prisma, type PrismaClient } from "@prisma/client";
+import { AppError } from "../lib/errors.js";
 import { hashPassword } from "./auth-service.js";
 
 const userInclude = {
@@ -72,11 +73,38 @@ export async function createUser(prisma: PrismaClient, input: UserInput) {
   return safeUser(user);
 }
 
+async function assertUpdateAllowed(
+  prisma: PrismaClient,
+  id: string,
+  input: UserInput,
+) {
+  const target = await prisma.user.findUniqueOrThrow({
+    select: {
+      isDefaultAdmin: true,
+    },
+    where: { id },
+  });
+
+  if (!target.isDefaultAdmin) {
+    return;
+  }
+
+  if (input.role !== UserRole.ADMIN) {
+    throw new AppError(403, "O usuario admin default deve permanecer como Admin.");
+  }
+
+  if (!input.active) {
+    throw new AppError(403, "O usuario admin default deve permanecer ativo.");
+  }
+}
+
 export async function updateUser(
   prisma: PrismaClient,
   id: string,
   input: UserInput,
 ) {
+  await assertUpdateAllowed(prisma, id, input);
+
   const user = await prisma.user.update({
     where: { id },
     data: {
@@ -94,4 +122,31 @@ export async function updateUser(
   });
 
   return safeUser(user);
+}
+
+export async function deleteUser(
+  prisma: PrismaClient,
+  id: string,
+  actingUserId: string,
+) {
+  const target = await prisma.user.findUniqueOrThrow({
+    select: {
+      id: true,
+      isDefaultAdmin: true,
+    },
+    where: { id },
+  });
+
+  if (target.isDefaultAdmin) {
+    throw new AppError(403, "O usuario admin default nao pode ser excluido.");
+  }
+
+  if (target.id === actingUserId) {
+    throw new AppError(403, "Voce nao pode excluir seu proprio usuario.");
+  }
+
+  await prisma.$transaction([
+    prisma.userWarehouse.deleteMany({ where: { userId: id } }),
+    prisma.user.delete({ where: { id } }),
+  ]);
 }

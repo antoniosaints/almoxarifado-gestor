@@ -1,9 +1,11 @@
 import { UserRole } from "@prisma/client";
 import PDFDocument from "pdfkit";
 import { Router, type Response } from "express";
+import type { SessionUser } from "../lib/auth.js";
 import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
 import { warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
+import { getSystemSettings } from "../services/settings-service.js";
 
 export const reportRoutes = Router();
 
@@ -14,6 +16,21 @@ type ReportColumn = {
   label: string;
   width: number;
 };
+
+type ReportSettings = Awaited<ReturnType<typeof getSystemSettings>>;
+
+type ReportChrome = {
+  generatedAt: Date;
+  logo: Buffer | null;
+  settings: ReportSettings;
+  subtitle: string;
+  title: string;
+  user: SessionUser;
+};
+
+function roleLabel(role: UserRole) {
+  return role === UserRole.ADMIN ? "Administrador" : "Operador";
+}
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", {
   dateStyle: "short",
@@ -75,15 +92,218 @@ function queryList(query: Record<string, unknown>, key: string) {
 function ensureSpace(document: PDFKit.PDFDocument, height: number) {
   if (document.y + height > document.page.height - document.page.margins.bottom) {
     document.addPage();
+    return true;
   }
+
+  return false;
 }
 
-function writeReportHeader(document: PDFKit.PDFDocument, title: string, subtitle: string) {
-  document.fontSize(16).font("Helvetica-Bold").text(title);
-  document.moveDown(0.25);
-  document.fontSize(9).font("Helvetica").fillColor("#475569").text(subtitle);
-  document.fillColor("#0f172a");
-  document.moveDown();
+function normalizeHex(color: string | null | undefined, fallback = "#0f766e") {
+  return /^#[0-9a-fA-F]{6}$/.test(color ?? "") ? color ?? fallback : fallback;
+}
+
+function foregroundFor(hex: string) {
+  const normalized = normalizeHex(hex).slice(1);
+  const red = Number.parseInt(normalized.slice(0, 2), 16) / 255;
+  const green = Number.parseInt(normalized.slice(2, 4), 16) / 255;
+  const blue = Number.parseInt(normalized.slice(4, 6), 16) / 255;
+  const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+
+  return luminance > 0.62 ? "#0f172a" : "#ffffff";
+}
+
+function drawFallbackLogo(
+  document: PDFKit.PDFDocument,
+  settings: ReportSettings,
+  x: number,
+  y: number,
+  size: number,
+) {
+  const primaryColor = normalizeHex(settings.reportPrimaryColor, settings.primaryColor);
+  const initial = settings.systemName.trim().charAt(0).toUpperCase() || "A";
+
+  document.roundedRect(x, y, size, size, 8).fillColor(primaryColor).fill();
+  document
+    .font("Helvetica-Bold")
+    .fontSize(18)
+    .fillColor(foregroundFor(primaryColor))
+    .text(initial, x, y + 16, { align: "center", width: size });
+}
+
+function drawMetadata(
+  document: PDFKit.PDFDocument,
+  label: string,
+  value: string,
+  x: number,
+  y: number,
+  width: number,
+) {
+  document
+    .font("Helvetica-Bold")
+    .fontSize(6.5)
+    .fillColor("#64748b")
+    .text(label.toUpperCase(), x, y, { width });
+  document
+    .font("Helvetica")
+    .fontSize(8)
+    .fillColor("#0f172a")
+    .text(value, x, y + 11, { height: 24, width });
+}
+
+function drawReportChrome(
+  document: PDFKit.PDFDocument,
+  meta: ReportChrome,
+  pageNumber: number,
+  pageCount: number,
+) {
+  const left = document.page.margins.left;
+  const right = document.page.width - document.page.margins.right;
+  const width = right - left;
+  const primaryColor = normalizeHex(
+    meta.settings.reportPrimaryColor,
+    meta.settings.primaryColor,
+  );
+  const footerText = meta.settings.reportFooterText.trim();
+
+  document.save();
+  document.rect(0, 0, document.page.width, 8).fillColor(primaryColor).fill();
+
+  document.roundedRect(left, 24, 54, 54, 8).fillColor("#ffffff").fill();
+  document.roundedRect(left, 24, 54, 54, 8).strokeColor("#cbd5e1").stroke();
+
+  if (meta.logo) {
+    try {
+      document.image(meta.logo, left + 6, 30, { fit: [42, 42] });
+    } catch {
+      drawFallbackLogo(document, meta.settings, left, 24, 54);
+    }
+  } else {
+    drawFallbackLogo(document, meta.settings, left, 24, 54);
+  }
+
+  const titleX = left + 68;
+  document
+    .font("Helvetica-Bold")
+    .fontSize(7)
+    .fillColor("#64748b")
+    .text(meta.settings.systemName.toUpperCase(), titleX, 24, {
+      width: right - titleX,
+    });
+  document
+    .font("Helvetica-Bold")
+    .fontSize(17)
+    .fillColor("#0f172a")
+    .text(meta.title, titleX, 36, { width: right - titleX });
+  document
+    .font("Helvetica")
+    .fontSize(8.5)
+    .fillColor("#475569")
+    .text(meta.subtitle, titleX, 60, { width: right - titleX });
+
+  document.roundedRect(left, 88, width, 42, 7).fillColor("#f8fafc").fill();
+  document.roundedRect(left, 88, width, 42, 7).strokeColor("#e2e8f0").stroke();
+
+  const columnGap = 18;
+  const columnWidth = (width - columnGap * 2) / 3;
+  drawMetadata(
+    document,
+    "Emitido por",
+    `${meta.user.name} (${meta.user.email})`,
+    left + 12,
+    99,
+    columnWidth,
+  );
+  drawMetadata(
+    document,
+    "Gerado em",
+    formatDate(meta.generatedAt),
+    left + 12 + columnWidth + columnGap,
+    99,
+    columnWidth,
+  );
+  drawMetadata(
+    document,
+    "Responsavel",
+    `${meta.user.name} - ${roleLabel(meta.user.role)}`,
+    left + 12 + (columnWidth + columnGap) * 2,
+    99,
+    columnWidth,
+  );
+
+  const footerY = document.page.height - 48;
+  document
+    .moveTo(left, footerY)
+    .lineTo(right, footerY)
+    .lineWidth(0.5)
+    .strokeColor("#cbd5e1")
+    .stroke();
+  const originalBottomMargin = document.page.margins.bottom;
+
+  document.page.margins.bottom = 0;
+  try {
+    document
+      .font("Helvetica")
+      .fontSize(7.5)
+      .fillColor("#64748b")
+      .text(footerText, left, footerY + 8, {
+        lineBreak: false,
+        width: width - 90,
+      });
+    document.text(`Pagina ${pageNumber} de ${pageCount}`, right - 78, footerY + 8, {
+      align: "right",
+      lineBreak: false,
+      width: 78,
+    });
+  } finally {
+    document.page.margins.bottom = originalBottomMargin;
+  }
+
+  document.restore();
+}
+
+async function loadReportLogo(url: string | null | undefined) {
+  const normalizedUrl = url?.trim();
+
+  if (!normalizedUrl) {
+    return null;
+  }
+
+  if (normalizedUrl.startsWith("data:image/")) {
+    const commaIndex = normalizedUrl.indexOf(",");
+
+    if (commaIndex < 0) {
+      return null;
+    }
+
+    const metadata = normalizedUrl.slice(0, commaIndex);
+    const payload = normalizedUrl.slice(commaIndex + 1);
+
+    return Buffer.from(
+      metadata.includes(";base64") ? payload : decodeURIComponent(payload),
+      metadata.includes(";base64") ? "base64" : "utf8",
+    );
+  }
+
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    const response = await fetch(normalizedUrl, { signal: controller.signal });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return Buffer.from(await response.arrayBuffer());
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function writeSectionTitle(document: PDFKit.PDFDocument, title: string) {
@@ -126,29 +346,33 @@ function writeTable(
   document: PDFKit.PDFDocument,
   columns: ReportColumn[],
   rows: string[][],
+  accentColor: string,
 ) {
   const startX = document.page.margins.left;
-  const headerHeight = 22;
+  const tableWidth = columns.reduce((total, column) => total + column.width, 0);
+  const headerHeight = 24;
+  const primaryColor = normalizeHex(accentColor);
 
-  ensureSpace(document, headerHeight);
-  let x = startX;
-  const headerY = document.y;
+  function writeTableHeader() {
+    ensureSpace(document, headerHeight);
+    let x = startX;
+    const headerY = document.y;
 
-  document.fontSize(8).font("Helvetica-Bold");
-  for (const column of columns) {
-    document.text(column.label, x, headerY, {
-      align: column.align ?? "left",
-      width: column.width,
-    });
-    x += column.width;
+    document.roundedRect(startX, headerY, tableWidth, headerHeight, 6).fillColor(primaryColor).fill();
+    document.fontSize(7.5).font("Helvetica-Bold").fillColor(foregroundFor(primaryColor));
+
+    for (const column of columns) {
+      document.text(column.label, x + 4, headerY + 7, {
+        align: column.align ?? "left",
+        width: column.width - 8,
+      });
+      x += column.width;
+    }
+
+    document.y = headerY + headerHeight + 3;
   }
 
-  document
-    .moveTo(startX, headerY + 15)
-    .lineTo(startX + columns.reduce((total, column) => total + column.width, 0), headerY + 15)
-    .strokeColor("#cbd5e1")
-    .stroke();
-  document.y = headerY + headerHeight;
+  writeTableHeader();
 
   if (!rows.length) {
     document.fontSize(9).font("Helvetica").fillColor("#475569").text("Nenhum registro encontrado.");
@@ -157,43 +381,101 @@ function writeTable(
   }
 
   document.fontSize(8).font("Helvetica");
-  for (const row of rows) {
+  rows.forEach((row, rowIndex) => {
     const rowHeight =
       Math.max(
         ...row.map((cell, index) =>
-          document.heightOfString(cell, { width: columns[index]?.width ?? 80 }),
+          document.heightOfString(cell, {
+            width: (columns[index]?.width ?? 80) - 8,
+          }),
         ),
       ) + 10;
 
-    ensureSpace(document, rowHeight);
-    x = startX;
+    if (ensureSpace(document, rowHeight)) {
+      writeTableHeader();
+    }
+
+    let x = startX;
     const rowY = document.y;
 
+    if (rowIndex % 2 === 0) {
+      document.rect(startX, rowY - 2, tableWidth, rowHeight).fillColor("#f8fafc").fill();
+    }
+
+    document.font("Helvetica").fontSize(8).fillColor("#0f172a");
     row.forEach((cell, index) => {
       const column = columns[index];
-      document.text(cell, x, rowY, {
+      document.text(cell, x + 4, rowY + 3, {
         align: column?.align ?? "left",
-        width: column?.width ?? 80,
+        width: (column?.width ?? 80) - 8,
       });
       x += column?.width ?? 80;
     });
 
+    document
+      .moveTo(startX, rowY + rowHeight - 1)
+      .lineTo(startX + tableWidth, rowY + rowHeight - 1)
+      .lineWidth(0.5)
+      .strokeColor("#e2e8f0")
+      .stroke();
     document.y = rowY + rowHeight;
-  }
+  });
 }
 
-function buildPdf(title: string, subtitle: string, draw: (document: PDFKit.PDFDocument) => void) {
+async function buildPdf(
+  title: string,
+  subtitle: string,
+  user: SessionUser,
+  draw: (
+    document: PDFKit.PDFDocument,
+    settings: ReportSettings,
+  ) => Promise<void> | void,
+) {
+  const settings = await getSystemSettings(prisma);
+  const logo = await loadReportLogo(settings.reportLogoUrl ?? settings.logoUrl);
+  const generatedAt = new Date();
+
   return new Promise<Buffer>((resolve, reject) => {
-    const document = new PDFDocument({ margin: 42, size: "A4" });
+    const document = new PDFDocument({
+      bufferPages: true,
+      margins: {
+        bottom: 64,
+        left: 36,
+        right: 36,
+        top: 150,
+      },
+      size: "A4",
+    });
     const chunks: Buffer[] = [];
 
     document.on("data", (chunk: Buffer) => chunks.push(chunk));
     document.on("end", () => resolve(Buffer.concat(chunks)));
     document.on("error", reject);
 
-    writeReportHeader(document, title, subtitle);
-    draw(document);
-    document.end();
+    Promise.resolve(draw(document, settings))
+      .then(() => {
+        const range = document.bufferedPageRange();
+
+        for (let index = range.start; index < range.start + range.count; index += 1) {
+          document.switchToPage(index);
+          drawReportChrome(
+            document,
+            {
+              generatedAt,
+              logo,
+              settings,
+              subtitle,
+              title,
+              user,
+            },
+            index - range.start + 1,
+            range.count,
+          );
+        }
+
+        document.end();
+      })
+      .catch(reject);
   });
 }
 
@@ -251,8 +533,9 @@ reportRoutes.get(
 
     const buffer = await buildPdf(
       "Relatorio de movimentacoes",
-      `Gerado em ${formatDate(new Date())}`,
-      (document) => {
+      "Entradas, saidas e transferencias por almoxarifado.",
+      user,
+      (document, settings) => {
         writeTable(
           document,
           [
@@ -285,6 +568,7 @@ reportRoutes.get(
               unitPrice ? formatCurrency(unitPrice * movement.quantity) : "-",
             ];
           }),
+          settings.reportPrimaryColor,
         );
       },
     );
@@ -320,8 +604,9 @@ reportRoutes.get(
 
     const buffer = await buildPdf(
       "Relatorio de saldos de estoque",
-      `Gerado em ${formatDate(new Date())}`,
-      (document) => {
+      "Saldo atual, minimo e estado dos produtos por almoxarifado.",
+      user,
+      (document, settings) => {
         writeTable(
           document,
           [
@@ -344,6 +629,7 @@ reportRoutes.get(
                 ? "Baixo estoque"
                 : "Adequado",
           ]),
+          settings.reportPrimaryColor,
         );
       },
     );
@@ -364,12 +650,8 @@ reportRoutes.get(
     const scopedMovementWhere = {
       warehouse: warehouseScope(user),
     };
-    const invoiceScope =
-      user.role === UserRole.ADMIN
-        ? undefined
-        : {
-            some: scopedMovementWhere,
-          };
+    const scopedInvoiceMovements =
+      user.role === UserRole.ADMIN ? { some: {} } : { some: scopedMovementWhere };
     const invoices = await prisma.invoice.findMany({
       include: {
         movements: {
@@ -403,15 +685,16 @@ reportRoutes.get(
                 lte: to,
               }
             : undefined,
-        movements: invoiceScope,
+        movements: scopedInvoiceMovements,
         number: number ? { contains: number } : undefined,
       },
     });
 
     const buffer = await buildPdf(
       "Relatorio por notas fiscais",
-      `Gerado em ${formatDate(new Date())}`,
-      (document) => {
+      "Notas fiscais e movimentacoes vinculadas ao estoque.",
+      user,
+      (document, settings) => {
         if (!invoices.length) {
           document
             .fontSize(9)
@@ -476,6 +759,7 @@ reportRoutes.get(
                 movement.responsibleUser?.name ?? "-",
               ];
             }),
+            settings.reportPrimaryColor,
           );
         });
       },

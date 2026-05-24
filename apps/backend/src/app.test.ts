@@ -16,6 +16,10 @@ function authorizationFor(user: {
   return `Bearer ${createAccessToken(user)}`;
 }
 
+function countPdfPages(body: Buffer) {
+  return (body.toString("latin1").match(/\/Type\s*\/Page\b/g) ?? []).length;
+}
+
 describe("api", () => {
   beforeEach(async () => {
     await resetDatabase(prisma);
@@ -287,6 +291,78 @@ describe("api", () => {
       role: UserRole.OPERATOR,
       warehouseAssignments: [{ warehouseId: warehouse.id }],
     });
+  });
+
+  it("keeps the default admin protected from removal and demotion", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const defaultAdmin = await prisma.user.create({
+      data: {
+        active: true,
+        email: "admin@prefeitura.local",
+        isDefaultAdmin: true,
+        name: "Administrador",
+        role: UserRole.ADMIN,
+      },
+    });
+
+    const demotion = await request(app)
+      .put(`/users/${defaultAdmin.id}`)
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }))
+      .send({
+        active: true,
+        email: "admin@prefeitura.local",
+        name: "Administrador",
+        role: UserRole.OPERATOR,
+        warehouseIds: [],
+      });
+
+    expect(demotion.status).toBe(403);
+    expect(demotion.body.message).toBe(
+      "O usuario admin default deve permanecer como Admin.",
+    );
+
+    const profileUpdate = await request(app)
+      .put(`/users/${defaultAdmin.id}`)
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }))
+      .send({
+        active: true,
+        email: "admin@prefeitura.local",
+        name: "Administrador Geral",
+        role: UserRole.ADMIN,
+        warehouseIds: [],
+      });
+
+    expect(profileUpdate.status).toBe(200);
+    expect(profileUpdate.body).toMatchObject({
+      isDefaultAdmin: true,
+      name: "Administrador Geral",
+      role: UserRole.ADMIN,
+    });
+
+    const removal = await request(app)
+      .delete(`/users/${defaultAdmin.id}`)
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
+
+    expect(removal.status).toBe(403);
+    expect(removal.body.message).toBe("O usuario admin default nao pode ser excluido.");
+    await expect(
+      prisma.user.findUnique({ where: { id: defaultAdmin.id } }),
+    ).resolves.toMatchObject({
+      isDefaultAdmin: true,
+      role: UserRole.ADMIN,
+    });
+  });
+
+  it("prevents admins from deleting their own user", async () => {
+    const { user } = await createBaseFixture(prisma);
+
+    const response = await request(app)
+      .delete(`/users/${user.id}`)
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toBe("Voce nao pode excluir seu proprio usuario.");
+    await expect(prisma.user.findUnique({ where: { id: user.id } })).resolves.toBeTruthy();
   });
 
   it("deletes a stock item with its movements and audit trail", async () => {
@@ -822,5 +898,60 @@ describe("api", () => {
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toContain("application/pdf");
     expect(response.headers["content-disposition"]).toContain("relatorio-saldos.pdf");
+    expect(countPdfPages(response.body)).toBe(1);
+  });
+
+  it("exports invoice reports without empty duplicate pages", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const linkedInvoice = await prisma.invoice.create({
+      data: {
+        cnpj: "17404232000108",
+        companyName: "CAS Internet",
+        issueDate: new Date("2026-05-21T12:00:00.000Z"),
+        number: "41425387",
+      },
+    });
+
+    await prisma.invoice.create({
+      data: {
+        cnpj: "17404232000108",
+        companyName: "CAS Internet",
+        issueDate: new Date("2026-05-21T12:00:00.000Z"),
+        number: "41425387",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    await prisma.stockMovement.create({
+      data: {
+        invoiceId: linkedInvoice.id,
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 10,
+        responsibleUserId: user.id,
+        type: "ENTRADA",
+        unitPrice: 35,
+        warehouseId: warehouse.id,
+      },
+    });
+
+    const response = await request(app)
+      .get("/reports/invoices?number=41425387")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/pdf");
+    expect(countPdfPages(response.body)).toBe(1);
   });
 });

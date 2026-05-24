@@ -38,6 +38,7 @@ model User {
   passwordHash             String            @default("")
   role                     UserRole          @default(ADMIN)
   active                   Boolean           @default(true)
+  isDefaultAdmin           Boolean           @default(false)
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
   movements                StockMovement[]
@@ -250,14 +251,17 @@ model AuditLog {
 }
 
 model SystemSettings {
-  id                 String   @id @default("system")
-  systemName         String   @default("Prefeitura")
-  logoUrl            String?
-  primaryColor       String   @default("#0f766e")
-  loginBackgroundUrl String?
-  loginTitle         String   @default("Almoxarifado Municipal")
-  loginSubtitle      String   @default("Entre com seu usuario para acompanhar o estoque municipal.")
-  loginImageUrl      String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                    String   @id @default("system")
+  systemName            String   @default("Prefeitura")
+  logoUrl               String?
+  primaryColor          String   @default("#0f766e")
+  loginBackgroundUrl    String?
+  loginTitle            String   @default("Almoxarifado Municipal")
+  loginSubtitle         String   @default("Entre com seu usuario para acompanhar o estoque municipal.")
+  loginImageUrl         String?
+  reportLogoUrl         String?
+  reportPrimaryColor    String   @default("#0f766e")
+  reportFooterText      String   @default("Documento gerado pelo sistema de almoxarifado municipal.")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
