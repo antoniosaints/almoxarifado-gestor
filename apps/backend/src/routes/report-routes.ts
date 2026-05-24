@@ -28,6 +28,20 @@ type ReportChrome = {
   user: SessionUser;
 };
 
+const firstPageMargins = {
+  bottom: 64,
+  left: 36,
+  right: 36,
+  top: 150,
+};
+
+const continuationPageMargins = {
+  bottom: 64,
+  left: 36,
+  right: 36,
+  top: 42,
+};
+
 function roleLabel(role: UserRole) {
   return role === UserRole.ADMIN ? "Administrador" : "Operador";
 }
@@ -91,11 +105,15 @@ function queryList(query: Record<string, unknown>, key: string) {
 
 function ensureSpace(document: PDFKit.PDFDocument, height: number) {
   if (document.y + height > document.page.height - document.page.margins.bottom) {
-    document.addPage();
-    return true;
+    return addContinuationPage(document);
   }
 
   return false;
+}
+
+function addContinuationPage(document: PDFKit.PDFDocument) {
+  document.addPage({ margins: continuationPageMargins });
+  return true;
 }
 
 function normalizeHex(color: string | null | undefined, fallback = "#0f766e") {
@@ -166,69 +184,72 @@ function drawReportChrome(
   const footerText = meta.settings.reportFooterText.trim();
 
   document.save();
-  document.rect(0, 0, document.page.width, 8).fillColor(primaryColor).fill();
 
-  document.roundedRect(left, 24, 54, 54, 8).fillColor("#ffffff").fill();
-  document.roundedRect(left, 24, 54, 54, 8).strokeColor("#cbd5e1").stroke();
+  if (pageNumber === 1) {
+    document.rect(0, 0, document.page.width, 8).fillColor(primaryColor).fill();
 
-  if (meta.logo) {
-    try {
-      document.image(meta.logo, left + 6, 30, { fit: [42, 42] });
-    } catch {
+    document.roundedRect(left, 24, 54, 54, 8).fillColor("#ffffff").fill();
+    document.roundedRect(left, 24, 54, 54, 8).strokeColor("#cbd5e1").stroke();
+
+    if (meta.logo) {
+      try {
+        document.image(meta.logo, left + 6, 30, { fit: [42, 42] });
+      } catch {
+        drawFallbackLogo(document, meta.settings, left, 24, 54);
+      }
+    } else {
       drawFallbackLogo(document, meta.settings, left, 24, 54);
     }
-  } else {
-    drawFallbackLogo(document, meta.settings, left, 24, 54);
+
+    const titleX = left + 68;
+    document
+      .font("Helvetica-Bold")
+      .fontSize(7)
+      .fillColor("#64748b")
+      .text(meta.settings.systemName.toUpperCase(), titleX, 24, {
+        width: right - titleX,
+      });
+    document
+      .font("Helvetica-Bold")
+      .fontSize(17)
+      .fillColor("#0f172a")
+      .text(meta.title, titleX, 36, { width: right - titleX });
+    document
+      .font("Helvetica")
+      .fontSize(8.5)
+      .fillColor("#475569")
+      .text(meta.subtitle, titleX, 60, { width: right - titleX });
+
+    document.roundedRect(left, 88, width, 42, 7).fillColor("#f8fafc").fill();
+    document.roundedRect(left, 88, width, 42, 7).strokeColor("#e2e8f0").stroke();
+
+    const columnGap = 18;
+    const columnWidth = (width - columnGap * 2) / 3;
+    drawMetadata(
+      document,
+      "Emitido por",
+      `${meta.user.name} (${meta.user.email})`,
+      left + 12,
+      99,
+      columnWidth,
+    );
+    drawMetadata(
+      document,
+      "Gerado em",
+      formatDate(meta.generatedAt),
+      left + 12 + columnWidth + columnGap,
+      99,
+      columnWidth,
+    );
+    drawMetadata(
+      document,
+      "Responsavel",
+      `${meta.user.name} - ${roleLabel(meta.user.role)}`,
+      left + 12 + (columnWidth + columnGap) * 2,
+      99,
+      columnWidth,
+    );
   }
-
-  const titleX = left + 68;
-  document
-    .font("Helvetica-Bold")
-    .fontSize(7)
-    .fillColor("#64748b")
-    .text(meta.settings.systemName.toUpperCase(), titleX, 24, {
-      width: right - titleX,
-    });
-  document
-    .font("Helvetica-Bold")
-    .fontSize(17)
-    .fillColor("#0f172a")
-    .text(meta.title, titleX, 36, { width: right - titleX });
-  document
-    .font("Helvetica")
-    .fontSize(8.5)
-    .fillColor("#475569")
-    .text(meta.subtitle, titleX, 60, { width: right - titleX });
-
-  document.roundedRect(left, 88, width, 42, 7).fillColor("#f8fafc").fill();
-  document.roundedRect(left, 88, width, 42, 7).strokeColor("#e2e8f0").stroke();
-
-  const columnGap = 18;
-  const columnWidth = (width - columnGap * 2) / 3;
-  drawMetadata(
-    document,
-    "Emitido por",
-    `${meta.user.name} (${meta.user.email})`,
-    left + 12,
-    99,
-    columnWidth,
-  );
-  drawMetadata(
-    document,
-    "Gerado em",
-    formatDate(meta.generatedAt),
-    left + 12 + columnWidth + columnGap,
-    99,
-    columnWidth,
-  );
-  drawMetadata(
-    document,
-    "Responsavel",
-    `${meta.user.name} - ${roleLabel(meta.user.role)}`,
-    left + 12 + (columnWidth + columnGap) * 2,
-    99,
-    columnWidth,
-  );
 
   const footerY = document.page.height - 48;
   document
@@ -438,12 +459,7 @@ async function buildPdf(
   return new Promise<Buffer>((resolve, reject) => {
     const document = new PDFDocument({
       bufferPages: true,
-      margins: {
-        bottom: 64,
-        left: 36,
-        right: 36,
-        top: 150,
-      },
+      margins: firstPageMargins,
       size: "A4",
     });
     const chunks: Buffer[] = [];
@@ -716,7 +732,7 @@ reportRoutes.get(
           ).join(", ");
 
           if (index > 0) {
-            document.addPage();
+            addContinuationPage(document);
           }
 
           writeSectionTitle(document, `Nota fiscal ${invoice.number}`);

@@ -30,6 +30,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { useApiResource } from "@/lib/api";
+import { useRouteLoading } from "@/lib/route-loading";
 import { useSession } from "@/lib/session";
 import { useSystemSettings } from "@/lib/system-settings";
 import type { UserRole } from "@/lib/types";
@@ -95,12 +96,49 @@ function BrandLogo({ logoUrl }: { logoUrl?: string | null }) {
   return <Boxes className="h-5 w-5" />;
 }
 
+function RouteLoadingSlide({ active }: { active: boolean }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!active) {
+      setVisible(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setVisible(true), 120);
+
+    return () => window.clearTimeout(timer);
+  }, [active]);
+
+  return (
+    <div className="pointer-events-none sticky top-16 z-20 h-0">
+      <div
+        aria-hidden={!visible}
+        className={cn(
+          "overflow-hidden border-b bg-background/90 text-xs text-muted-foreground shadow-sm backdrop-blur transition duration-200",
+          visible ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0",
+        )}
+        role="status"
+      >
+        <div className="mx-auto flex h-8 w-full max-w-[90rem] items-center gap-3 px-4 md:px-6">
+          <span className="whitespace-nowrap">Carregando...</span>
+          <div className="relative h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+            <div className="route-loading-slide absolute inset-y-0 left-0 w-1/3 rounded-full bg-primary" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { clearSession, session } = useSession();
   const { darkMode, setDarkMode, settings } = useSystemSettings();
+  const routeLoading = useRouteLoading();
   const location = useLocation();
   const navigate = useNavigate();
   const role = session?.user.role ?? "OPERATOR";
+  const routeKey = `${location.pathname}${location.search}`;
   const notificationSeenKey = `almoxarifado-notifications-seen-${session?.user.id ?? "anon"}`;
   const [seenNotificationTotal, setSeenNotificationTotal] = useState(() =>
     Number(localStorage.getItem(notificationSeenKey) ?? 0),
@@ -220,7 +258,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </DropdownMenu>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[90rem] p-4 md:p-6">{children}</main>
+        <RouteLoadingSlide active={routeLoading.active} />
+        <main className="mx-auto w-full max-w-[90rem] p-4 md:p-6">
+          <div className="route-transition-frame" key={routeKey}>
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   );

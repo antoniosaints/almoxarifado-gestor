@@ -1,15 +1,24 @@
-import { FileText } from "lucide-react";
+import { FileText, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
-import { useApiResource } from "@/lib/api";
+import { api, useApiResource } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import type { Movement, MovementType, Product, Warehouse } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -21,10 +30,14 @@ export const movementLabels: Record<MovementType, string> = {
 };
 
 export function MovementsTable({
+  deletingMovementId = null,
   movements,
+  onDeleteMovement,
   showInvoiceAction = false,
 }: {
+  deletingMovementId?: string | null;
   movements: Movement[];
+  onDeleteMovement?: (movement: Movement) => void;
   showInvoiceAction?: boolean;
 }) {
   return (
@@ -127,6 +140,28 @@ export function MovementsTable({
               },
             ]
           : []),
+        ...(onDeleteMovement
+          ? [
+              {
+                cell: (movement: Movement) => (
+                  <Button
+                    aria-label={`Excluir movimentacao de ${movement.product.name}`}
+                    disabled={deletingMovementId === movement.id}
+                    onClick={() => onDeleteMovement(movement)}
+                    size="icon"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </Button>
+                ),
+                cellClassName: "text-right",
+                header: "Acoes",
+                headerClassName: "text-right",
+                key: "delete-action",
+              },
+            ]
+          : []),
       ]}
       data={movements}
       emptyMessage="Nenhuma movimentacao encontrada."
@@ -152,6 +187,7 @@ export function MovementsTable({
 }
 
 export function MovementsPage() {
+  const { session } = useSession();
   const warehouses = useApiResource<Warehouse[]>("/warehouses", []);
   const products = useApiResource<Product[]>("/products", []);
   const [warehouseId, setWarehouseId] = useState("");
@@ -159,6 +195,10 @@ export function MovementsPage() {
   const [type, setType] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [movementToDelete, setMovementToDelete] = useState<Movement | null>(null);
+  const [deletingMovementId, setDeletingMovementId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const path = useMemo(() => {
     const params = new URLSearchParams();
@@ -172,6 +212,34 @@ export function MovementsPage() {
   }, [from, productId, to, type, warehouseId]);
 
   const movements = useApiResource<Movement[]>(path, []);
+  const canDeleteMovements = session?.user.role === "ADMIN";
+
+  async function deleteMovement() {
+    if (!movementToDelete) {
+      return;
+    }
+
+    setDeletingMovementId(movementToDelete.id);
+    setActionError(null);
+    setActionMessage(null);
+
+    try {
+      await api(`/movements/${movementToDelete.id}`, { method: "DELETE" });
+      movements.setData((current) =>
+        current.filter((movement) => movement.id !== movementToDelete.id),
+      );
+      setActionMessage("Movimentacao excluida.");
+      setMovementToDelete(null);
+    } catch (caughtError) {
+      setActionError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao excluir movimentacao.",
+      );
+    } finally {
+      setDeletingMovementId(null);
+    }
+  }
 
   if (warehouses.loading || products.loading || movements.loading) {
     return <LoadingLine />;
@@ -191,6 +259,15 @@ export function MovementsPage() {
         <p className="text-sm text-muted-foreground">Auditoria</p>
         <h2 className="text-2xl font-semibold">Movimentacoes</h2>
       </div>
+      {actionMessage ? (
+        <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
+          <AlertTitle>Pronto</AlertTitle>
+          <AlertDescription className="text-emerald-900">
+            {actionMessage}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {actionError ? <ResourceError message={actionError} /> : null}
       <div className="grid gap-4 rounded-lg border bg-card p-4 md:grid-cols-2 xl:grid-cols-5">
         <FormField>
           <Label htmlFor="movement-warehouse">Almoxarifado</Label>
@@ -254,7 +331,57 @@ export function MovementsPage() {
           <Input id="movement-to" onChange={(event) => setTo(event.target.value)} type="date" value={to} />
         </FormField>
       </div>
-      <MovementsTable movements={movements.data} />
+      <MovementsTable
+        deletingMovementId={deletingMovementId}
+        movements={movements.data}
+        onDeleteMovement={canDeleteMovements ? setMovementToDelete : undefined}
+      />
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open && !deletingMovementId) {
+            setMovementToDelete(null);
+          }
+        }}
+        open={Boolean(movementToDelete)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir movimentacao</DialogTitle>
+            <DialogDescription>
+              Esta movimentacao sera removida do historico do estoque.
+            </DialogDescription>
+          </DialogHeader>
+          {movementToDelete ? (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <p className="font-medium">{movementToDelete.product.name}</p>
+              <p className="text-muted-foreground">
+                {movementLabels[movementToDelete.type]} em{" "}
+                {movementToDelete.warehouse.name} no dia{" "}
+                {formatDate(movementToDelete.movementDate)}
+              </p>
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button
+              disabled={Boolean(deletingMovementId)}
+              onClick={() => setMovementToDelete(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={Boolean(deletingMovementId)}
+              onClick={deleteMovement}
+              type="button"
+              variant="destructive"
+            >
+              {deletingMovementId ? "Excluindo..." : "Excluir"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

@@ -60,3 +60,44 @@
     font: inherit;
   }
 }
+
+@layer components {
+  .app-route-frame,
+  .route-transition-frame {
+    animation: route-enter 220ms ease-out both;
+  }
+
+  .route-loading-slide {
+    animation: route-loading-slide 1.15s ease-in-out infinite;
+  }
+}
+
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes route-loading-slide {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(310%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-route-frame,
+  .route-transition-frame,
+  .route-loading-slide {
+    animation: none;
+  }
+}

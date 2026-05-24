@@ -1,4 +1,4 @@
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
 import { CategoriesPage } from "@/pages/categories-page";
 import { DashboardPage } from "@/pages/dashboard-page";
@@ -41,67 +41,72 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 }
 
 export function App() {
+  const location = useLocation();
+  const appFrameKey = location.pathname === "/login" ? "login" : "app";
+
   return (
-    <Routes>
-      <Route element={<LoginPage />} path="/login" />
-      <Route element={<ProtectedLayout />}>
-        <Route element={<DashboardPage />} path="/dashboard" />
-        <Route
-          element={
-            <AdminRoute>
-              <InsightsPage />
-            </AdminRoute>
-          }
-          path="/insights"
-        />
-        <Route element={<WarehousesPage />} path="/warehouses" />
-        <Route element={<WarehouseDetailPage />} path="/warehouses/:warehouseId" />
-        <Route
-          element={
-            <AdminRoute>
-              <ProductsPage />
-            </AdminRoute>
-          }
-          path="/products"
-        />
-        <Route
-          element={
-            <AdminRoute>
-              <CategoriesPage />
-            </AdminRoute>
-          }
-          path="/categories"
-        />
-        <Route
-          element={
-            <AdminRoute>
-              <UnitsPage />
-            </AdminRoute>
-          }
-          path="/units"
-        />
-        <Route element={<InvoicesPage />} path="/invoices" />
-        <Route element={<ReportsPage />} path="/reports" />
-        <Route element={<MovementsPage />} path="/movements" />
-        <Route element={<RequestsPage />} path="/requests" />
-        <Route
-          element={
-            <AdminRoute>
-              <UsersPage />
-            </AdminRoute>
-          }
-          path="/users"
-        />
-        <Route
-          element={
-            <AdminRoute>
-              <SettingsPage />
-            </AdminRoute>
-          }
-          path="/settings"
-        />
-      </Route>
-      <Route element={<Navigate replace to="/dashboard" />} path="*" />
-    </Routes>
+    <div className="app-route-frame" key={appFrameKey}>
+      <Routes>
+        <Route element={<LoginPage />} path="/login" />
+        <Route element={<ProtectedLayout />}>
+          <Route element={<DashboardPage />} path="/dashboard" />
+          <Route
+            element={
+              <AdminRoute>
+                <InsightsPage />
+              </AdminRoute>
+            }
+            path="/insights"
+          />
+          <Route element={<WarehousesPage />} path="/warehouses" />
+          <Route element={<WarehouseDetailPage />} path="/warehouses/:warehouseId" />
+          <Route
+            element={
+              <AdminRoute>
+                <ProductsPage />
+              </AdminRoute>
+            }
+            path="/products"
+          />
+          <Route
+            element={
+              <AdminRoute>
+                <CategoriesPage />
+              </AdminRoute>
+            }
+            path="/categories"
+          />
+          <Route
+            element={
+              <AdminRoute>
+                <UnitsPage />
+              </AdminRoute>
+            }
+            path="/units"
+          />
+          <Route element={<InvoicesPage />} path="/invoices" />
+          <Route element={<ReportsPage />} path="/reports" />
+          <Route element={<MovementsPage />} path="/movements" />
+          <Route element={<RequestsPage />} path="/requests" />
+          <Route
+            element={
+              <AdminRoute>
+                <UsersPage />
+              </AdminRoute>
+            }
+            path="/users"
+          />
+          <Route
+            element={
+              <AdminRoute>
+                <SettingsPage />
+              </AdminRoute>
+            }
+            path="/settings"
+          />
+        </Route>
+        <Route element={<Navigate replace to="/dashboard" />} path="*" />
+      </Routes>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { Movement } from "@/lib/types";
 import { MovementsTable } from "./movements-page";
 
@@ -33,5 +33,22 @@ describe("MovementsTable", () => {
 
     expect(screen.getByText(/R\$\s*14,75/)).toBeInTheDocument();
     expect(screen.getByText(/R\$\s*118,00/)).toBeInTheDocument();
+  });
+
+  it("calls the delete handler from the action button", () => {
+    const onDeleteMovement = vi.fn();
+
+    render(
+      <MovementsTable
+        movements={[movement]}
+        onDeleteMovement={onDeleteMovement}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /excluir movimentacao de papel a4/i }),
+    );
+
+    expect(onDeleteMovement).toHaveBeenCalledWith(movement);
   });
 });

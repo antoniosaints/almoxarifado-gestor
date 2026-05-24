@@ -5,6 +5,7 @@ dist
 *.db-journal
 *.db-shm
 *.db-wal
+.codex-*.log
 coverage
 apps/backend/prisma/dev.db
 apps/backend/prisma/test.db

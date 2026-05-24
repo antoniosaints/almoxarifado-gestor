@@ -145,6 +145,10 @@ export const stockBulkAdminInput = z.object({
   stockIds: z.array(z.string().min(1)).min(1, "Selecione ao menos um estoque."),
 });
 
+export const systemResetInput = z.object({
+  password: z.string().min(1, "Informe sua senha para confirmar."),
+});
+
 const movementBase = z.object({
   movementDate: z.coerce.date(),
   observation: optionalText,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouteLoading } from "./route-loading";
 import { getStoredSession } from "./session";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3333";
@@ -53,8 +54,11 @@ export function useApiResource<T>(path: string, initialValue: T) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const mounted = useRef(true);
+  const { startLoading } = useRouteLoading();
 
   const reload = useCallback(async () => {
+    const finishLoading = startLoading();
+
     if (mounted.current) {
       setLoading(true);
       setError(null);
@@ -76,8 +80,9 @@ export function useApiResource<T>(path: string, initialValue: T) {
       if (mounted.current) {
         setLoading(false);
       }
+      finishLoading();
     }
-  }, [path]);
+  }, [path, startLoading]);
 
   useEffect(() => {
     mounted.current = true;

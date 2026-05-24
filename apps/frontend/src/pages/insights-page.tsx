@@ -4,7 +4,7 @@ import {
   BarChart3,
   Boxes,
   ClipboardList,
-  FileSearch,
+  ExternalLink,
   PackageCheck,
   PackagePlus,
   TrendingUp,
@@ -562,7 +562,7 @@ export function InsightsPage() {
                     <InvoiceMovementsDialog invoice={invoice} />
                     <Button asChild aria-label={`Abrir nota ${invoice.number}`} size="icon" variant="outline">
                       <Link to={`/invoices?invoiceId=${invoice.id}`}>
-                        <FileSearch className="h-4 w-4" />
+                        <ExternalLink className="h-4 w-4" />
                       </Link>
                     </Button>
                   </div>

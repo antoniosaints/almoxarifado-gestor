@@ -1,19 +1,42 @@
-import { Building2, FileText, Image, Moon, Palette, Save, Sun } from "lucide-react";
+import {
+  AlertTriangle,
+  Building2,
+  FileText,
+  Image,
+  Moon,
+  Palette,
+  RotateCcw,
+  Save,
+  Sun,
+} from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { api } from "@/lib/api";
 import {
   defaultSystemSettings,
   useSystemSettings,
 } from "@/lib/system-settings";
 import type { SystemSettings } from "@/lib/types";
+
+type SettingsMessage = {
+  kind: "error" | "success";
+  text: string;
+};
 
 function normalizeColor(color: string, fallback = defaultSystemSettings.primaryColor) {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
@@ -30,7 +53,13 @@ export function SettingsPage() {
   } = useSystemSettings();
   const [draft, setDraft] = useState<SystemSettings>(settings);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<SettingsMessage | null>(null);
+  const [resetStep, setResetStep] = useState<"closed" | "confirm" | "password">(
+    "closed",
+  );
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     setDraft(settings);
@@ -59,15 +88,73 @@ export function SettingsPage() {
       });
 
       setDraft(savedSettings);
-      setMessage("Configuracoes salvas.");
+      setMessage({ kind: "success", text: "Configuracoes salvas." });
     } catch (caughtError) {
-      setMessage(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Falha ao salvar configuracoes.",
-      );
+      setMessage({
+        kind: "error",
+        text:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Falha ao salvar configuracoes.",
+      });
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openResetDialog() {
+    setMessage(null);
+    setResetError(null);
+    setResetPassword("");
+    setResetStep("password");
+  }
+
+  function closeResetDialog() {
+    if (resetting) {
+      return;
+    }
+
+    setResetError(null);
+    setResetPassword("");
+    setResetStep("closed");
+  }
+
+  function continueReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!resetPassword.trim()) {
+      setResetError("Informe a senha do usuario admin.");
+      return;
+    }
+
+    setResetError(null);
+    setResetStep("confirm");
+  }
+
+  async function confirmReset() {
+    setResetting(true);
+    setResetError(null);
+    setMessage(null);
+
+    try {
+      await api("/settings/reset-data", {
+        body: JSON.stringify({ password: resetPassword }),
+        method: "POST",
+      });
+      setMessage({
+        kind: "success",
+        text: "Dados do sistema apagados. Usuarios preservados.",
+      });
+      setResetPassword("");
+      setResetStep("closed");
+    } catch (caughtError) {
+      setResetError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao resetar os dados do sistema.",
+      );
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -90,15 +177,15 @@ export function SettingsPage() {
 
       {error ? <ResourceError message={error} /> : null}
       {message ? (
-        message === "Configuracoes salvas." ? (
+        message.kind === "success" ? (
           <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
             <AlertTitle>Pronto</AlertTitle>
             <AlertDescription className="text-emerald-900">
-              {message}
+              {message.text}
             </AlertDescription>
           </Alert>
         ) : (
-          <ResourceError message={message} />
+          <ResourceError message={message.text} />
         )
       ) : null}
 
@@ -366,6 +453,108 @@ export function SettingsPage() {
           </TabsContent>
         </Tabs>
       </Form>
+
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-950">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-red-100 text-red-700">
+            <AlertTriangle className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="font-medium">Resetar dados do sistema</p>
+            <p className="max-w-3xl text-sm text-red-900">
+              Apaga almoxarifados, produtos, estoques, movimentacoes, notas,
+              solicitacoes e vinculos de almoxarifado. Usuarios e configuracoes
+              permanecem.
+            </p>
+          </div>
+        </div>
+        <Button onClick={openResetDialog} type="button" variant="destructive">
+          <RotateCcw className="h-4 w-4" />
+          Resetar dados
+        </Button>
+      </section>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            closeResetDialog();
+          }
+        }}
+        open={resetStep !== "closed"}
+      >
+        <DialogContent>
+          {resetStep === "password" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Confirmar senha do admin</DialogTitle>
+                <DialogDescription>
+                  Os dados do sistema serao apagados e os usuarios serao
+                  mantidos.
+                </DialogDescription>
+              </DialogHeader>
+              <form className="space-y-4" onSubmit={continueReset}>
+                {resetError ? <ResourceError message={resetError} /> : null}
+                <FormField>
+                  <Label htmlFor="settings-reset-password">Senha do admin</Label>
+                  <Input
+                    autoFocus
+                    id="settings-reset-password"
+                    onChange={(event) => setResetPassword(event.target.value)}
+                    type="password"
+                    value={resetPassword}
+                  />
+                </FormField>
+                <div className="flex justify-end gap-2">
+                  <Button onClick={closeResetDialog} type="button" variant="outline">
+                    Cancelar
+                  </Button>
+                  <Button type="submit" variant="destructive">
+                    Continuar
+                  </Button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Apagar dados definitivamente</DialogTitle>
+                <DialogDescription>
+                  Esta acao nao tem recuperacao apos a confirmacao final.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  Almoxarifados, produtos, estoques, movimentacoes, notas fiscais
+                  e solicitacoes serao removidos permanentemente.
+                </p>
+              </div>
+              {resetError ? <ResourceError message={resetError} /> : null}
+              <div className="flex justify-end gap-2">
+                <Button
+                  disabled={resetting}
+                  onClick={() => {
+                    setResetError(null);
+                    setResetStep("password");
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  Voltar
+                </Button>
+                <Button
+                  disabled={resetting}
+                  onClick={confirmReset}
+                  type="button"
+                  variant="destructive"
+                >
+                  {resetting ? "Resetando..." : "Apagar definitivamente"}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

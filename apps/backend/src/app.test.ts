@@ -424,6 +424,55 @@ describe("api", () => {
     });
   });
 
+  it("deletes an individual movement from the general movements list", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const stock = await prisma.stock.create({
+      data: {
+        currentQuantity: 3,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    const movement = await prisma.stockMovement.create({
+      data: {
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 3,
+        responsibleUserId: user.id,
+        stockId: stock.id,
+        type: "ENTRADA",
+        unitPrice: 18,
+        warehouseId: warehouse.id,
+      },
+    });
+
+    const response = await request(app)
+      .delete(`/movements/${movement.id}`)
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
+
+    expect(response.status).toBe(204);
+    await expect(
+      prisma.stockMovement.findUnique({ where: { id: movement.id } }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.auditLog.findFirst({
+        where: {
+          action: "DELETE",
+          entity: "StockMovement",
+          entityId: movement.id,
+        },
+      }),
+    ).resolves.toMatchObject({
+      userId: user.id,
+    });
+  });
+
   it("zeros selected stocks after admin password confirmation", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({
@@ -522,6 +571,144 @@ describe("api", () => {
     await expect(
       prisma.stockMovement.findMany({ where: { stockId: stock.id } }),
     ).resolves.toEqual([]);
+  });
+
+  it("resets system data after admin password confirmation while keeping users and settings", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await hashPassword("admin123"),
+        role: UserRole.ADMIN,
+      },
+    });
+    await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+    const sourceWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    const destinationWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    const stock = await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: sourceWarehouse.id,
+      },
+    });
+    const invoice = await prisma.invoice.create({
+      data: {
+        cnpj: "12345678000190",
+        companyName: "Fornecedor Municipal",
+        issueDate: new Date("2026-05-20T12:00:00.000Z"),
+        number: "NF-RESET",
+      },
+    });
+    await prisma.stockMovement.create({
+      data: {
+        invoiceId: invoice.id,
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 10,
+        responsibleUserId: admin.id,
+        stockId: stock.id,
+        type: "ENTRADA",
+        warehouseId: sourceWarehouse.id,
+      },
+    });
+    await prisma.userWarehouse.create({
+      data: {
+        userId: admin.id,
+        warehouseId: sourceWarehouse.id,
+      },
+    });
+    await prisma.entryRequest.create({
+      data: {
+        movementDate: new Date("2026-05-23T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 1,
+        requestedById: admin.id,
+        warehouseId: sourceWarehouse.id,
+      },
+    });
+    await prisma.transferRequest.create({
+      data: {
+        createdById: admin.id,
+        destinationWarehouseId: destinationWarehouse.id,
+        movementDate: new Date("2026-05-24T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 2,
+        sourceWarehouseId: sourceWarehouse.id,
+      },
+    });
+    await prisma.auditLog.create({
+      data: {
+        action: "TEST",
+        entity: "System",
+        entityId: "fixture",
+        userId: admin.id,
+      },
+    });
+    await prisma.systemSettings.create({
+      data: {
+        id: "system",
+        loginSubtitle: "Entre com seguranca.",
+        loginTitle: "Almoxarifado",
+        primaryColor: "#112233",
+        reportFooterText: "Rodape preservado.",
+        reportPrimaryColor: "#445566",
+        systemName: "ALMOX",
+      },
+    });
+
+    const denied = await request(app)
+      .post("/settings/reset-data")
+      .set("Authorization", authorizationFor(admin))
+      .send({ password: "senha-errada" });
+
+    expect(denied.status).toBe(401);
+    await expect(prisma.warehouse.count()).resolves.toBe(2);
+
+    const response = await request(app)
+      .post("/settings/reset-data")
+      .set("Authorization", authorizationFor(admin))
+      .send({ password: "admin123" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(response.body.deleted.movements).toBe(1);
+    await expect(prisma.user.count()).resolves.toBe(2);
+    await expect(
+      prisma.systemSettings.findUnique({ where: { id: "system" } }),
+    ).resolves.toMatchObject({
+      reportFooterText: "Rodape preservado.",
+      systemName: "ALMOX",
+    });
+    await expect(prisma.auditLog.count()).resolves.toBe(0);
+    await expect(prisma.entryRequest.count()).resolves.toBe(0);
+    await expect(prisma.transferRequest.count()).resolves.toBe(0);
+    await expect(prisma.stockMovement.count()).resolves.toBe(0);
+    await expect(prisma.invoice.count()).resolves.toBe(0);
+    await expect(prisma.stock.count()).resolves.toBe(0);
+    await expect(prisma.userWarehouse.count()).resolves.toBe(0);
+    await expect(prisma.product.count()).resolves.toBe(0);
+    await expect(prisma.unitOfMeasure.count()).resolves.toBe(0);
+    await expect(prisma.productCategory.count()).resolves.toBe(0);
+    await expect(prisma.warehouse.count()).resolves.toBe(0);
+    await expect(prisma.warehouseCategory.count()).resolves.toBe(0);
   });
 
   it("deletes invoices without deleting stock movements", async () => {
