@@ -136,6 +136,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     setSeenNotificationTotal(summary.data.total);
   }
 
+  const subtitle = import.meta.env.VITE_NAME_SYSTEM ?? "GEMA - Gestão Municipal de Almoxarifado.";
+
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
       <aside className="hidden border-r bg-card lg:flex lg:flex-col">
@@ -145,8 +147,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <BrandLogo logoUrl={settings.logoUrl} />
             </div>
             <div>
-              <p className="text-sm font-semibold">{settings.systemName}</p>
-              <p className="text-xs text-muted-foreground">Almoxarifado</p>
+              <p className="text-sm font-semibold">{settings.loginTitle}</p>
+              <p className="text-xs text-muted-foreground">{subtitle}</p>
             </div>
           </div>
         </div>

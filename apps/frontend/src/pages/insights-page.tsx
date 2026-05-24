@@ -154,8 +154,8 @@ export function InsightsPage() {
         </button>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card>
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Movimentacao e pendencias</CardTitle>
             <CardDescription>
@@ -188,7 +188,7 @@ export function InsightsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Alertas de estoque</CardTitle>
             <CardDescription>Baixo estoque e itens zerados para reposicao.</CardDescription>
@@ -244,8 +244,8 @@ export function InsightsPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card>
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Saldo consolidado</CardTitle>
             <CardDescription>Quantidade total acompanhada no estoque.</CardDescription>
@@ -279,7 +279,7 @@ export function InsightsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Top produtos do mes</CardTitle>
             <CardDescription>Clique em uma barra para acessar o catalogo.</CardDescription>
