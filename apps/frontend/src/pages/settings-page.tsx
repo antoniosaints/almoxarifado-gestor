@@ -50,7 +50,7 @@ type ResetCatalogOptions = {
 };
 
 const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
-const maxImageSize = 1024 * 1024;
+const maxImageSize = 1024 * 1024 * 5;
 const settingsUploadSlots: Partial<Record<keyof SystemSettings, string>> = {
   faviconUrl: "favicon",
   loginBackgroundUrl: "login-background",
