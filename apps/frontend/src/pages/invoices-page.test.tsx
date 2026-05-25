@@ -55,7 +55,7 @@ describe("InvoiceMovementsDialog", () => {
   it("shows the stock movements linked to an invoice", () => {
     render(<InvoiceMovementsDialog invoice={invoice} />);
 
-    fireEvent.click(screen.getByLabelText("Consultar movimentacoes da nota NF-101"));
+    fireEvent.click(screen.getByLabelText("Consultar movimentações da nota NF-101"));
 
     expect(screen.getByText("Movimentações da nota NF-101")).toBeInTheDocument();
     expect(screen.getByText("Papel A4")).toBeInTheDocument();

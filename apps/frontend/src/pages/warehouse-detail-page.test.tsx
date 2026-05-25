@@ -43,6 +43,7 @@ const warehouseWithStock: Warehouse = {
         categoryId: "office",
         code: "0000001",
         id: "paper",
+        minimumQuantity: 0,
         name: "Papel A4",
         unit: {
           abbreviation: "PCT",
@@ -68,6 +69,7 @@ const createdProduct: Product = {
   categoryId: "office",
   code: "0000002",
   id: "new-paper",
+  minimumQuantity: 0,
   name: "Clips galvanizado",
   unit: {
     abbreviation: "CX",
@@ -86,6 +88,7 @@ const outsideProduct: Product = {
   categoryId: "cleaning",
   code: "0000003",
   id: "detergent",
+  minimumQuantity: 0,
   name: "Detergente",
   unit: {
     abbreviation: "UN",
@@ -373,7 +376,7 @@ describe("WarehouseTabs", () => {
 
     openStockTab();
 
-    expect(screen.queryByLabelText("Estoque minimo de Papel A4")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Estoque mínimo de Papel A4")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Editar estoque de Papel A4")).toBeInTheDocument();
     expect(screen.getByLabelText("Remover estoque de Papel A4")).toBeInTheDocument();
   });
@@ -431,13 +434,13 @@ describe("WarehouseTabs", () => {
     openStockTab();
 
     expect(screen.queryByRole("columnheader", { name: "Estado" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Valor unitario" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Valor unitário" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("columnheader", { name: "Valor total" })[0]).toBeInTheDocument();
     expect(screen.getAllByText("R$ 186,64")[0]).toBeInTheDocument();
-    expect(screen.getByLabelText("Ver movimentacoes de Papel A4")).toBeInTheDocument();
+    expect(screen.getByLabelText("Ver movimentações de Papel A4")).toBeInTheDocument();
     expect(screen.getAllByText("Entrada - 23/05/2026, 09:00")[0]).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Ver movimentacoes de Papel A4"));
+    fireEvent.click(screen.getByLabelText("Ver movimentações de Papel A4"));
     expect(screen.getByRole("link", { name: "Abrir nota NF-1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Exportar PDF" })).toBeInTheDocument();
   });
@@ -495,7 +498,7 @@ describe("WarehouseTabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Exportar movimentações" }));
 
     expect(screen.getByRole("dialog", { name: "Exportar movimentações" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Periodo de")).toBeInTheDocument();
+    expect(screen.getByLabelText("Período de")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Filtrar nota fiscal" })).toHaveTextContent(
       "Todas as notas",
     );
@@ -731,7 +734,7 @@ describe("WarehouseTabs", () => {
         screen.getByRole("dialog", { name: "Incluir Estoque" }),
       ).toBeInTheDocument();
     });
-    expect(screen.getByText("Estoque minimo inicial")).toBeInTheDocument();
+    expect(screen.getByText("Estoque mínimo inicial")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Produto" })).toHaveTextContent(
       "0000002 - Clips galvanizado",
     );

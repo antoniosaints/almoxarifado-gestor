@@ -137,7 +137,7 @@ function parseIssueDate(value: string) {
     return dateOnly;
   }
 
-  throw new AppError(400, "Nao foi possivel identificar a data da nota no XML.");
+  throw new AppError(400, "Não foi possível identificar a data da nota no XML.");
 }
 
 function parseInvoiceXml(xml: string): ParsedInvoiceXml {
@@ -191,7 +191,7 @@ function parseInvoiceXml(xml: string): ParsedInvoiceXml {
   } satisfies ParsedInvoiceXml;
 
   if (!parsed.companyName || !parsed.cnpj || !parsed.number || !parsed.items.length) {
-    throw new AppError(400, "XML de nota fiscal incompleto ou invalido.");
+    throw new AppError(400, "XML de nota fiscal incompleto ou inválido.");
   }
 
   return parsed;
@@ -229,7 +229,7 @@ async function ensureCategory(
     });
 
     if (!category) {
-      throw new AppError(404, "Categoria padrao nao encontrada.");
+      throw new AppError(404, "Categoria padrão não encontrada.");
     }
 
     return category;
@@ -281,7 +281,7 @@ async function findOrCreateProduct(
     : findMatchingProduct(products, item);
 
   if (mappedProductId && !product) {
-    throw new AppError(404, "Produto mapeado nao encontrado.");
+    throw new AppError(404, "Produto mapeado não encontrado.");
   }
 
   if (product) {
@@ -311,7 +311,7 @@ async function findOrCreateProduct(
       active: true,
       categoryId,
       code: nextProductCode(lastProduct?.code),
-      description: item.code ? `Codigo do fornecedor: ${item.code}` : null,
+      description: item.code ? `Código do fornecedor: ${item.code}` : null,
       name: item.name,
       unitId,
     },
@@ -415,7 +415,7 @@ export async function importInvoiceXml(
         });
 
     if (existingInvoice?.movements.length) {
-      throw new AppError(409, "Esta nota ja foi importada com movimentacoes.");
+      throw new AppError(409, "Esta nota já foi importada com movimentações.");
     }
 
     const invoice = existingInvoice

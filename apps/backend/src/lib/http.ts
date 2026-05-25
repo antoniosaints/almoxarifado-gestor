@@ -35,7 +35,7 @@ export const authenticate = asyncHandler(async (request, response, next) => {
   });
 
   if (!user?.active) {
-    throw new AppError(401, "Sessao invalida.");
+    throw new AppError(401, "Sessão inválida.");
   }
 
   response.locals.user = {
@@ -61,7 +61,7 @@ export function currentUser(response: Response): SessionUser {
 export function requireRole(...roles: UserRole[]): RequestHandler {
   return (_request, response, next) => {
     if (!roles.includes(currentUser(response).role)) {
-      next(new AppError(403, "Voce nao tem permissao para esta acao."));
+      next(new AppError(403, "Você não tem permissão para esta ação."));
       return;
     }
 
@@ -96,13 +96,13 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
 
     if (error.code === "P2003") {
       response.status(409).json({
-        message: "Este cadastro possui vinculos e nao pode ser removido agora.",
+        message: "Este cadastro possui vínculos e não pode ser removido agora.",
       });
       return;
     }
 
     if (error.code === "P2025") {
-      response.status(404).json({ message: "Registro nao encontrado." });
+      response.status(404).json({ message: "Registro não encontrado." });
       return;
     }
   }

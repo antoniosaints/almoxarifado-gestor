@@ -20,7 +20,7 @@ function WarehouseFacts({ warehouse }: { warehouse: Warehouse }) {
         <dd className="text-lg font-semibold">{warehouse.summary.lowStockItems}</dd>
       </div>
       <div>
-        <dt className="text-muted-foreground">Ultima movimentacao</dt>
+        <dt className="text-muted-foreground">Última movimentação</dt>
         <dd className="font-medium">{formatDate(warehouse.summary.lastMovementAt)}</dd>
       </div>
     </dl>

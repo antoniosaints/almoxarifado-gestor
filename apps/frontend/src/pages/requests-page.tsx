@@ -1,4 +1,4 @@
-import { Check, PackagePlus, Warehouse, X } from "lucide-react";
+import { ArrowRightLeft, Check, PackagePlus, Warehouse, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
@@ -59,13 +59,45 @@ function ApprovalDialog({
   invoices,
   onApprove,
   request,
+  warehouses,
 }: {
   invoices: Invoice[];
-  onApprove: (requestId: string, invoiceId?: string) => Promise<void>;
+  onApprove: (
+    requestId: string,
+    invoiceId: string | undefined,
+    quantity: number,
+  ) => Promise<void>;
   request: EntryRequest;
+  warehouses: WarehouseType[];
 }) {
   const [invoiceId, setInvoiceId] = useState("");
   const [open, setOpen] = useState(false);
+  const [quantity, setQuantity] = useState(String(request.quantity));
+  const approvedQuantity = Number.parseInt(quantity, 10);
+  const summaryQuantity =
+    Number.isInteger(approvedQuantity) && approvedQuantity > 0
+      ? approvedQuantity
+      : request.quantity;
+  const sourceWarehouse = warehouses.find((warehouse) => warehouse.isGeneral);
+  const destinationWarehouse = warehouses.find(
+    (warehouse) => warehouse.id === request.warehouse.id,
+  );
+  const sourceStock = sourceWarehouse?.stocks.find(
+    (stock) => stock.productId === request.product.id,
+  );
+  const destinationStock = destinationWarehouse?.stocks.find(
+    (stock) => stock.productId === request.product.id,
+  );
+  const sourceBefore = sourceStock?.currentQuantity ?? 0;
+  const destinationBefore = destinationStock?.currentQuantity ?? 0;
+  const sourceAfter = sourceBefore - summaryQuantity;
+  const destinationAfter = destinationBefore + summaryQuantity;
+
+  useEffect(() => {
+    if (open) {
+      setQuantity(String(request.quantity));
+    }
+  }, [open, request.quantity]);
 
   return (
     <>
@@ -82,6 +114,36 @@ function ApprovalDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor={`quantity-${request.id}`}>Quantidade aprovada</Label>
+                <Input
+                  id={`quantity-${request.id}`}
+                  min="1"
+                  onChange={(event) => setQuantity(event.target.value)}
+                  type="number"
+                  value={quantity}
+                />
+              </div>
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                <p>
+                  Estoque geral: {sourceBefore}{" "}
+                  {request.product.unit.abbreviation}
+                </p>
+                <p>
+                  Após aprovar: {sourceAfter}{" "}
+                  {request.product.unit.abbreviation}
+                </p>
+                <p>
+                  Destino atual: {destinationBefore}{" "}
+                  {request.product.unit.abbreviation}
+                </p>
+                <p>
+                  Destino após entrada: {destinationAfter}{" "}
+                  {request.product.unit.abbreviation}
+                </p>
+              </div>
+            </div>
             <div>
               <Label htmlFor={`invoice-${request.id}`}>Nota fiscal opcional</Label>
               <SearchSelect
@@ -101,13 +163,16 @@ function ApprovalDialog({
               />
             </div>
             <Button
+              disabled={!Number.isInteger(approvedQuantity) || approvedQuantity <= 0}
               onClick={() => {
-                void onApprove(request.id, invoiceId || undefined).then(() =>
-                  setOpen(false),
-                );
+                void onApprove(
+                  request.id,
+                  invoiceId || undefined,
+                  approvedQuantity,
+                ).then(() => setOpen(false));
               }}
             >
-              Confirmar aprovacao
+              Confirmar aprovação
             </Button>
           </div>
         </DialogContent>
@@ -261,7 +326,7 @@ function DirectEntryRequestDialog({
       setMessage(
         caughtError instanceof Error
           ? caughtError.message
-          : "Falha ao enviar solicitacao.",
+          : "Falha ao enviar solicitação.",
       );
     } finally {
       setSaving(false);
@@ -310,7 +375,7 @@ function DirectEntryRequestDialog({
                 emptyMessage={
                   loadingProducts
                     ? "Carregando produtos..."
-                    : "Nenhum produto disponivel."
+                    : "Nenhum produto disponível."
                 }
                 id="request-product"
                 onValueChange={setProductId}
@@ -338,7 +403,7 @@ function DirectEntryRequestDialog({
                 />
               </FormField>
               <FormField>
-                <Label htmlFor="request-date">Data da movimentacao</Label>
+                <Label htmlFor="request-date">Data da movimentação</Label>
                 <Input
                   id="request-date"
                   onChange={(event) => setMovementDate(event.target.value)}
@@ -349,7 +414,7 @@ function DirectEntryRequestDialog({
               </FormField>
             </div>
             <FormField>
-              <Label htmlFor="request-observation">Observacao</Label>
+              <Label htmlFor="request-observation">Observação</Label>
               <Textarea
                 id="request-observation"
                 onChange={(event) => setObservation(event.target.value)}
@@ -361,7 +426,229 @@ function DirectEntryRequestDialog({
               type="submit"
             >
               <PackagePlus className="h-4 w-4" />
-              {saving ? "Enviando..." : "Enviar solicitacao"}
+              {saving ? "Enviando..." : "Enviar solicitação"}
+            </Button>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function DirectTransferDialog({
+  onCreated,
+  warehouses,
+}: {
+  onCreated: () => Promise<void>;
+  warehouses: WarehouseType[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [destinationWarehouseId, setDestinationWarehouseId] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [movementDate, setMovementDate] = useState(todayInputValue());
+  const [observation, setObservation] = useState("");
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const sourceWarehouse = warehouses.find((warehouse) => warehouse.isGeneral);
+  const destinationWarehouses = warehouses.filter((warehouse) => !warehouse.isGeneral);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setDestinationWarehouseId(
+      (current) => current || destinationWarehouses[0]?.id || "",
+    );
+  }, [destinationWarehouses, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadProducts() {
+      setLoadingProducts(true);
+      setMessage(null);
+
+      try {
+        const nextProducts = await api<Product[]>("/entry-requests/available-products");
+
+        if (!ignore) {
+          setProducts(nextProducts);
+          setProductId((current) =>
+            nextProducts.some((product) => product.id === current)
+              ? current
+              : nextProducts[0]?.id ?? "",
+          );
+        }
+      } catch (caughtError) {
+        if (!ignore) {
+          setMessage(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Falha ao carregar produtos.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingProducts(false);
+        }
+      }
+    }
+
+    void loadProducts();
+
+    return () => {
+      ignore = true;
+    };
+  }, [open]);
+
+  function openDialog() {
+    setMessage(null);
+    setQuantity("1");
+    setMovementDate(todayInputValue());
+    setObservation("");
+    setOpen(true);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!sourceWarehouse) {
+      setMessage("Cadastre um almoxarifado geral ativo para transferir.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      await api("/movements/transfer", {
+        body: JSON.stringify({
+          destinationWarehouseId,
+          movementDate,
+          observation,
+          productId,
+          quantity,
+          sourceWarehouseId: sourceWarehouse.id,
+        }),
+        method: "POST",
+      });
+      await onCreated();
+      setOpen(false);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao solicitar transferência.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        disabled={!sourceWarehouse || !destinationWarehouses.length}
+        onClick={openDialog}
+        type="button"
+        variant="outline"
+      >
+        <ArrowRightLeft className="h-4 w-4" />
+        Transferir
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Transferir produto</DialogTitle>
+            <DialogDescription>
+              Solicite uma transferência do almoxarifado geral para o destino.
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={submit}>
+            {message ? <ResourceError message={message} /> : null}
+            <FormField>
+              <Label htmlFor="transfer-destination">Almoxarifado destino</Label>
+              <SearchSelect
+                ariaLabel="Almoxarifado destino"
+                id="transfer-destination"
+                onValueChange={setDestinationWarehouseId}
+                options={destinationWarehouses.map((warehouse) => ({
+                  label: warehouse.name,
+                  searchText: warehouse.category.name,
+                  value: warehouse.id,
+                }))}
+                placeholder="Selecione"
+                value={destinationWarehouseId}
+              />
+            </FormField>
+            <FormField>
+              <Label htmlFor="transfer-product">Produto</Label>
+              <SearchSelect
+                ariaLabel="Produto"
+                disabled={loadingProducts}
+                emptyMessage={
+                  loadingProducts
+                    ? "Carregando produtos..."
+                    : "Nenhum produto disponível no almoxarifado geral."
+                }
+                id="transfer-product"
+                onValueChange={setProductId}
+                options={products.map((product) => ({
+                  label: `${product.code} - ${product.name}`,
+                  searchText: `${product.category.name} ${product.unit.abbreviation}`,
+                  value: product.id,
+                }))}
+                placeholder={loadingProducts ? "Carregando..." : "Selecione"}
+                value={productId}
+              />
+            </FormField>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField>
+                <Label htmlFor="transfer-quantity">Quantidade</Label>
+                <Input
+                  id="transfer-quantity"
+                  min="1"
+                  onChange={(event) => setQuantity(event.target.value)}
+                  required
+                  type="number"
+                  value={quantity}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="transfer-date">Data da movimentação</Label>
+                <Input
+                  id="transfer-date"
+                  onChange={(event) => setMovementDate(event.target.value)}
+                  required
+                  type="datetime-local"
+                  value={movementDate}
+                />
+              </FormField>
+            </div>
+            <FormField>
+              <Label htmlFor="transfer-observation">Observação</Label>
+              <Textarea
+                id="transfer-observation"
+                onChange={(event) => setObservation(event.target.value)}
+                value={observation}
+              />
+            </FormField>
+            <Button
+              disabled={
+                !destinationWarehouseId || !productId || saving || loadingProducts
+              }
+              type="submit"
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+              {saving ? "Enviando..." : "Solicitar transferência"}
             </Button>
           </Form>
         </DialogContent>
@@ -383,13 +670,17 @@ export function RequestsPage() {
   } | null>(null);
   const admin = session?.user.role === "ADMIN";
 
-  async function approve(requestId: string, invoiceId?: string) {
+  async function approve(
+    requestId: string,
+    invoiceId: string | undefined,
+    quantity: number,
+  ) {
     try {
       await api(`/entry-requests/${requestId}/approve`, {
-        body: JSON.stringify({ invoiceId }),
+        body: JSON.stringify({ invoiceId, quantity }),
         method: "POST",
       });
-      setMessage({ error: false, text: "Solicitacao aprovada." });
+      setMessage({ error: false, text: "Solicitação aprovada." });
       await entries.reload();
     } catch (caughtError) {
       setMessage({
@@ -402,7 +693,7 @@ export function RequestsPage() {
   async function reject(requestId: string) {
     try {
       await api(`/entry-requests/${requestId}/reject`, { method: "POST" });
-      setMessage({ error: false, text: "Solicitacao rejeitada." });
+      setMessage({ error: false, text: "Solicitação rejeitada." });
       await entries.reload();
     } catch (caughtError) {
       setMessage({
@@ -423,14 +714,19 @@ export function RequestsPage() {
         text:
           caughtError instanceof Error
             ? caughtError.message
-            : "Falha ao receber transferencia.",
+            : "Falha ao receber transferência.",
       });
     }
   }
 
   async function requestCreated() {
-    setMessage({ error: false, text: "Solicitacao enviada." });
+    setMessage({ error: false, text: "Solicitação enviada." });
     await entries.reload();
+  }
+
+  async function transferCreated() {
+    setMessage({ error: false, text: "Transferência solicitada." });
+    await transfers.reload();
   }
 
   if (
@@ -460,13 +756,21 @@ export function RequestsPage() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">Pendencias internas</p>
+          <p className="text-sm text-muted-foreground">Pendências internas</p>
           <h2 className="text-2xl font-semibold">Solicitações</h2>
         </div>
-        <DirectEntryRequestDialog
-          onCreated={requestCreated}
-          warehouses={warehouses.data}
-        />
+        <div className="flex flex-wrap gap-2">
+          <DirectEntryRequestDialog
+            onCreated={requestCreated}
+            warehouses={warehouses.data}
+          />
+          {admin ? (
+            <DirectTransferDialog
+              onCreated={transferCreated}
+              warehouses={warehouses.data}
+            />
+          ) : null}
+        </div>
       </div>
 
       {message ? (
@@ -477,7 +781,9 @@ export function RequestsPage() {
               : "border-emerald-200 bg-emerald-50 text-emerald-950"
           }
         >
-          <AlertTitle>{message.error ? "Nao foi possivel concluir" : "Atualizacao"}</AlertTitle>
+          <AlertTitle>
+            {message.error ? "Não foi possível concluir" : "Atualização"}
+          </AlertTitle>
           <AlertDescription className="text-current">{message.text}</AlertDescription>
         </Alert>
       ) : null}
@@ -545,6 +851,7 @@ export function RequestsPage() {
                           invoices={invoices.data}
                           onApprove={approve}
                           request={request}
+                          warehouses={warehouses.data}
                         />
                         <Button
                           onClick={() => void reject(request.id)}
@@ -559,13 +866,13 @@ export function RequestsPage() {
                   </div>
                 ),
                 cellClassName: "text-right",
-                header: "Acoes",
+                header: "Ações",
                 headerClassName: "text-right",
                 key: "actions",
               },
             ]}
             data={entries.data}
-            emptyMessage="Nenhuma solicitacao de entrada encontrada."
+            emptyMessage="Nenhuma solicitação de entrada encontrada."
             getRowId={(request) => request.id}
             searchPlaceholder="Buscar entrada solicitada..."
             searchText={(request) =>
@@ -635,7 +942,7 @@ export function RequestsPage() {
                   </div>
                 ),
                 cellClassName: "text-right",
-                header: "Acoes",
+                header: "Ações",
                 headerClassName: "text-right",
                 key: "actions",
               },

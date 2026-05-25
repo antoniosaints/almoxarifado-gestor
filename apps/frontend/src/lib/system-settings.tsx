@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { api } from "./api";
+import { resolveAssetUrl } from "./assets";
 import type { SystemSettings } from "./types";
 
 const themeKey = "almoxarifado-theme";
@@ -17,14 +18,14 @@ export const defaultSystemSettings: SystemSettings = {
   id: "system",
   loginBackgroundUrl: null,
   loginImageUrl: null,
-  loginSubtitle: "Entre com seu usuario para acompanhar o estoque municipal.",
+  loginSubtitle: "Entre com seu usuário para acompanhar o estoque municipal.",
   loginTitle: "Almoxarifado Municipal",
   logoUrl: null,
   primaryColor: "#0f766e",
   reportFooterText: "Documento gerado pelo sistema de almoxarifado municipal.",
   reportLogoUrl: null,
   reportPrimaryColor: "#0f766e",
-  reportTitle: "GEMA - Gestao Municipal de Almoxarifado",
+  reportTitle: "GEMA - Gestão Municipal de Almoxarifado",
   systemName: "Prefeitura",
 };
 
@@ -117,7 +118,7 @@ function applyBranding(settings: SystemSettings, darkMode: boolean) {
   root.style.setProperty("--ring", hexToHsl(primaryColor));
   root.style.setProperty("--primary-foreground", foregroundFor(primaryColor));
 
-  const faviconUrl = settings.faviconUrl?.trim();
+  const faviconUrl = resolveAssetUrl(settings.faviconUrl);
   let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
 
   if (!favicon && faviconUrl) {
@@ -149,7 +150,7 @@ export function SystemSettingsProvider({ children }: { children: ReactNode }) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Falha ao carregar configuracoes.",
+          : "Falha ao carregar configurações.",
       );
       setSettings(defaultSystemSettings);
     } finally {

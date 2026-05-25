@@ -46,7 +46,7 @@ describe("MovementsTable", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: /excluir movimentacao de papel a4/i }),
+      screen.getByRole("button", { name: /excluir movimentação de papel a4/i }),
     );
 
     expect(onDeleteMovement).toHaveBeenCalledWith(movement);

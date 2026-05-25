@@ -25,6 +25,7 @@ export type Product = {
   code: string;
   description?: string | null;
   id: string;
+  minimumQuantity: number;
   name: string;
   unit: UnitOfMeasure;
   unitId: string;
@@ -251,7 +252,6 @@ export type WarehouseCsvPreviewRow = {
   invoiceNumber: string;
   issueDate?: string | null;
   observation?: string | null;
-  productCode: string;
   productName: string;
   quantity: number;
   rowNumber: number;
@@ -265,4 +265,22 @@ export type WarehouseCsvPreviewRow = {
 
 export type WarehouseCsvPreview = {
   rows: WarehouseCsvPreviewRow[];
+};
+
+export type ProductCsvPreviewRow = {
+  canImport: boolean;
+  categoryName: string;
+  code: string | null;
+  errors: string[];
+  existingProduct?: Pick<Product, "code" | "id" | "name"> | null;
+  index: number;
+  minimumQuantity: number;
+  productName: string;
+  rowNumber: number;
+  unit: string;
+  warnings: string[];
+};
+
+export type ProductCsvPreview = {
+  rows: ProductCsvPreviewRow[];
 };

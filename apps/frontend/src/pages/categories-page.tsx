@@ -99,7 +99,7 @@ function CategoryPanel<T extends { description?: string | null; id: string; name
           },
           {
             cell: (item) => item.description || "-",
-            header: "Descricao",
+            header: "Descrição",
             key: "description",
           },
           {
@@ -132,7 +132,7 @@ function CategoryPanel<T extends { description?: string | null; id: string; name
               </div>
             ),
             cellClassName: "text-right",
-            header: "Acoes",
+            header: "Ações",
             headerClassName: "text-right",
             key: "actions",
           },

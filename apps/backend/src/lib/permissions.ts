@@ -21,7 +21,7 @@ export async function assertWarehouseAccess(
   });
 
   if (!assignment) {
-    throw new AppError(403, "Este almoxarifado nao esta liberado para voce.");
+    throw new AppError(403, "Este almoxarifado não está liberado para você.");
   }
 }
 

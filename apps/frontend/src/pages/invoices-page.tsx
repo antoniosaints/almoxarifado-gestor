@@ -537,7 +537,7 @@ function InvoiceExportDialog({
           <DialogHeader>
             <DialogTitle>Exportar notas fiscais</DialogTitle>
             <DialogDescription>
-              Selecione uma nota ou refine por empresa, CNPJ e numero.
+              Selecione uma nota ou refine por empresa, CNPJ e número.
             </DialogDescription>
           </DialogHeader>
           <Form onSubmit={submit}>
@@ -581,7 +581,7 @@ function InvoiceExportDialog({
               </FormField>
             </div>
             <FormField>
-              <Label htmlFor="invoice-export-number">Numero da nota</Label>
+              <Label htmlFor="invoice-export-number">Número da nota</Label>
               <Input
                 id="invoice-export-number"
                 placeholder="010101"
@@ -615,7 +615,7 @@ export function InvoiceMovementsDialog({
   return (
     <>
       <Button
-        aria-label={`Consultar movimentacoes da nota ${invoice.number}`}
+        aria-label={`Consultar movimentações da nota ${invoice.number}`}
         onClick={() => setOpen(true)}
         size="icon"
         variant="outline"
@@ -764,7 +764,7 @@ export function InvoicesPage() {
 
   async function removeInvoice(invoice: Invoice) {
     const confirmed = window.confirm(
-      `Excluir nota ${invoice.number}? As movimentacoes vinculadas serao mantidas sem nota fiscal.`,
+      `Excluir nota ${invoice.number}? As movimentações vinculadas serão mantidas sem nota fiscal.`,
     );
 
     if (!confirmed) {
@@ -907,7 +907,7 @@ export function InvoicesPage() {
                 {invoice.movements?.length ?? 0}
               </Badge>
             ),
-            header: "Movimentacoes",
+            header: "Movimentações",
             key: "movements",
           },
           {
@@ -937,7 +937,7 @@ export function InvoicesPage() {
               </div>
             ),
             cellClassName: "text-right",
-            header: "Acoes",
+            header: "Ações",
             headerClassName: "text-right",
             key: "actions",
           },

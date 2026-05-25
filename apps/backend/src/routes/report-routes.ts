@@ -548,8 +548,8 @@ reportRoutes.get(
     });
 
     const buffer = await buildPdf(
-      "Relatorio de movimentacoes",
-      "Entradas, saidas e transferencias por almoxarifado.",
+      "Relatório de movimentações",
+      "Entradas, saídas e transferências por almoxarifado.",
       user,
       (document, settings) => {
         writeTable(
@@ -620,7 +620,7 @@ reportRoutes.get(
 
     const buffer = await buildPdf(
       "Relatorio de saldos de estoque",
-      "Saldo atual, minimo e estado dos produtos por almoxarifado.",
+      "Saldo atual, mínimo e estado dos produtos por almoxarifado.",
       user,
       (document, settings) => {
         writeTable(
@@ -708,7 +708,7 @@ reportRoutes.get(
 
     const buffer = await buildPdf(
       "Relatorio por notas fiscais",
-      "Notas fiscais e movimentacoes vinculadas ao estoque.",
+      "Notas fiscais e movimentações vinculadas ao estoque.",
       user,
       (document, settings) => {
         if (!invoices.length) {
@@ -739,15 +739,15 @@ reportRoutes.get(
           writeFieldRows(document, [
             ["Empresa", invoice.companyName],
             ["CNPJ", invoice.cnpj],
-            ["Numero da nota", invoice.number],
+            ["Número da nota", invoice.number],
             ["Data de emissao", formatDateOnly(invoice.issueDate)],
-            ["Observacao", invoice.observation ?? "-"],
+            ["Observação", invoice.observation ?? "-"],
             ["Almoxarifados", warehouses || "-"],
-            ["Movimentacoes", String(invoice.movements.length)],
+            ["Movimentações", String(invoice.movements.length)],
             ["Valor total da nota", formatCurrency(invoiceTotalValue)],
           ]);
 
-          writeSectionTitle(document, "Itens e movimentacoes vinculadas");
+          writeSectionTitle(document, "Itens e movimentações vinculadas");
           writeTable(
             document,
             [

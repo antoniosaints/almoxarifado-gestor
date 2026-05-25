@@ -118,11 +118,11 @@ export function UsersPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">Acessos</p>
-          <h2 className="text-2xl font-semibold">Usuarios</h2>
+          <h2 className="text-2xl font-semibold">Usuários</h2>
         </div>
         <Button onClick={() => setDraft(emptyDraft())}>
           <Plus className="h-4 w-4" />
-          Novo usuario
+          Novo usuário
         </Button>
       </div>
 
@@ -207,15 +207,15 @@ export function UsersPage() {
               </div>
             ),
             cellClassName: "text-right",
-            header: "Acoes",
+            header: "Ações",
             headerClassName: "text-right",
             key: "actions",
           },
         ]}
         data={users.data}
-        emptyMessage="Nenhum usuario cadastrado."
+        emptyMessage="Nenhum usuário cadastrado."
         getRowId={(user) => user.id}
-        searchPlaceholder="Buscar usuario, email ou almoxarifado..."
+        searchPlaceholder="Buscar usuário, email ou almoxarifado..."
         searchText={(user) =>
           [
             user.name,
@@ -231,7 +231,7 @@ export function UsersPage() {
       <Dialog onOpenChange={(open) => !open && setDraft(null)} open={Boolean(draft)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{draft?.id ? "Editar usuario" : "Novo usuario"}</DialogTitle>
+            <DialogTitle>{draft?.id ? "Editar usuário" : "Novo usuário"}</DialogTitle>
             <DialogDescription>
               Admin acessa tudo. Operador trabalha apenas nos almoxarifados marcados.
             </DialogDescription>
@@ -330,7 +330,7 @@ export function UsersPage() {
                 />
                 Usuario ativo
               </label>
-              <Button type="submit">Salvar usuario</Button>
+              <Button type="submit">Salvar usuário</Button>
             </Form>
           ) : null}
         </DialogContent>

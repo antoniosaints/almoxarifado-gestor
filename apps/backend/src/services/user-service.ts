@@ -90,11 +90,11 @@ async function assertUpdateAllowed(
   }
 
   if (input.role !== UserRole.ADMIN) {
-    throw new AppError(403, "O usuario admin default deve permanecer como Admin.");
+    throw new AppError(403, "O usuário admin default deve permanecer como Admin.");
   }
 
   if (!input.active) {
-    throw new AppError(403, "O usuario admin default deve permanecer ativo.");
+    throw new AppError(403, "O usuário admin default deve permanecer ativo.");
   }
 }
 
@@ -138,11 +138,11 @@ export async function deleteUser(
   });
 
   if (target.isDefaultAdmin) {
-    throw new AppError(403, "O usuario admin default nao pode ser excluido.");
+    throw new AppError(403, "O usuário admin default não pode ser excluído.");
   }
 
   if (target.id === actingUserId) {
-    throw new AppError(403, "Voce nao pode excluir seu proprio usuario.");
+    throw new AppError(403, "Você não pode excluir seu próprio usuário.");
   }
 
   await prisma.$transaction([

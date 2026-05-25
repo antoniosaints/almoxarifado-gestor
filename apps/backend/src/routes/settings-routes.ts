@@ -68,7 +68,7 @@ settingsRoutes.post(
     });
 
     if (!passwordMatches(password, admin.passwordHash)) {
-      throw new AppError(401, "Senha do admin invalida.");
+      throw new AppError(401, "Senha do admin inválida.");
     }
 
     const deleted = await prisma.$transaction(async (transaction) => {

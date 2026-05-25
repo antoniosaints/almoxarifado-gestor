@@ -42,7 +42,7 @@ export function verifyAccessToken(token: string): SessionUser {
   const [header, payload, signature] = token.split(".");
 
   if (!header || !payload || !signature) {
-    throw new AppError(401, "Sessao invalida.");
+    throw new AppError(401, "Sessão inválida.");
   }
 
   const expectedSignature = sign(`${header}.${payload}`);
@@ -53,7 +53,7 @@ export function verifyAccessToken(token: string): SessionUser {
     signatureBuffer.length !== expectedBuffer.length ||
     !timingSafeEqual(signatureBuffer, expectedBuffer)
   ) {
-    throw new AppError(401, "Sessao invalida.");
+    throw new AppError(401, "Sessão inválida.");
   }
 
   const parsedPayload = JSON.parse(
@@ -67,7 +67,7 @@ export function verifyAccessToken(token: string): SessionUser {
     !Object.values(UserRole).includes(parsedPayload.role) ||
     parsedPayload.exp <= Math.floor(Date.now() / 1000)
   ) {
-    throw new AppError(401, "Sessao expirada. Entre novamente.");
+    throw new AppError(401, "Sessão expirada. Entre novamente.");
   }
 
   return {

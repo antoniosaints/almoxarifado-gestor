@@ -522,8 +522,8 @@ function MovementForm({
         kind === "entryRequest"
           ? "Solicitacao enviada."
           : kind === "transfer"
-            ? "Transferencia enviada para recebimento."
-            : "Movimentacao registrada.",
+            ? "Transferência enviada para recebimento."
+            : "Movimentação registrada.",
       );
       await onSaved();
     } catch (caughtError) {
@@ -540,17 +540,17 @@ function MovementForm({
       {message ? (
         <Alert
           className={
-            message === "Movimentacao registrada." ||
+            message === "Movimentação registrada." ||
             message === "Solicitacao enviada." ||
-            message === "Transferencia enviada para recebimento."
+            message === "Transferência enviada para recebimento."
               ? "border-emerald-200 bg-emerald-50 text-emerald-950"
               : "border-rose-200 bg-rose-50 text-rose-950"
           }
         >
           <AlertTitle>
-            {message === "Movimentacao registrada." ||
+            {message === "Movimentação registrada." ||
             message === "Solicitacao enviada." ||
-            message === "Transferencia enviada para recebimento."
+            message === "Transferência enviada para recebimento."
               ? "Pronto"
               : "Atencao"}
           </AlertTitle>
@@ -648,7 +648,7 @@ function MovementForm({
       <div className={`grid gap-4 ${createsNewStock ? "lg:grid-cols-2" : ""}`}>
         {createsNewStock ? (
           <FormField>
-            <Label htmlFor="entry-minimum-stock">Estoque minimo inicial</Label>
+            <Label htmlFor="entry-minimum-stock">Estoque mínimo inicial</Label>
             <Input
               id="entry-minimum-stock"
               min="0"
@@ -662,7 +662,7 @@ function MovementForm({
 
         {kind === "entry" ? (
           <FormField>
-            <Label htmlFor="entry-unit-price">Valor unitario</Label>
+            <Label htmlFor="entry-unit-price">Valor unitário</Label>
             <Input
               id="entry-unit-price"
               min="0"
@@ -836,7 +836,7 @@ function StockMovementsDialog({
       setMessage(
         caughtError instanceof Error
           ? caughtError.message
-          : "Falha ao exportar movimentacoes.",
+          : "Falha ao exportar movimentações.",
       );
     } finally {
       setExporting(false);
@@ -846,7 +846,7 @@ function StockMovementsDialog({
   return (
     <>
       <Button
-        aria-label={`Ver movimentacoes de ${stock.product.name}`}
+        aria-label={`Ver movimentações de ${stock.product.name}`}
         onClick={() => setOpen(true)}
         size="icon"
         variant="outline"
@@ -858,7 +858,7 @@ function StockMovementsDialog({
           <DialogHeader>
             <DialogTitle>Movimentações de {stock.product.name}</DialogTitle>
             <DialogDescription>
-              Entradas e saidas registradas neste almoxarifado.
+              Entradas e saídas registradas neste almoxarifado.
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
@@ -905,6 +905,7 @@ function uniqueProductsForMovements(movements: Movement[], stocks: Stock[]) {
         name: "",
       },
       categoryId: "",
+      minimumQuantity: 0,
       unitId: movement.product.unit.id,
     });
   });
@@ -993,7 +994,7 @@ function WarehouseMovementsExportDialog({
       setMessage(
         caughtError instanceof Error
           ? caughtError.message
-          : "Falha ao exportar movimentacoes.",
+          : "Falha ao exportar movimentações.",
       );
     } finally {
       setExporting(false);
@@ -1011,14 +1012,14 @@ function WarehouseMovementsExportDialog({
           <DialogHeader>
             <DialogTitle>Exportar movimentações</DialogTitle>
             <DialogDescription>
-              Exporte todo o historico ou filtre por periodo, nota e produto.
+              Exporte todo o histórico ou filtre por período, nota e produto.
             </DialogDescription>
           </DialogHeader>
           <Form onSubmit={exportMovements}>
             {message ? <ResourceError message={message} /> : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField>
-                <Label htmlFor="warehouse-movement-export-from">Periodo de</Label>
+                <Label htmlFor="warehouse-movement-export-from">Período de</Label>
                 <Input
                   id="warehouse-movement-export-from"
                   onChange={(event) => setFrom(event.target.value)}
@@ -1166,7 +1167,7 @@ function BulkStockActionDialog({
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              Selecione os estoques e confirme com a senha do usuario admin.
+              Selecione os estoques e confirme com a senha do usuário admin.
             </DialogDescription>
           </DialogHeader>
           <Form onSubmit={confirmAction}>
@@ -1203,7 +1204,7 @@ function BulkStockActionDialog({
                       </span>
                       <span className="block text-xs text-muted-foreground">
                         {stock.currentQuantity}{" "}
-                        {stock.product.unit.abbreviation} | minimo{" "}
+                        {stock.product.unit.abbreviation} | mínimo{" "}
                         {stock.minimumQuantity}
                       </span>
                     </span>
@@ -1308,7 +1309,7 @@ function StockTable({
                   {stock.currentQuantity <= stock.minimumQuantity && (
                     <p
                       className="text-xs text-red-500"
-                      title={`O estoque está baixo, minimo ${stock.minimumQuantity}${stock.product.unit.abbreviation}`}
+                      title={`O estoque está baixo, mínimo ${stock.minimumQuantity}${stock.product.unit.abbreviation}`}
                     >
                       <TriangleAlert className="h-4 w-4" />
                     </p>
@@ -1342,7 +1343,7 @@ function StockTable({
           {
             cell: (stock) =>
               movementSummary(latestMovementForStock(movements, stock)),
-            header: "Ultima movimentacao",
+            header: "Última movimentação",
             key: "last-movement",
           },
           ...(admin
@@ -1394,7 +1395,7 @@ function StockTable({
                     </div>
                   ),
                   cellClassName: "text-right",
-                  header: "Acoes",
+                  header: "Ações",
                   headerClassName: "text-right",
                   key: "actions",
                 },
@@ -1429,7 +1430,7 @@ function StockTable({
                     </div>
                   ),
                   cellClassName: "text-right",
-                  header: "Acoes",
+                  header: "Ações",
                   headerClassName: "text-right",
                   key: "actions",
                 },
@@ -1694,7 +1695,7 @@ function WarehouseOverview({
             </div>
           ) : (
             <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Nenhuma movimentação registrada no periodo.
+              Nenhuma movimentação registrada no período.
             </p>
           )}
         </section>
@@ -1732,7 +1733,7 @@ function WarehouseCsvImportDialog({
   const [message, setMessage] = useState<string | null>(null);
   const productOptions = [
     {
-      label: "Nao importar esta linha",
+      label: "Não importar esta linha",
       searchText: "ignorar pular",
       value: skipCsvRowValue,
     },
@@ -1770,8 +1771,8 @@ function WarehouseCsvImportDialog({
 
   function downloadTemplate() {
     const content = [
-      "numero_nota;cnpj_empresa;nome_empresa;data_nota;codigo_produto;nome_produto;unidade;quantidade;valor_unitario;valor_total;observacao",
-      "NF-001;12345678000190;Fornecedor Municipal;2026-05-25;PAP-A4;Papel A4;PCT;10;25,50;255,00;Compra mensal",
+      "nome_produto;unidade;quantidade;valor_unitario;observacao;numero_nota;cnpj_empresa;nome_empresa;data_nota",
+      "Papel A4;PCT;10;25,50;Compra mensal;NF-001;12345678000190;Fornecedor Municipal;25/05/2026",
     ].join("\n");
     const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -1938,7 +1939,7 @@ function WarehouseCsvImportDialog({
                 />
               </FormField>
               <FormField>
-                <Label htmlFor="stock-csv-minimum">Estoque minimo inicial</Label>
+                <Label htmlFor="stock-csv-minimum">Estoque mínimo inicial</Label>
                 <Input
                   id="stock-csv-minimum"
                   min="0"
@@ -1990,7 +1991,7 @@ function WarehouseCsvImportDialog({
                           <div className="space-y-1">
                             <p className="font-medium">{row.productName}</p>
                             <p className="text-xs text-muted-foreground">
-                              {[row.productCode || "-", row.unit].join(" / ")}
+                              {row.unit}
                             </p>
                             {row.suggestedProduct ? (
                               <Badge variant="success">Sugerido</Badge>
@@ -2230,13 +2231,13 @@ export function WarehouseDetailPage() {
         body: JSON.stringify({ minimumQuantity }),
         method: "PUT",
       });
-      setMessage("Estoque minimo atualizado.");
+      setMessage("Estoque mínimo atualizado.");
       await warehouse.reload();
     } catch (caughtError) {
       setMessage(
         caughtError instanceof Error
           ? caughtError.message
-          : "Falha ao atualizar minimo.",
+          : "Falha ao atualizar mínimo.",
       );
     }
   }
@@ -2292,7 +2293,7 @@ export function WarehouseDetailPage() {
   }
 
   if (!warehouse.data) {
-    return <ResourceError message="Almoxarifado nao encontrado." />;
+    return <ResourceError message="Almoxarifado não encontrado." />;
   }
 
   const currentMonth = new Date().getMonth();
@@ -2328,7 +2329,7 @@ export function WarehouseDetailPage() {
             <h2 className="text-2xl font-semibold">{warehouse.data.name}</h2>
             <p className="text-sm text-muted-foreground">
               {warehouse.data.description ||
-                "Operacao de estoque do almoxarifado."}
+                "Operação de estoque do almoxarifado."}
             </p>
           </div>
         </div>
@@ -2336,7 +2337,7 @@ export function WarehouseDetailPage() {
 
       {message ? (
         <Alert className="border-sky-200 bg-sky-50 text-sky-950">
-          <AlertTitle>Atualizacao</AlertTitle>
+          <AlertTitle>Atualização</AlertTitle>
           <AlertDescription className="text-sky-900">
             {message}
           </AlertDescription>

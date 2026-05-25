@@ -7,7 +7,7 @@ import {
 } from "./stock-csv-import-service.js";
 
 const csvHeader =
-  "numero_nota;cnpj_empresa;nome_empresa;data_nota;codigo_produto;nome_produto;unidade;quantidade;valor_unitario;valor_total;observacao";
+  "nome_produto;unidade;quantidade;valor_unitario;observacao;numero_nota;cnpj_empresa;nome_empresa;data_nota";
 
 describe("stock CSV import service", () => {
   beforeEach(async () => {
@@ -29,8 +29,8 @@ describe("stock CSV import service", () => {
     });
     const csv = [
       csvHeader,
-      "NF-10;12345678000190;Fornecedor Municipal;2026-05-25;0000001;Papel A4;UN;2;10,50;99,00;Compra mensal",
-      "NF-11;;;2026-05-25;CLP-001;Clips galvanizado;CX;1;5,00;5,00;",
+      "Papel A4;UN;2;10,50;Compra mensal;NF-10;12345678000190;Fornecedor Municipal;25/05/2026",
+      "Clips galvanizado;CX;1;5,00;;NF-11;;;25/05/2026",
     ].join("\n");
 
     const preview = await previewWarehouseCsvImport(prisma, {
@@ -41,24 +41,23 @@ describe("stock CSV import service", () => {
     expect(preview.rows[0]).toMatchObject({
       canImport: true,
       cnpj: "12345678000190",
+      issueDate: new Date("2026-05-25T00:00:00.000Z"),
       invoiceNumber: "NF-10",
-      productCode: "0000001",
       suggestedProduct: {
         id: product.id,
       },
+      totalValue: 21,
       unit: "UN",
     });
-    expect(preview.rows[0].warnings).toContain(
-      "Valor total diverge da quantidade multiplicada pelo valor unitario.",
-    );
+    expect(preview.rows[0].warnings).toEqual([]);
     expect(preview.rows[1]).toMatchObject({
       canImport: false,
       invoiceNumber: "NF-11",
     });
     expect(preview.rows[1].errors).toEqual(
       expect.arrayContaining([
-        "Informe o CNPJ da empresa para linhas com numero de nota.",
-        "Informe o nome da empresa para linhas com numero de nota.",
+        "Informe o CNPJ da empresa para linhas com número de nota.",
+        "Informe o nome da empresa para linhas com número de nota.",
       ]),
     );
   });
@@ -74,9 +73,9 @@ describe("stock CSV import service", () => {
     });
     const csv = [
       csvHeader,
-      "NF-20;12345678000190;Fornecedor Municipal;2026-05-25;0000001;Papel A4;UN;2;10,50;21,00;Compra mensal",
-      "; ; ; ;CLP-001;Clips galvanizado;CX;3;5,00;15,00;Sem nota",
-      "; ; ; ;IGN-001;Item ignorado;UN;1;1,00;1,00;Nao importar",
+      "Papel A4;UN;2;10,50;Compra mensal;NF-20;12345678000190;Fornecedor Municipal;25/05/2026",
+      "Clips galvanizado;CX;3;5,00;Sem nota;;;;",
+      "Item ignorado;UN;1;1,00;Não importar;;;;",
     ].join("\n");
 
     const result = await importWarehouseCsv(prisma, {
@@ -166,7 +165,7 @@ describe("stock CSV import service", () => {
     });
     const csv = [
       csvHeader,
-      "NF-30;12345678000190;Fornecedor Municipal;2026-05-25;0000001;Papel A4;UN;2;10,00;20,00;",
+      "Papel A4;UN;2;10,00;;NF-30;12345678000190;Fornecedor Municipal;25/05/2026",
     ].join("\n");
 
     await expect(
@@ -176,6 +175,6 @@ describe("stock CSV import service", () => {
         userId: user.id,
         warehouseId: warehouse.id,
       }),
-    ).rejects.toThrow("A nota NF-30 ja possui movimentacoes importadas.");
+    ).rejects.toThrow("A nota NF-30 já possui movimentações importadas.");
   });
 });

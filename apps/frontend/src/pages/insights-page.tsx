@@ -99,7 +99,7 @@ export function InsightsPage() {
   }
 
   if (!insights.data) {
-    return <ResourceError message="Não foi possivel carregar os indicadores." />;
+    return <ResourceError message="Não foi possível carregar os indicadores." />;
   }
 
   const { totals } = insights.data;
@@ -360,7 +360,7 @@ export function InsightsPage() {
                   {stock.product.unit?.abbreviation ?? ""}
                 </span>
               ),
-              header: "Saldo / minimo",
+              header: "Saldo / mínimo",
               key: "balance",
             },
             {

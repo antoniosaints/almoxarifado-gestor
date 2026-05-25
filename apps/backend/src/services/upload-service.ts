@@ -108,7 +108,7 @@ function isAcceptedImageMimeType(value: string): value is UploadMimeType {
 
 function assertSafeStoragePart(value: string, name: string) {
   if (!/^[a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*$/i.test(value)) {
-    throw new AppError(400, `Identificador de upload invalido: ${name}.`);
+    throw new AppError(400, `Identificador de upload inválido: ${name}.`);
   }
 }
 
@@ -228,7 +228,7 @@ async function storeS3Asset({
   const config = resolveS3Config();
 
   if (!config) {
-    throw new AppError(500, "Storage S3 nao configurado.");
+    throw new AppError(500, "Storage S3 não configurado.");
   }
 
   await signedS3Request(config, {

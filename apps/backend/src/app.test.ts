@@ -398,7 +398,7 @@ describe("api", () => {
 
     expect(demotion.status).toBe(403);
     expect(demotion.body.message).toBe(
-      "O usuario admin default deve permanecer como Admin.",
+      "O usuário admin default deve permanecer como Admin.",
     );
 
     const profileUpdate = await request(app)
@@ -424,7 +424,7 @@ describe("api", () => {
       .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
 
     expect(removal.status).toBe(403);
-    expect(removal.body.message).toBe("O usuario admin default nao pode ser excluido.");
+    expect(removal.body.message).toBe("O usuário admin default não pode ser excluído.");
     await expect(
       prisma.user.findUnique({ where: { id: defaultAdmin.id } }),
     ).resolves.toMatchObject({
@@ -441,7 +441,7 @@ describe("api", () => {
       .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
 
     expect(response.status).toBe(403);
-    expect(response.body.message).toBe("Voce nao pode excluir seu proprio usuario.");
+    expect(response.body.message).toBe("Você não pode excluir seu próprio usuário.");
     await expect(prisma.user.findUnique({ where: { id: user.id } })).resolves.toBeTruthy();
   });
 
@@ -862,7 +862,7 @@ describe("api", () => {
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.message).toBe("Informe uma URL valida.");
+    expect(response.body.message).toBe("Informe uma URL válida.");
   });
 
   it("deletes invoices without deleting stock movements", async () => {

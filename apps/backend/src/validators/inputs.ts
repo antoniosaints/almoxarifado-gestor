@@ -40,6 +40,11 @@ export const productInput = z.object({
   active: z.boolean().default(true),
   categoryId: z.string().min(1, "Escolha uma categoria."),
   description: optionalText,
+  minimumQuantity: z.coerce
+    .number()
+    .int()
+    .min(0, "O estoque mínimo não pode ser negativo.")
+    .default(0),
   name: z.string().trim().min(2, "Informe o nome do produto."),
   unitId: z.string().min(1, "Escolha uma unidade de medida."),
 });
@@ -61,7 +66,7 @@ export const invoiceInput = z.object({
   invoiceKey: optionalText,
   issueDate: z.coerce.date(),
   municipalRegistration: optionalText,
-  number: z.string().trim().min(1, "Informe o numero da nota."),
+  number: z.string().trim().min(1, "Informe o número da nota."),
   observation: optionalText,
   series: optionalText,
   stateRegistration: optionalText,
@@ -89,48 +94,48 @@ export const invoiceXmlPreviewInput = z.object({
 
 const optionalUrl = optionalText.refine(
   (value) => !value || /^https?:\/\//i.test(value) || value.startsWith("/uploads/"),
-  "Informe uma URL valida.",
+  "Informe uma URL válida.",
 );
 
 export const systemSettingsInput = z.object({
   faviconUrl: optionalUrl,
   loginBackgroundUrl: optionalUrl,
   loginImageUrl: optionalUrl,
-  loginSubtitle: z.string().trim().min(2, "Informe o subtitulo do login."),
-  loginTitle: z.string().trim().min(2, "Informe o titulo do login."),
+  loginSubtitle: z.string().trim().min(2, "Informe o subtítulo do login."),
+  loginTitle: z.string().trim().min(2, "Informe o título do login."),
   logoUrl: optionalUrl,
   primaryColor: z
     .string()
     .trim()
-    .regex(/^#[0-9a-fA-F]{6}$/, "Informe uma cor hexadecimal valida."),
+    .regex(/^#[0-9a-fA-F]{6}$/, "Informe uma cor hexadecimal válida."),
   reportFooterText: z
     .string()
     .trim()
-    .min(2, "Informe o rodape do relatorio.")
+    .min(2, "Informe o rodapé do relatório.")
     .default("Documento gerado pelo sistema de almoxarifado municipal."),
   reportLogoUrl: optionalUrl,
   reportPrimaryColor: z
     .string()
     .trim()
-    .regex(/^#[0-9a-fA-F]{6}$/, "Informe uma cor hexadecimal valida.")
+    .regex(/^#[0-9a-fA-F]{6}$/, "Informe uma cor hexadecimal válida.")
     .default("#0f766e"),
   reportTitle: z
     .string()
     .trim()
-    .min(2, "Informe o titulo do cabecalho do relatorio.")
-    .default("GEMA - Gestao Municipal de Almoxarifado"),
+    .min(2, "Informe o título do cabeçalho do relatório.")
+    .default("GEMA - Gestão Municipal de Almoxarifado"),
   systemName: z.string().trim().min(2, "Informe o nome do sistema."),
 });
 
 export const loginInput = z.object({
-  email: z.string().trim().email("Informe um email valido.").transform((value) => value.toLowerCase()),
+  email: z.string().trim().email("Informe um email válido.").transform((value) => value.toLowerCase()),
   password: z.string().min(1, "Informe a senha."),
 });
 
 export const userCreateInput = z.object({
   active: z.boolean().default(true),
-  email: z.string().trim().email("Informe um email valido.").transform((value) => value.toLowerCase()),
-  name: z.string().trim().min(2, "Informe o nome do usuario."),
+  email: z.string().trim().email("Informe um email válido.").transform((value) => value.toLowerCase()),
+  name: z.string().trim().min(2, "Informe o nome do usuário."),
   password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
   role: z.nativeEnum(UserRole),
   warehouseIds: z.array(z.string().min(1)).default([]),
@@ -143,7 +148,7 @@ export const userUpdateInput = userCreateInput
   });
 
 export const minimumStockInput = z.object({
-  minimumQuantity: z.coerce.number().int().min(0, "O estoque minimo nao pode ser negativo."),
+  minimumQuantity: z.coerce.number().int().min(0, "O estoque mínimo não pode ser negativo."),
 });
 
 export const stockBulkAdminInput = z.object({
@@ -160,7 +165,7 @@ export const warehouseCsvImportInput = warehouseCsvPreviewInput.extend({
   minimumQuantity: z.coerce
     .number()
     .int()
-    .min(0, "O estoque minimo nao pode ser negativo.")
+    .min(0, "O estoque mínimo não pode ser negativo.")
     .default(0),
   rows: z
     .array(
@@ -190,11 +195,11 @@ export const entryInput = movementBase.extend({
   minimumQuantity: z.coerce
     .number()
     .int()
-    .min(0, "O estoque minimo nao pode ser negativo.")
+    .min(0, "O estoque mínimo não pode ser negativo.")
     .optional(),
   unitPrice: z.coerce
     .number()
-    .min(0, "O valor unitario nao pode ser negativo.")
+    .min(0, "O valor unitário não pode ser negativo.")
     .optional()
     .nullable(),
   warehouseId: z.string().min(1, "Escolha um almoxarifado."),
@@ -206,7 +211,18 @@ export const entryRequestInput = movementBase.extend({
 
 export const entryRequestApprovalInput = z.object({
   invoiceId: z.string().min(1).optional().nullable(),
+  quantity: z.coerce
+    .number()
+    .int()
+    .positive("Informe uma quantidade maior que zero.")
+    .optional(),
 });
+
+export const productCsvPreviewInput = z.object({
+  csv: z.string().min(1, "Selecione o CSV de produtos."),
+});
+
+export const productCsvImportInput = productCsvPreviewInput;
 
 export const outputInput = movementBase.extend({
   destinationNote: optionalText,

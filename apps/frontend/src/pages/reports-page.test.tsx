@@ -77,10 +77,10 @@ describe("ReportsPage", () => {
       expect(screen.getAllByRole("button", { name: "Exportar PDF" }).length).toBe(3);
     });
 
-    fireEvent.change(screen.getByLabelText("Periodo de"), {
+    fireEvent.change(screen.getByLabelText("Período de"), {
       target: { value: "2026-05-01" },
     });
-    fireEvent.change(screen.getByLabelText("Periodo ate"), {
+    fireEvent.change(screen.getByLabelText("Período até"), {
       target: { value: "2026-05-31" },
     });
     fireEvent.click(screen.getAllByRole("button", { name: "Exportar PDF" })[2]);
@@ -119,7 +119,7 @@ describe("ReportsPage", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Exportar PDF" })[0]);
     fireEvent.click(screen.getByLabelText("Almoxarifado da Saude"));
     fireEvent.click(
-      screen.getByRole("button", { name: "Exportar movimentacoes" }),
+      screen.getByRole("button", { name: "Exportar movimentações" }),
     );
 
     await waitFor(() => {
