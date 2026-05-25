@@ -32,7 +32,6 @@ type ParsedCsvRow = {
   invoiceNumber: string;
   issueDate: Date | null;
   observation: string | null;
-  productCode: string;
   productName: string;
   quantity: number;
   rowNumber: number;
@@ -40,6 +39,8 @@ type ParsedCsvRow = {
   unit: string;
   unitPrice: number;
 };
+
+type ParsedCsvRowWithoutTotal = Omit<ParsedCsvRow, "totalValue">;
 
 type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
@@ -49,17 +50,15 @@ type ProductWithRelations = Prisma.ProductGetPayload<{
 }>;
 
 const headerMap = {
-  cnpj: "cnpj_empresa",
-  companyName: "nome_empresa",
-  invoiceNumber: "numero_nota",
-  issueDate: "data_nota",
   observation: "observacao",
-  productCode: "codigo_produto",
   productName: "nome_produto",
   quantity: "quantidade",
-  totalValue: "valor_total",
   unit: "unidade",
   unitPrice: "valor_unitario",
+  invoiceNumber: "numero_nota",
+  cnpj: "cnpj_empresa",
+  companyName: "nome_empresa",
+  issueDate: "data_nota",
 } as const;
 
 function normalize(value: string) {
@@ -102,6 +101,34 @@ function parseDate(value: string) {
 
   if (!trimmed) {
     return null;
+  }
+
+  const brDate = trimmed.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+  );
+
+  if (brDate) {
+    const [, day, month, year, hour = "0", minute = "0", second = "0"] = brDate;
+    const parsed = new Date(
+      Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+        Number(second),
+      ),
+    );
+
+    if (
+      parsed.getUTCFullYear() !== Number(year) ||
+      parsed.getUTCMonth() !== Number(month) - 1 ||
+      parsed.getUTCDate() !== Number(day)
+    ) {
+      return null;
+    }
+
+    return parsed;
   }
 
   const parsed = new Date(trimmed);
@@ -157,7 +184,7 @@ function parseCsv(csv: string) {
     .filter((line) => line.trim());
 
   if (lines.length < 2) {
-    throw new AppError(400, "CSV deve conter cabecalho e ao menos uma linha.");
+    throw new AppError(400, "CSV deve conter cabeçalho e ao menos uma linha.");
   }
 
   const delimiter = lines[0].includes(";") ? ";" : ",";
@@ -170,25 +197,38 @@ function parseCsv(csv: string) {
     }
   }
 
-  return lines.slice(1).map((line, index) => {
-    const cells = parseCsvLine(line, delimiter);
-    const value = (header: string) => cells[headerIndex.get(header) ?? -1] ?? "";
+  return lines
+    .slice(1)
+    .map((line, index) => {
+      const cells = parseCsvLine(line, delimiter);
+      const value = (header: string) =>
+        cells[headerIndex.get(header) ?? -1] ?? "";
 
-    return {
-      cnpj: onlyDigits(value(headerMap.cnpj)),
-      companyName: value(headerMap.companyName).trim(),
-      invoiceNumber: value(headerMap.invoiceNumber).trim(),
-      issueDate: parseDate(value(headerMap.issueDate)),
-      observation: optionalText(value(headerMap.observation)),
-      productCode: value(headerMap.productCode).trim(),
-      productName: value(headerMap.productName).trim(),
-      quantity: Number.parseInt(value(headerMap.quantity).trim(), 10),
-      rowNumber: index + 2,
-      totalValue: parseCurrency(value(headerMap.totalValue)),
-      unit: value(headerMap.unit).trim().toLocaleUpperCase("pt-BR").slice(0, 10),
-      unitPrice: parseCurrency(value(headerMap.unitPrice)),
-    } satisfies ParsedCsvRow;
-  });
+      return {
+        cnpj: onlyDigits(value(headerMap.cnpj)),
+        companyName: value(headerMap.companyName).trim(),
+        invoiceNumber: value(headerMap.invoiceNumber).trim(),
+        issueDate: parseDate(value(headerMap.issueDate)),
+        observation: optionalText(value(headerMap.observation)),
+        productName: value(headerMap.productName).trim(),
+        quantity: Number.parseInt(value(headerMap.quantity).trim(), 10),
+        rowNumber: index + 2,
+        unit: value(headerMap.unit)
+          .trim()
+          .toLocaleUpperCase("pt-BR")
+          .slice(0, 10),
+        unitPrice: parseCurrency(value(headerMap.unitPrice)),
+      } satisfies ParsedCsvRowWithoutTotal;
+    })
+    .map(
+      (row): ParsedCsvRow => ({
+        ...row,
+        totalValue:
+          Number.isInteger(row.quantity) && Number.isFinite(row.unitPrice)
+            ? roundCurrency(row.quantity * row.unitPrice)
+            : Number.NaN,
+      }),
+    );
 }
 
 function findMatchingProduct(
@@ -197,7 +237,6 @@ function findMatchingProduct(
 ) {
   return products.find(
     (product) =>
-      (row.productCode && product.code === row.productCode) ||
       normalize(product.name) === normalize(row.productName),
   );
 }
@@ -223,19 +262,19 @@ function validateRow(row: ParsedCsvRow) {
 
   if (row.invoiceNumber) {
     if (!row.cnpj) {
-      errors.push("Informe o CNPJ da empresa para linhas com numero de nota.");
+      errors.push("Informe o CNPJ da empresa para linhas com número de nota.");
     }
 
     if (!row.companyName) {
-      errors.push("Informe o nome da empresa para linhas com numero de nota.");
+      errors.push("Informe o nome da empresa para linhas com número de nota.");
     }
 
     if (!row.issueDate) {
-      errors.push("Informe uma data valida para linhas com numero de nota.");
+      errors.push("Informe uma data válida para linhas com número de nota.");
     }
   }
 
-  if (!row.productName && !row.productCode) {
+  if (!row.productName) {
     errors.push("Informe o produto da linha.");
   }
 
@@ -248,20 +287,11 @@ function validateRow(row: ParsedCsvRow) {
   }
 
   if (!Number.isFinite(row.unitPrice) || row.unitPrice < 0) {
-    errors.push("Informe um valor unitario valido.");
+    errors.push("Informe um valor unitário válido.");
   }
 
   if (!Number.isFinite(row.totalValue) || row.totalValue < 0) {
-    errors.push("Informe um valor total valido.");
-  } else if (
-    Number.isInteger(row.quantity) &&
-    Number.isFinite(row.unitPrice) &&
-    Math.abs(roundCurrency(row.quantity * row.unitPrice) - roundCurrency(row.totalValue)) >
-      0.01
-  ) {
-    warnings.push(
-      "Valor total diverge da quantidade multiplicada pelo valor unitario.",
-    );
+    errors.push("Não foi possível calcular o valor total da linha.");
   }
 
   return { errors, warnings };
@@ -311,7 +341,6 @@ export async function previewWarehouseCsvImport(
         invoiceNumber: row.invoiceNumber,
         issueDate: row.issueDate,
         observation: row.observation,
-        productCode: row.productCode,
         productName: row.productName,
         quantity: row.quantity,
         rowNumber: row.rowNumber,
@@ -336,7 +365,7 @@ async function ensureCategory(
     });
 
     if (!category) {
-      throw new AppError(404, "Categoria padrao nao encontrada.");
+      throw new AppError(404, "Categoria padrão não encontrada.");
     }
 
     return category;
@@ -389,7 +418,7 @@ async function resolveProduct(
     });
 
     if (!product) {
-      throw new AppError(404, "Produto mapeado nao encontrado.");
+      throw new AppError(404, "Produto mapeado não encontrado.");
     }
 
     return product;
@@ -428,10 +457,9 @@ async function resolveProduct(
       active: true,
       categoryId: category.id,
       code: nextProductCode(lastProduct?.code),
-      description: row.productCode
-        ? `Codigo do fornecedor: ${row.productCode}`
-        : "Importado por CSV.",
-      name: row.productName || row.productCode,
+      description: "Importado por CSV.",
+      minimumQuantity: 0,
+      name: row.productName,
       unitId: unit.id,
     },
     include: {
@@ -495,7 +523,7 @@ async function ensureInvoice(
   if (existingInvoice?.movements.length) {
     throw new AppError(
       409,
-      `A nota ${row.invoiceNumber} ja possui movimentacoes importadas.`,
+      `A nota ${row.invoiceNumber} já possui movimentações importadas.`,
     );
   }
 

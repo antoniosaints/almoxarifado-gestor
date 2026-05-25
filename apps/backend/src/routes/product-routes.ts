@@ -2,8 +2,17 @@ import { UserRole } from "@prisma/client";
 import { Router } from "express";
 import { asyncHandler, requireRole } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
+import {
+  importProductsCsv,
+  previewProductsCsvImport,
+} from "../services/product-csv-import-service.js";
 import { createProduct, updateProduct } from "../services/product-service.js";
-import { idParam, productInput } from "../validators/inputs.js";
+import {
+  idParam,
+  productCsvImportInput,
+  productCsvPreviewInput,
+  productInput,
+} from "../validators/inputs.js";
 
 export const productRoutes = Router();
 
@@ -19,6 +28,26 @@ productRoutes.get(
         orderBy: { code: "asc" },
       }),
     );
+  }),
+);
+
+productRoutes.post(
+  "/import-csv/preview",
+  requireRole(UserRole.ADMIN),
+  asyncHandler(async (request, response) => {
+    const input = productCsvPreviewInput.parse(request.body);
+
+    response.json(await previewProductsCsvImport(prisma, input));
+  }),
+);
+
+productRoutes.post(
+  "/import-csv",
+  requireRole(UserRole.ADMIN),
+  asyncHandler(async (request, response) => {
+    const input = productCsvImportInput.parse(request.body);
+
+    response.status(201).json(await importProductsCsv(prisma, input));
   }),
 );
 

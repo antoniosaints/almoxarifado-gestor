@@ -19,7 +19,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const payload = (await response.json().catch(() => null)) as
       | { message?: string }
       | null;
-    throw new Error(payload?.message ?? "Nao foi possivel concluir a operacao.");
+    throw new Error(payload?.message ?? "Não foi possível concluir a operação.");
   }
 
   if (response.status === 204) {
@@ -43,7 +43,7 @@ export async function apiFile(path: string, init?: RequestInit): Promise<Blob> {
     const payload = (await response.json().catch(() => null)) as
       | { message?: string }
       | null;
-    throw new Error(payload?.message ?? "Nao foi possivel baixar o arquivo.");
+    throw new Error(payload?.message ?? "Não foi possível baixar o arquivo.");
   }
 
   return response.blob();
@@ -64,7 +64,7 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
     const payload = (await response.json().catch(() => null)) as
       | { message?: string }
       | null;
-    throw new Error(payload?.message ?? "Nao foi possivel enviar o arquivo.");
+    throw new Error(payload?.message ?? "Não foi possível enviar o arquivo.");
   }
 
   return response.json() as Promise<T>;

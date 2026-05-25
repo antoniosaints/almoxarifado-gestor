@@ -1,4 +1,4 @@
-import { Boxes, Pencil, Plus, Trash2 } from "lucide-react";
+import { Boxes, FileDown, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { DataTable } from "@/components/domain/data-table";
 import {
@@ -20,9 +20,23 @@ import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
-import type { Product, ProductCategory, Stock, UnitOfMeasure } from "@/lib/types";
+import type {
+  Product,
+  ProductCategory,
+  ProductCsvPreview,
+  Stock,
+  UnitOfMeasure,
+} from "@/lib/types";
 
 type ProductDraft = {
   active: boolean;
@@ -30,6 +44,7 @@ type ProductDraft = {
   code?: string;
   description: string;
   id?: string;
+  minimumQuantity: string;
   name: string;
   unitId: string;
 };
@@ -39,6 +54,7 @@ function emptyDraft(categoryId = "", unitId = ""): ProductDraft {
     active: true,
     categoryId,
     description: "",
+    minimumQuantity: "0",
     name: "",
     unitId,
   };
@@ -85,7 +101,7 @@ export function ProductStocksDialog({
               },
               {
                 cell: (stock) => stock.minimumQuantity,
-                header: "Estoque minimo",
+                header: "Estoque mínimo",
                 key: "minimum",
               },
               {
@@ -114,6 +130,204 @@ export function ProductStocksDialog({
   );
 }
 
+function ProductCsvImportDialog({ onImported }: { onImported: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [csv, setCsv] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [preview, setPreview] = useState<ProductCsvPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const canSubmit = Boolean(preview) && (preview?.rows ?? []).every((row) => row.canImport);
+
+  function openDialog() {
+    setCsv("");
+    setFileName("");
+    setPreview(null);
+    setMessage(null);
+    setOpen(true);
+  }
+
+  function downloadTemplate() {
+    const content = [
+      "id;nome;unidade;minimo;categoria",
+      ";Clips galvanizado;CX;12;Expediente",
+      "0000042;Detergente;UN;5;Limpeza",
+    ].join("\n");
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "modelo-importacao-produtos.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function selectCsv(file?: File) {
+    setMessage(null);
+
+    if (!file) {
+      setCsv("");
+      setFileName("");
+      setPreview(null);
+      return;
+    }
+
+    if (!file.name.toLocaleLowerCase("pt-BR").endsWith(".csv")) {
+      setMessage("Selecione um arquivo CSV.");
+      return;
+    }
+
+    const selectedCsv = await file.text();
+
+    setCsv(selectedCsv);
+    setFileName(file.name);
+    setPreview(null);
+    setPreviewLoading(true);
+
+    try {
+      setPreview(
+        await api<ProductCsvPreview>("/products/import-csv/preview", {
+          body: JSON.stringify({ csv: selectedCsv }),
+          method: "POST",
+        }),
+      );
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error ? caughtError.message : "Falha ao ler CSV.",
+      );
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      await api("/products/import-csv", {
+        body: JSON.stringify({ csv }),
+        method: "POST",
+      });
+      await onImported();
+      setOpen(false);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao importar produtos.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={openDialog} type="button" variant="outline">
+        <Upload className="h-4 w-4" />
+        Importar CSV
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Importar CSV de produtos</DialogTitle>
+            <DialogDescription>
+              Confira nomes, unidades, mínimos e categorias antes do cadastro.
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={submit}>
+            {message ? <ResourceError message={message} /> : null}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_14rem]">
+              <FormField>
+                <Label htmlFor="product-csv-file">Arquivo CSV</Label>
+                <Input
+                  accept=".csv,text/csv"
+                  id="product-csv-file"
+                  onChange={(event) => void selectCsv(event.target.files?.[0])}
+                  type="file"
+                />
+                {fileName ? (
+                  <p className="text-xs text-muted-foreground">{fileName}</p>
+                ) : null}
+              </FormField>
+              <div className="flex items-end">
+                <Button
+                  className="w-full"
+                  onClick={downloadTemplate}
+                  type="button"
+                  variant="outline"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Baixar modelo
+                </Button>
+              </div>
+            </div>
+
+            {previewLoading ? <LoadingLine /> : null}
+
+            {preview ? (
+              <div className="overflow-hidden rounded-lg border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Linha</TableHead>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Produto</TableHead>
+                      <TableHead>Unidade</TableHead>
+                      <TableHead className="text-right">Mínimo</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {preview.rows.map((row) => (
+                      <TableRow key={row.index}>
+                        <TableCell>{row.rowNumber}</TableCell>
+                        <TableCell className="font-mono">
+                          {row.code ?? "Automático"}
+                        </TableCell>
+                        <TableCell className="font-medium">{row.productName}</TableCell>
+                        <TableCell>{row.unit}</TableCell>
+                        <TableCell className="text-right">
+                          {row.minimumQuantity}
+                        </TableCell>
+                        <TableCell>{row.categoryName}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {row.canImport ? (
+                              <Badge variant="success">Pronto</Badge>
+                            ) : null}
+                            {row.errors.map((error) => (
+                              <Badge key={error} variant="zero">
+                                {error}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : null}
+
+            <Button disabled={!canSubmit || saving || previewLoading} type="submit">
+              <Upload className="h-4 w-4" />
+              {saving ? "Importando..." : "Confirmar importação"}
+            </Button>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function ProductsPage() {
   const products = useApiResource<Product[]>("/products", []);
   const categories = useApiResource<ProductCategory[]>("/product-categories", []);
@@ -132,6 +346,7 @@ export function ProductsPage() {
       active: draft.active,
       categoryId: draft.categoryId,
       description: draft.description,
+      minimumQuantity: draft.minimumQuantity,
       name: draft.name,
       unitId: draft.unitId,
     };
@@ -184,13 +399,16 @@ export function ProductsPage() {
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">Catalogo</p>
+          <p className="text-sm text-muted-foreground">Catálogo</p>
           <h2 className="text-2xl font-semibold">Produtos</h2>
         </div>
-        <Button onClick={() => setDraft(emptyDraft(categories.data[0]?.id, units.data[0]?.id))}>
-          <Plus className="h-4 w-4" />
-          Novo produto
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <ProductCsvImportDialog onImported={products.reload} />
+          <Button onClick={() => setDraft(emptyDraft(categories.data[0]?.id, units.data[0]?.id))}>
+            <Plus className="h-4 w-4" />
+            Novo produto
+          </Button>
+        </div>
       </div>
 
       {message ? <ResourceError message={message} /> : null}
@@ -200,7 +418,7 @@ export function ProductsPage() {
           {
             cell: (product) => product.code,
             cellClassName: "font-mono",
-            header: "Codigo",
+            header: "Código",
             key: "code",
           },
           {
@@ -224,6 +442,11 @@ export function ProductsPage() {
             key: "unit",
           },
           {
+            cell: (product) => product.minimumQuantity,
+            header: "Mínimo",
+            key: "minimum",
+          },
+          {
             cell: (product) => (
               <Badge variant={product.active ? "success" : "zero"}>
                 {product.active ? "Ativo" : "Inativo"}
@@ -245,6 +468,7 @@ export function ProductsPage() {
                       code: product.code,
                       description: product.description ?? "",
                       id: product.id,
+                      minimumQuantity: String(product.minimumQuantity ?? 0),
                       name: product.name,
                       unitId: product.unitId,
                     })
@@ -265,7 +489,7 @@ export function ProductsPage() {
               </div>
             ),
             cellClassName: "text-right",
-            header: "Acoes",
+            header: "Ações",
             headerClassName: "text-right",
             key: "actions",
           },
@@ -273,7 +497,7 @@ export function ProductsPage() {
         data={products.data}
         emptyMessage="Nenhum produto cadastrado."
         getRowId={(product) => product.id}
-        searchPlaceholder="Buscar por codigo, produto ou categoria..."
+        searchPlaceholder="Buscar por código, produto ou categoria..."
         searchText={(product) =>
           [
             product.code,
@@ -298,13 +522,13 @@ export function ProductsPage() {
           <DialogHeader>
             <DialogTitle>{draft?.id ? "Editar produto" : "Novo produto"}</DialogTitle>
             <DialogDescription>
-              O codigo de sete digitos e gerado automaticamente pelo sistema.
+              O código de sete dígitos é gerado automaticamente pelo sistema.
             </DialogDescription>
           </DialogHeader>
           {draft ? (
             <Form onSubmit={save}>
               <FormField>
-                <Label htmlFor="product-code">Codigo</Label>
+                <Label htmlFor="product-code">Código</Label>
                 <Input
                   disabled
                   id="product-code"
@@ -321,13 +545,26 @@ export function ProductsPage() {
                 />
               </FormField>
               <FormField>
-                <Label htmlFor="product-description">Descricao</Label>
+                <Label htmlFor="product-description">Descrição</Label>
                 <Textarea
                   id="product-description"
                   onChange={(event) =>
                     setDraft({ ...draft, description: event.target.value })
                   }
                   value={draft.description}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="product-minimum">Mínimo padrão</Label>
+                <Input
+                  id="product-minimum"
+                  min="0"
+                  onChange={(event) =>
+                    setDraft({ ...draft, minimumQuantity: event.target.value })
+                  }
+                  required
+                  type="number"
+                  value={draft.minimumQuantity}
                 />
               </FormField>
               <div className="grid gap-4 sm:grid-cols-2">

@@ -34,6 +34,61 @@ const centralWarehouse = {
   name: "Almoxarifado Central",
 };
 
+const warehousesPayload = [
+  {
+    ...centralWarehouse,
+    active: true,
+    categoryId: "general",
+    createdAt: "2026-05-20T12:00:00.000Z",
+    isGeneral: true,
+    stocks: [
+      {
+        currentQuantity: 10,
+        id: "central-paper",
+        minimumQuantity: 0,
+        product,
+        productId: product.id,
+        totalValue: 100,
+        unitPriceAverage: 10,
+        warehouseId: "central",
+      },
+    ],
+    summary: {
+      lastMovementAt: null,
+      lowStockItems: 0,
+      outOfStockItems: 0,
+      stockedProducts: 1,
+    },
+    updatedAt: "2026-05-20T12:00:00.000Z",
+  },
+  {
+    ...warehouse,
+    active: true,
+    categoryId: "health",
+    createdAt: "2026-05-20T12:00:00.000Z",
+    isGeneral: false,
+    stocks: [
+      {
+        currentQuantity: 3,
+        id: "health-paper",
+        minimumQuantity: 0,
+        product,
+        productId: product.id,
+        totalValue: 30,
+        unitPriceAverage: 10,
+        warehouseId: "health",
+      },
+    ],
+    summary: {
+      lastMovementAt: null,
+      lowStockItems: 0,
+      outOfStockItems: 0,
+      stockedProducts: 1,
+    },
+    updatedAt: "2026-05-20T12:00:00.000Z",
+  },
+];
+
 const entryRequest: EntryRequest = {
   createdAt: "2026-05-23T12:00:00.000Z",
   id: "entry-request",
@@ -172,6 +227,127 @@ describe("RequestsPage", () => {
     expect(
       screen.getByRole("dialog", { name: "Solicitar entrada" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Almoxarifado destino")).toBeInTheDocument();
+    expect(screen.getByLabelText("Produto")).toBeInTheDocument();
+  });
+
+  it("shows approval stock summary and sends adjusted quantity", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/entry-requests/entry-request/approve") {
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          quantity: 2,
+        });
+
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      const payload =
+        url.pathname === "/entry-requests"
+          ? [entryRequest]
+          : url.pathname === "/transfer-requests"
+            ? []
+            : url.pathname === "/warehouses"
+              ? warehousesPayload
+              : url.pathname === "/invoices"
+                ? []
+                : [];
+
+      return new Response(JSON.stringify(payload), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <RequestsPage />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Aprovar" }));
+    fireEvent.change(screen.getByLabelText("Quantidade aprovada"), {
+      target: { value: "2" },
+    });
+
+    expect(screen.getByText("Estoque geral: 10 PCT")).toBeInTheDocument();
+    expect(screen.getByText("Após aprovar: 8 PCT")).toBeInTheDocument();
+    expect(screen.getByText("Destino atual: 3 PCT")).toBeInTheDocument();
+    expect(screen.getByText("Destino após entrada: 5 PCT")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar aprovação" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://127.0.0.1:3333/entry-requests/entry-request/approve",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+  });
+
+  it("opens a transfer dialog from requests page with destination warehouse", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input));
+        const payload =
+          url.pathname === "/entry-requests"
+            ? []
+            : url.pathname === "/transfer-requests"
+              ? []
+              : url.pathname === "/warehouses"
+                ? warehousesPayload
+                : url.pathname === "/entry-requests/available-products"
+                  ? [product]
+                  : [];
+
+        return new Response(JSON.stringify(payload), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <RequestsPage />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Transferir" }));
+
+    expect(screen.getByRole("dialog", { name: "Transferir produto" })).toBeInTheDocument();
     expect(screen.getByLabelText("Almoxarifado destino")).toBeInTheDocument();
     expect(screen.getByLabelText("Produto")).toBeInTheDocument();
   });

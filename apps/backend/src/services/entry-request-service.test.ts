@@ -87,7 +87,7 @@ describe("entry request service", () => {
         warehouseId: warehouse.id,
       }),
     ).rejects.toMatchObject({
-      message: "Solicite apenas produtos ja cadastrados no estoque deste almoxarifado.",
+      message: "Solicite apenas produtos já cadastrados no estoque deste almoxarifado.",
       status: 400,
     });
   });
@@ -182,5 +182,71 @@ describe("entry request service", () => {
       "TRANSFERENCIA_ENTRADA",
     ]);
     expect(movements[1]?.invoiceId).toBe(invoice.id);
+  });
+
+  it("approves a request with an adjusted quantity and returns stock summary", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saúde",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 3,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    const request = await createEntryRequest(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 8,
+      requestedById: operator.id,
+      warehouseId: warehouse.id,
+    });
+
+    const result = await approveEntryRequest(prisma, {
+      quantity: 6,
+      requestId: request.id,
+      reviewedById: user.id,
+    });
+
+    expect(result.summary).toMatchObject({
+      approvedQuantity: 6,
+      destinationAfter: 9,
+      destinationBefore: 3,
+      sourceAfter: 4,
+      sourceBefore: 10,
+    });
+    await expect(
+      prisma.entryRequest.findUniqueOrThrow({ where: { id: request.id } }),
+    ).resolves.toMatchObject({
+      quantity: 6,
+      status: RequestStatus.APPROVED,
+    });
   });
 });

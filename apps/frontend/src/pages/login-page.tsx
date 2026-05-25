@@ -8,6 +8,7 @@ import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
+import { resolveAssetUrl } from "@/lib/assets";
 import { useSession } from "@/lib/session";
 import { useSystemSettings } from "@/lib/system-settings";
 import type { User } from "@/lib/types";
@@ -26,6 +27,9 @@ export function LoginPage() {
   const [password, setPassword] = useState("admin123");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const loginBackgroundUrl = resolveAssetUrl(settings.loginBackgroundUrl);
+  const loginImageUrl = resolveAssetUrl(settings.loginImageUrl);
+  const logoUrl = resolveAssetUrl(settings.logoUrl);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,11 +50,11 @@ export function LoginPage() {
     }
   }
 
-  const backgroundStyle = settings.loginBackgroundUrl
+  const backgroundStyle = loginBackgroundUrl
     ? {
         backgroundImage: darkMode
-          ? `linear-gradient(135deg, rgb(2 6 23 / 0.88), rgb(15 23 42 / 0.1)), url("${settings.loginBackgroundUrl.replace(/"/g, "%22")}")`
-          : `linear-gradient(135deg, rgb(248 250 252 / 0.88), rgb(236 254 255 / 0.1)), url("${settings.loginBackgroundUrl.replace(/"/g, "%22")}")`,
+          ? `linear-gradient(135deg, rgb(2 6 23 / 0.88), rgb(15 23 42 / 0.1)), url("${loginBackgroundUrl.replace(/"/g, "%22")}")`
+          : `linear-gradient(135deg, rgb(248 250 252 / 0.88), rgb(236 254 255 / 0.1)), url("${loginBackgroundUrl.replace(/"/g, "%22")}")`,
       }
     : undefined;
 
@@ -58,7 +62,7 @@ export function LoginPage() {
     <main
       className={cn(
         "grid min-h-screen place-items-center p-4",
-        settings.loginBackgroundUrl
+        loginBackgroundUrl
           ? "bg-cover bg-center"
           : "bg-[linear-gradient(135deg,#f8fafc_0%,#ecfeff_44%,#f8fafc_100%)] dark:bg-[linear-gradient(135deg,#020617_0%,#0f172a_44%,#111827_100%)]",
       )}
@@ -67,28 +71,28 @@ export function LoginPage() {
       <section
         className={cn(
           "w-full",
-          settings.loginImageUrl
+          loginImageUrl
             ? "grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-center"
             : "max-w-md",
         )}
       >
-        {settings.loginImageUrl ? (
+        {loginImageUrl ? (
           <div className="hidden overflow-hidden rounded-lg border bg-card shadow-sm lg:block">
             <img
               alt=""
               className="h-[31rem] w-full object-cover"
-              src={settings.loginImageUrl}
+              src={loginImageUrl}
             />
           </div>
         ) : null}
         <div className="w-full max-w-md justify-self-center">
           <div className="mb-5 flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-lg bg-primary text-primary-foreground shadow-sm">
-              {settings.logoUrl ? (
+            <div className="grid w-12 place-items-center overflow-hidden rounded-lg border text-primary-foreground shadow-sm">
+              {logoUrl ? (
                 <img
                   alt=""
-                  className="h-full w-full object-cover"
-                  src={settings.logoUrl}
+                  className="h-12 w-12 object-cover"
+                  src={logoUrl}
                 />
               ) : (
                 <Boxes className="h-6 w-6" />

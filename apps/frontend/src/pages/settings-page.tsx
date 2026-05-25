@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, apiUpload } from "@/lib/api";
+import { resolveAssetUrl } from "@/lib/assets";
 import {
   defaultSystemSettings,
   useSystemSettings,
@@ -170,7 +171,7 @@ export function SettingsPage() {
       const slot = settingsUploadSlots[field];
 
       if (!slot) {
-        throw new Error("Campo de upload invalido.");
+        throw new Error("Campo de upload inválido.");
       }
 
       const uploaded = await apiUpload<SettingsUploadResponse>(
@@ -209,14 +210,14 @@ export function SettingsPage() {
       });
 
       setDraft(savedSettings);
-      setMessage({ kind: "success", text: "Configuracoes salvas." });
+      setMessage({ kind: "success", text: "Configurações salvas." });
     } catch (caughtError) {
       setMessage({
         kind: "error",
         text:
           caughtError instanceof Error
             ? caughtError.message
-            : "Falha ao salvar configuracoes.",
+            : "Falha ao salvar configurações.",
       });
     } finally {
       setSaving(false);
@@ -244,7 +245,7 @@ export function SettingsPage() {
     event.preventDefault();
 
     if (!resetPassword.trim()) {
-      setResetError("Informe a senha do usuario admin.");
+      setResetError("Informe a senha do usuário admin.");
       return;
     }
 
@@ -264,7 +265,7 @@ export function SettingsPage() {
       });
       setMessage({
         kind: "success",
-        text: "Dados do sistema apagados. Usuarios preservados.",
+        text: "Dados do sistema apagados. Usuários preservados.",
       });
       setResetPassword("");
       setResetStep("closed");
@@ -283,12 +284,16 @@ export function SettingsPage() {
     return <LoadingLine />;
   }
 
+  const draftLogoUrl = resolveAssetUrl(draft.logoUrl);
+  const draftLoginImageUrl = resolveAssetUrl(draft.loginImageUrl);
+  const draftReportLogoUrl = resolveAssetUrl(draft.reportLogoUrl);
+
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">Sistema</p>
-          <h2 className="text-2xl font-semibold">Configuracoes</h2>
+          <h2 className="text-2xl font-semibold">Configurações</h2>
         </div>
         <Button disabled={saving} form="system-settings-form" type="submit">
           <Save className="h-4 w-4" />
@@ -327,7 +332,7 @@ export function SettingsPage() {
             </TabsTrigger>
             <TabsTrigger value="reports">
               <FileText className="mr-1 h-4 w-4" />
-              Relatorios
+              Relatórios
             </TabsTrigger>
           </TabsList>
 
@@ -408,11 +413,11 @@ export function SettingsPage() {
               <div className="rounded-lg border bg-background p-4">
                 <div className="flex items-center gap-3">
                   <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
-                    {draft.logoUrl ? (
+                    {draftLogoUrl ? (
                       <img
                         alt=""
                         className="h-full w-full object-cover"
-                        src={draft.logoUrl}
+                        src={draftLogoUrl}
                       />
                     ) : (
                       <Building2 className="h-5 w-5" />
@@ -431,7 +436,7 @@ export function SettingsPage() {
             <section className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-2">
               <div className="space-y-4">
                 <FormField>
-                  <Label htmlFor="settings-login-title">Titulo do login</Label>
+                  <Label htmlFor="settings-login-title">Título do login</Label>
                   <Input
                     id="settings-login-title"
                     onChange={(event) => updateDraft("loginTitle", event.target.value)}
@@ -440,7 +445,7 @@ export function SettingsPage() {
                   />
                 </FormField>
                 <FormField>
-                  <Label htmlFor="settings-login-subtitle">Subtitulo do login</Label>
+                  <Label htmlFor="settings-login-subtitle">Subtítulo do login</Label>
                   <Input
                     id="settings-login-subtitle"
                     onChange={(event) => updateDraft("loginSubtitle", event.target.value)}
@@ -466,11 +471,11 @@ export function SettingsPage() {
                 />
               </div>
               <div className="overflow-hidden rounded-lg border bg-background">
-                {draft.loginImageUrl ? (
+                {draftLoginImageUrl ? (
                   <img
                     alt=""
                     className="h-56 w-full object-cover"
-                    src={draft.loginImageUrl}
+                    src={draftLoginImageUrl}
                   />
                 ) : (
                   <div className="grid h-56 place-items-center text-sm text-muted-foreground">
@@ -505,7 +510,7 @@ export function SettingsPage() {
                     />
                   </FormField>
                   <FormField>
-                    <Label htmlFor="settings-report-color-text">Cor do relatorio</Label>
+                    <Label htmlFor="settings-report-color-text">Cor do relatório</Label>
                     <Input
                       id="settings-report-color-text"
                       onChange={(event) =>
@@ -517,7 +522,7 @@ export function SettingsPage() {
                   </FormField>
                 </div>
                 <FormField>
-                  <Label htmlFor="settings-report-title">Titulo do cabecalho</Label>
+                  <Label htmlFor="settings-report-title">Título do cabeçalho</Label>
                   <Input
                     id="settings-report-title"
                     onChange={(event) => updateDraft("reportTitle", event.target.value)}
@@ -527,7 +532,7 @@ export function SettingsPage() {
                 </FormField>
                 <ImageUrlField
                   field="reportLogoUrl"
-                  label="Logo do relatorio"
+                  label="Logo do relatório"
                   onUpload={(field, file) => void uploadImage(field, file)}
                   uploading={uploadingField === "reportLogoUrl"}
                   updateDraft={updateDraft}
@@ -556,11 +561,11 @@ export function SettingsPage() {
                 <div className="space-y-4 p-4">
                   <div className="flex items-start gap-3">
                     <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
-                      {draft.reportLogoUrl ? (
+                      {draftReportLogoUrl ? (
                         <img
                           alt=""
                           className="h-full w-full object-cover"
-                          src={draft.reportLogoUrl}
+                          src={draftReportLogoUrl}
                         />
                       ) : (
                         <Building2 className="h-5 w-5 text-muted-foreground" />
@@ -594,8 +599,8 @@ export function SettingsPage() {
           <div>
             <p className="font-medium">Resetar dados do sistema</p>
             <p className="max-w-3xl text-sm text-red-900">
-              Apaga almoxarifados, produtos, estoques, movimentacoes, notas,
-              solicitacoes e vinculos de almoxarifado. Usuarios e configuracoes
+              Apaga almoxarifados, produtos, estoques, movimentações, notas,
+              solicitações e vínculos de almoxarifado. Usuários e configurações
               permanecem.
             </p>
           </div>
@@ -620,7 +625,7 @@ export function SettingsPage() {
               <DialogHeader>
                 <DialogTitle>Confirmar senha do admin</DialogTitle>
                 <DialogDescription>
-                  Os dados do sistema serao apagados e os usuarios serao
+                  Os dados do sistema serão apagados e os usuários serão
                   mantidos.
                 </DialogDescription>
               </DialogHeader>
@@ -651,14 +656,14 @@ export function SettingsPage() {
               <DialogHeader>
                 <DialogTitle>Apagar dados definitivamente</DialogTitle>
                 <DialogDescription>
-                  Esta acao nao tem recuperacao apos a confirmacao final.
+                  Esta ação não tem recuperação após a confirmação final.
                 </DialogDescription>
               </DialogHeader>
               <div className="flex gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-950">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <p>
-                  Almoxarifados, produtos, estoques, movimentacoes, notas fiscais
-                  e solicitacoes serao removidos permanentemente.
+                  Almoxarifados, produtos, estoques, movimentações, notas fiscais
+                  e solicitações serão removidos permanentemente.
                 </p>
               </div>
               {resetError ? <ResourceError message={resetError} /> : null}

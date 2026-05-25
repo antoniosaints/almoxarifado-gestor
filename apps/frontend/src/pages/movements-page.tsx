@@ -25,8 +25,8 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 export const movementLabels: Record<MovementType, string> = {
   ENTRADA: "Entrada",
   SAIDA: "Saida",
-  TRANSFERENCIA_ENTRADA: "Transferencia recebida",
-  TRANSFERENCIA_SAIDA: "Transferencia enviada",
+  TRANSFERENCIA_ENTRADA: "Transferência recebida",
+  TRANSFERENCIA_SAIDA: "Transferência enviada",
 };
 
 export function MovementsTable({
@@ -97,7 +97,7 @@ export function MovementsTable({
               ? "-"
               : formatCurrency(unitPrice);
           },
-          header: "Valor unitario",
+          header: "Valor unitário",
           key: "unit-price",
         },
         {
@@ -145,7 +145,7 @@ export function MovementsTable({
               {
                 cell: (movement: Movement) => (
                   <Button
-                    aria-label={`Excluir movimentacao de ${movement.product.name}`}
+                    aria-label={`Excluir movimentação de ${movement.product.name}`}
                     disabled={deletingMovementId === movement.id}
                     onClick={() => onDeleteMovement(movement)}
                     size="icon"
@@ -156,7 +156,7 @@ export function MovementsTable({
                   </Button>
                 ),
                 cellClassName: "text-right",
-                header: "Acoes",
+                header: "Ações",
                 headerClassName: "text-right",
                 key: "delete-action",
               },
@@ -164,9 +164,9 @@ export function MovementsTable({
           : []),
       ]}
       data={movements}
-      emptyMessage="Nenhuma movimentacao encontrada."
+      emptyMessage="Nenhuma movimentação encontrada."
       getRowId={(movement) => movement.id}
-      searchPlaceholder="Buscar movimentacao..."
+      searchPlaceholder="Buscar movimentação..."
       searchText={(movement) =>
         [
           formatDate(movement.movementDate),
@@ -228,13 +228,13 @@ export function MovementsPage() {
       movements.setData((current) =>
         current.filter((movement) => movement.id !== movementToDelete.id),
       );
-      setActionMessage("Movimentacao excluida.");
+      setActionMessage("Movimentação excluída.");
       setMovementToDelete(null);
     } catch (caughtError) {
       setActionError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Falha ao excluir movimentacao.",
+          : "Falha ao excluir movimentação.",
       );
     } finally {
       setDeletingMovementId(null);

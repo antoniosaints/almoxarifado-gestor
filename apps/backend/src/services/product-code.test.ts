@@ -12,7 +12,7 @@ describe("nextProductCode", () => {
 
   it("refuses to generate an eighth digit", () => {
     expect(() => nextProductCode("9999999")).toThrow(
-      "Limite de codigos de produto atingido.",
+      "Limite de códigos de produto atingido.",
     );
   });
 });

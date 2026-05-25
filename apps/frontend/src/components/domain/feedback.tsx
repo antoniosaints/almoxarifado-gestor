@@ -3,7 +3,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 export function ResourceError({ message }: { message: string }) {
   return (
     <Alert className="border-rose-200 bg-rose-50 text-rose-950">
-      <AlertTitle>Nao foi possivel carregar</AlertTitle>
+      <AlertTitle>Não foi possível carregar</AlertTitle>
       <AlertDescription className="text-rose-900">{message}</AlertDescription>
     </Alert>
   );

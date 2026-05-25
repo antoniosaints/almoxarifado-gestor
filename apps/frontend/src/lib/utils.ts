@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatDate(value?: string | null) {
   if (!value) {
-    return "Sem movimentacao";
+    return "Sem movimentação";
   }
 
   return new Intl.DateTimeFormat("pt-BR", {

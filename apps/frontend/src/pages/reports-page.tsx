@@ -86,7 +86,7 @@ function InvoiceReportDialog({
           <DialogHeader>
             <DialogTitle>Exportar notas fiscais</DialogTitle>
             <DialogDescription>
-              Refine a exportacao por empresa, CNPJ ou numero da nota.
+              Refine a exportação por empresa, CNPJ ou número da nota.
             </DialogDescription>
           </DialogHeader>
           <Form onSubmit={submit}>
@@ -181,7 +181,7 @@ function WarehouseReportDialog({
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              Selecione os almoxarifados do PDF. Sem selecao, todos serao exportados.
+              Selecione os almoxarifados do PDF. Sem seleção, todos serão exportados.
             </DialogDescription>
           </DialogHeader>
           <Form onSubmit={submit}>
@@ -242,7 +242,7 @@ export function ReportsPage() {
       URL.revokeObjectURL(url);
     } catch (caughtError) {
       setMessage(
-        caughtError instanceof Error ? caughtError.message : "Falha ao baixar relatorio.",
+        caughtError instanceof Error ? caughtError.message : "Falha ao baixar relatório.",
       );
     } finally {
       setLoading(null);
@@ -266,7 +266,7 @@ export function ReportsPage() {
 
       <div className="grid gap-4 rounded-lg border bg-card p-4 md:grid-cols-[1fr_1fr_auto]">
         <FormField>
-          <Label htmlFor="report-from">Periodo de</Label>
+          <Label htmlFor="report-from">Período de</Label>
           <Input
             id="report-from"
             onChange={(event) => setFrom(event.target.value)}
@@ -275,7 +275,7 @@ export function ReportsPage() {
           />
         </FormField>
         <FormField>
-          <Label htmlFor="report-to">Periodo ate</Label>
+          <Label htmlFor="report-to">Período até</Label>
           <Input
             id="report-to"
             onChange={(event) => setTo(event.target.value)}
@@ -292,7 +292,7 @@ export function ReportsPage() {
           type="button"
           variant="outline"
         >
-          Limpar periodo
+          Limpar período
         </Button>
       </div>
 
@@ -303,7 +303,7 @@ export function ReportsPage() {
               <ClipboardCheck className="h-5 w-5" />
             </div>
             <CardTitle>Movimentações de estoque</CardTitle>
-            <CardDescription>Entradas, saidas e transferencias por almoxarifado.</CardDescription>
+            <CardDescription>Entradas, saídas e transferências por almoxarifado.</CardDescription>
           </CardHeader>
           <CardContent>
             <WarehouseReportDialog
@@ -312,7 +312,7 @@ export function ReportsPage() {
               loading={loading === "movements"}
               onExport={(path, fileName) => downloadReport("movements", path, fileName)}
               reportKey="movements"
-              title="Exportar movimentacoes"
+              title="Exportar movimentações"
               to={to}
               warehouses={warehouses.data}
             />
@@ -325,7 +325,7 @@ export function ReportsPage() {
               <Boxes className="h-5 w-5" />
             </div>
             <CardTitle>Saldos de estoques</CardTitle>
-            <CardDescription>Saldo atual, minimo e estado por produto.</CardDescription>
+            <CardDescription>Saldo atual, mínimo e estado por produto.</CardDescription>
           </CardHeader>
           <CardContent>
             <WarehouseReportDialog
@@ -346,7 +346,7 @@ export function ReportsPage() {
             <div className="mb-2 grid h-10 w-10 place-items-center rounded-lg bg-muted text-primary">
               <FileText className="h-5 w-5" />
             </div>
-            <CardTitle>Relatorios por notas</CardTitle>
+            <CardTitle>Relatórios por notas</CardTitle>
             <CardDescription>Notas fiscais e movimentações vinculadas.</CardDescription>
           </CardHeader>
           <CardContent>

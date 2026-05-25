@@ -31,12 +31,12 @@ export type SettingsAssetSlot = keyof typeof settingsAssetSlots;
 
 export const defaultSettings = {
   id: settingsId,
-  loginSubtitle: "Entre com seu usuario para acompanhar o estoque municipal.",
+  loginSubtitle: "Entre com seu usuário para acompanhar o estoque municipal.",
   loginTitle: "Almoxarifado Municipal",
   primaryColor: "#0f766e",
   reportFooterText: "Documento gerado pelo sistema de almoxarifado municipal.",
   reportPrimaryColor: "#0f766e",
-  reportTitle: "GEMA - Gestao Municipal de Almoxarifado",
+  reportTitle: "GEMA - Gestão Municipal de Almoxarifado",
   systemName: "Prefeitura",
 };
 
@@ -65,7 +65,7 @@ export async function uploadSystemSettingsAsset(
   },
 ) {
   if (!isSettingsAssetSlot(slot)) {
-    throw new AppError(404, "Tipo de upload nao encontrado.");
+    throw new AppError(404, "Tipo de upload não encontrado.");
   }
 
   const config = settingsAssetSlots[slot];

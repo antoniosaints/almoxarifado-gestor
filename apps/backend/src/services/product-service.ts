@@ -5,6 +5,7 @@ export type ProductInput = {
   active: boolean;
   categoryId: string;
   description?: string | null;
+  minimumQuantity?: number;
   name: string;
   unitId: string;
 };

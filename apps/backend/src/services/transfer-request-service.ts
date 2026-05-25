@@ -59,7 +59,7 @@ export async function createTransferRequest(
   ]);
 
   if (!source || !destination) {
-    throw new AppError(404, "Almoxarifado nao encontrado.");
+    throw new AppError(404, "Almoxarifado não encontrado.");
   }
 
   if (!source.isGeneral) {
@@ -87,7 +87,7 @@ export async function receiveTransferRequest(
     });
 
     if (request.status !== TransferRequestStatus.PENDING_RECEIPT) {
-      throw new AppError(409, "Esta transferencia ja foi recebida.");
+      throw new AppError(409, "Esta transferência já foi recebida.");
     }
 
     const sourceStock = await transaction.stock.findUnique({

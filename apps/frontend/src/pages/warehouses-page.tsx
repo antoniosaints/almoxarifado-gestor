@@ -177,7 +177,7 @@ export function WarehousesPage() {
               </div>
             ),
             cellClassName: "text-right",
-            header: "Acoes",
+            header: "Ações",
             headerClassName: "text-right",
             key: "actions",
           },

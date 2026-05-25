@@ -46,7 +46,7 @@ export async function loginWithPassword(
   });
 
   if (!user || !user.active || !passwordMatches(password, user.passwordHash)) {
-    throw new AppError(401, "Email ou senha invalidos.");
+    throw new AppError(401, "Email ou senha inválidos.");
   }
 
   const safeUser = sessionUser(user);

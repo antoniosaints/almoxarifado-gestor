@@ -12,6 +12,7 @@ const product: Product = {
   categoryId: "office",
   code: "0000001",
   id: "paper",
+  minimumQuantity: 0,
   name: "Papel A4",
   unit: {
     abbreviation: "PCT",

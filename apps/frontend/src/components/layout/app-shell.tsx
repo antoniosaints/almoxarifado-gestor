@@ -30,6 +30,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { useApiResource } from "@/lib/api";
+import { resolveAssetUrl } from "@/lib/assets";
 import { useRouteLoading } from "@/lib/route-loading";
 import { useSession } from "@/lib/session";
 import { useSystemSettings } from "@/lib/system-settings";
@@ -44,10 +45,10 @@ const items = [
   { icon: Tags, label: "Categorias", role: "ADMIN", to: "/categories" },
   { icon: Ruler, label: "Unidades", role: "ADMIN", to: "/units" },
   { icon: FileText, label: "Notas fiscais", to: "/invoices" },
-  { icon: FileDown, label: "Relatorios", to: "/reports" },
+  { icon: FileDown, label: "Relatórios", to: "/reports" },
   { icon: ClipboardList, label: "Solicitações", to: "/requests" },
   { icon: ClipboardCheck, label: "Movimentações", to: "/movements" },
-  { icon: UsersRound, label: "Usuarios", role: "ADMIN", to: "/users" },
+  { icon: UsersRound, label: "Usuários", role: "ADMIN", to: "/users" },
   { icon: Settings, label: "Configurações", role: "ADMIN", to: "/settings" },
 ] satisfies Array<{
   icon: typeof Boxes;
@@ -83,12 +84,14 @@ function Navigation({ role }: { role: UserRole }) {
 }
 
 function BrandLogo({ logoUrl }: { logoUrl?: string | null }) {
-  if (logoUrl) {
+  const resolvedLogoUrl = resolveAssetUrl(logoUrl);
+
+  if (resolvedLogoUrl) {
     return (
       <img
         alt=""
         className="h-full w-full rounded-lg object-cover"
-        src={logoUrl}
+        src={resolvedLogoUrl}
       />
     );
   }
@@ -179,9 +182,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
       <aside className="hidden border-r bg-card lg:flex lg:flex-col">
-        <div className="px-5 py-6">
+        <div className="px-5 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary text-primary-foreground">
+            <div className="grid w-12 place-items-center rounded-lg border text-primary-foreground">
               <BrandLogo logoUrl={settings.logoUrl} />
             </div>
             <div>
@@ -241,7 +244,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {summary.data.pendingEntryRequests} entradas aguardando analise
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => navigate("/requests")}>
-                  {summary.data.pendingReceipts} transferencias aguardando recebimento
+                  {summary.data.pendingReceipts} transferências aguardando recebimento
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

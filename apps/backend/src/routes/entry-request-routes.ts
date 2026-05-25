@@ -121,6 +121,7 @@ entryRequestRoutes.post(
     response.json(
       await approveEntryRequest(prisma, {
         invoiceId: input.invoiceId,
+        quantity: input.quantity,
         requestId: id,
         reviewedById: currentUser(response).id,
       }),

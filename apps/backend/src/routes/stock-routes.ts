@@ -49,7 +49,7 @@ async function assertCurrentAdminPassword(userId: string, password: string) {
   });
 
   if (!passwordMatches(password, user.passwordHash)) {
-    throw new AppError(401, "Senha do admin invalida.");
+    throw new AppError(401, "Senha do admin inválida.");
   }
 }
 
@@ -167,7 +167,7 @@ stockRoutes.post(
     });
 
     if (stocks.length !== new Set(input.stockIds).size) {
-      throw new AppError(404, "Um ou mais estoques selecionados nao foram encontrados.");
+      throw new AppError(404, "Um ou mais estoques selecionados não foram encontrados.");
     }
 
     const movementDate = new Date();
@@ -204,7 +204,7 @@ stockRoutes.post(
               data: {
                 destinationNote: "Zerado por ajuste administrativo.",
                 movementDate,
-                observation: "Estoque zerado por acao administrativa em lote.",
+                observation: "Estoque zerado por ação administrativa em lote.",
                 productId: stock.productId,
                 quantity: stock.currentQuantity,
                 responsibleUserId: user.id,
@@ -247,7 +247,7 @@ stockRoutes.post(
     });
 
     if (stocks.length !== new Set(input.stockIds).size) {
-      throw new AppError(404, "Um ou mais estoques selecionados nao foram encontrados.");
+      throw new AppError(404, "Um ou mais estoques selecionados não foram encontrados.");
     }
 
     const movements = await prisma.stockMovement.findMany({

@@ -16,6 +16,7 @@ type EntryRequestInput = {
 
 type ApprovalInput = {
   invoiceId?: string | null;
+  quantity?: number;
   requestId: string;
   reviewedById: string;
 };
@@ -47,7 +48,7 @@ export async function createEntryRequest(
   if (!stock) {
     throw new AppError(
       400,
-      "Solicite apenas produtos ja cadastrados no estoque deste almoxarifado.",
+      "Solicite apenas produtos já cadastrados no estoque deste almoxarifado.",
     );
   }
 
@@ -73,8 +74,11 @@ export async function approveEntryRequest(
     });
 
     if (request.status !== RequestStatus.PENDING) {
-      throw new AppError(409, "Esta solicitacao ja foi analisada.");
+      throw new AppError(409, "Esta solicitação já foi analisada.");
     }
+
+    const approvedQuantity = input.quantity ?? request.quantity;
+    assertPositiveQuantity(approvedQuantity);
 
     const generalWarehouse = await transaction.warehouse.findFirst({
       where: {
@@ -96,15 +100,25 @@ export async function approveEntryRequest(
       },
     });
 
-    if (!generalStock || generalStock.currentQuantity < request.quantity) {
+    if (!generalStock || generalStock.currentQuantity < approvedQuantity) {
       throw new AppError(409, "Quantidade insuficiente no estoque geral.");
     }
+
+    const destinationStockBefore = await transaction.stock.findUnique({
+      where: {
+        warehouseId_productId: {
+          warehouseId: request.warehouseId,
+          productId: request.productId,
+        },
+      },
+      select: { currentQuantity: true },
+    });
 
     const sourceStock = await transaction.stock.update({
       where: { id: generalStock.id },
       data: {
         currentQuantity: {
-          decrement: request.quantity,
+          decrement: approvedQuantity,
         },
         lastMovementAt: request.movementDate,
       },
@@ -119,12 +133,12 @@ export async function approveEntryRequest(
       },
       update: {
         currentQuantity: {
-          increment: request.quantity,
+          increment: approvedQuantity,
         },
         lastMovementAt: request.movementDate,
       },
       create: {
-        currentQuantity: request.quantity,
+        currentQuantity: approvedQuantity,
         lastMovementAt: request.movementDate,
         productId: request.productId,
         warehouseId: request.warehouseId,
@@ -137,7 +151,7 @@ export async function approveEntryRequest(
         movementDate: request.movementDate,
         observation: request.observation,
         productId: request.productId,
-        quantity: request.quantity,
+        quantity: approvedQuantity,
         responsibleUserId: input.reviewedById,
         sourceWarehouseId: generalWarehouse.id,
         stockId: sourceStock.id,
@@ -153,7 +167,7 @@ export async function approveEntryRequest(
         movementDate: request.movementDate,
         observation: request.observation,
         productId: request.productId,
-        quantity: request.quantity,
+        quantity: approvedQuantity,
         responsibleUserId: input.reviewedById,
         sourceWarehouseId: generalWarehouse.id,
         stockId: stock.id,
@@ -165,6 +179,7 @@ export async function approveEntryRequest(
     const approvedRequest = await transaction.entryRequest.update({
       where: { id: request.id },
       data: {
+        quantity: approvedQuantity,
         reviewedAt: new Date(),
         reviewedById: input.reviewedById,
         status: RequestStatus.APPROVED,
@@ -174,6 +189,14 @@ export async function approveEntryRequest(
     return {
       movement,
       request: approvedRequest,
+      summary: {
+        approvedQuantity,
+        destinationAfter:
+          (destinationStockBefore?.currentQuantity ?? 0) + approvedQuantity,
+        destinationBefore: destinationStockBefore?.currentQuantity ?? 0,
+        sourceAfter: generalStock.currentQuantity - approvedQuantity,
+        sourceBefore: generalStock.currentQuantity,
+      },
       sourceMovement,
       sourceStock,
       stock,
@@ -191,7 +214,7 @@ export async function rejectEntryRequest(
   });
 
   if (request.status !== RequestStatus.PENDING) {
-    throw new AppError(409, "Esta solicitacao ja foi analisada.");
+    throw new AppError(409, "Esta solicitação já foi analisada.");
   }
 
   return prisma.entryRequest.update({
