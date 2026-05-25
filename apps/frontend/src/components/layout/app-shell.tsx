@@ -45,10 +45,10 @@ const items = [
   { icon: Ruler, label: "Unidades", role: "ADMIN", to: "/units" },
   { icon: FileText, label: "Notas fiscais", to: "/invoices" },
   { icon: FileDown, label: "Relatorios", to: "/reports" },
-  { icon: ClipboardList, label: "Solicitacoes", to: "/requests" },
-  { icon: ClipboardCheck, label: "Movimentacoes", to: "/movements" },
+  { icon: ClipboardList, label: "Solicitações", to: "/requests" },
+  { icon: ClipboardCheck, label: "Movimentações", to: "/movements" },
   { icon: UsersRound, label: "Usuarios", role: "ADMIN", to: "/users" },
-  { icon: Settings, label: "Configuracoes", role: "ADMIN", to: "/settings" },
+  { icon: Settings, label: "Configurações", role: "ADMIN", to: "/settings" },
 ] satisfies Array<{
   icon: typeof Boxes;
   label: string;
@@ -208,7 +208,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <SheetContent>
                 <div className="mb-5 pr-8">
                   <p className="font-semibold">{settings.systemName}</p>
-                  <p className="text-sm text-muted-foreground">Operacao de estoque</p>
+                  <p className="text-sm text-muted-foreground">Operação de estoque</p>
                 </div>
                 <Navigation role={role} />
               </SheetContent>
@@ -227,7 +227,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </label>
             <DropdownMenu onOpenChange={(open) => open && markNotificationsSeen()}>
               <DropdownMenuTrigger asChild>
-                <Button aria-label="Notificacoes internas" size="icon" variant="outline">
+                <Button aria-label="Notificações internas" size="icon" variant="outline">
                   <Bell className="h-4 w-4" />
                   {notificationCount ? (
                     <span className="absolute -mr-7 -mt-7 grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[11px] font-semibold text-white">

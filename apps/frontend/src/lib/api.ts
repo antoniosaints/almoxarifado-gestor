@@ -49,6 +49,27 @@ export async function apiFile(path: string, init?: RequestInit): Promise<Blob> {
   return response.blob();
 }
 
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const session = getStoredSession();
+  const response = await fetch(`${API_URL}${path}`, {
+    body: file,
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as
+      | { message?: string }
+      | null;
+    throw new Error(payload?.message ?? "Nao foi possivel enviar o arquivo.");
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export function useApiResource<T>(path: string, initialValue: T) {
   const [data, setData] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);

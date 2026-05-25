@@ -231,7 +231,7 @@ function NewProductInlineDialog({
               />
             </FormField>
             <FormField>
-              <Label htmlFor="stock-product-description">Descricao</Label>
+              <Label htmlFor="stock-product-description">Descrição</Label>
               <Textarea
                 id="stock-product-description"
                 onChange={(event) =>
@@ -402,7 +402,7 @@ function InvoiceFields({
                 />
               </FormField>
               <FormField>
-                <Label htmlFor="invoice-number">Numero da nota</Label>
+                <Label htmlFor="invoice-number">Número da nota</Label>
                 <Input
                   id="invoice-number"
                   onChange={(event) =>
@@ -426,7 +426,7 @@ function InvoiceFields({
               />
             </FormField>
             <FormField>
-              <Label htmlFor="invoice-observation">Observacao adicional</Label>
+              <Label htmlFor="invoice-observation">Observação adicional</Label>
               <Textarea
                 id="invoice-observation"
                 onChange={(event) =>
@@ -679,7 +679,7 @@ function MovementForm({
 
       <div className="grid gap-4">
         <FormField>
-          <Label htmlFor={`${kind}-date`}>Data da movimentacao</Label>
+          <Label htmlFor={`${kind}-date`}>Data da movimentação</Label>
           <Input
             id={`${kind}-date`}
             onChange={(event) => setMovementDate(event.target.value)}
@@ -689,7 +689,7 @@ function MovementForm({
           />
         </FormField>
         <FormField>
-          <Label htmlFor={`${kind}-observation`}>Observacao</Label>
+          <Label htmlFor={`${kind}-observation`}>Observação</Label>
           <Textarea
             id={`${kind}-observation`}
             onChange={(event) => setObservation(event.target.value)}
@@ -706,7 +706,7 @@ function MovementForm({
         ) : (
           <ArrowRightLeft className="h-4 w-4" />
         )}
-        {kind === "entryRequest" ? "Enviar solicitacao" : "Registrar"}
+        {kind === "entryRequest" ? "Enviar solicitação" : "Registrar"}
       </Button>
     </Form>
   );
@@ -784,7 +784,7 @@ function latestMovementForStock(movements: Movement[], stock: Stock) {
 
 function movementSummary(movement: Movement | null) {
   if (!movement) {
-    return "Sem movimentacao";
+    return "Sem movimentação";
   }
 
   return `${movementLabels[movement.type]} - ${formatDate(movement.movementDate)}`;
@@ -856,7 +856,7 @@ function StockMovementsDialog({
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
-            <DialogTitle>Movimentacoes de {stock.product.name}</DialogTitle>
+            <DialogTitle>Movimentações de {stock.product.name}</DialogTitle>
             <DialogDescription>
               Entradas e saidas registradas neste almoxarifado.
             </DialogDescription>
@@ -871,7 +871,7 @@ function StockMovementsDialog({
           <MovementsTable movements={visibleMovements} showInvoiceAction />
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {visibleMovements.length} movimentacao(oes) no filtro atual.
+              {visibleMovements.length} movimentação(ões) no filtro atual.
             </p>
             <Button
               disabled={exporting}
@@ -1004,12 +1004,12 @@ function WarehouseMovementsExportDialog({
     <>
       <Button onClick={() => setOpen(true)} type="button" variant="outline">
         <FileDown className="h-4 w-4" />
-        Exportar movimentacoes
+        Exportar movimentações
       </Button>
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Exportar movimentacoes</DialogTitle>
+            <DialogTitle>Exportar movimentações</DialogTitle>
             <DialogDescription>
               Exporte todo o historico ou filtre por periodo, nota e produto.
             </DialogDescription>
@@ -1027,7 +1027,7 @@ function WarehouseMovementsExportDialog({
                 />
               </FormField>
               <FormField>
-                <Label htmlFor="warehouse-movement-export-to">Periodo ate</Label>
+                <Label htmlFor="warehouse-movement-export-to">Período até</Label>
                 <Input
                   id="warehouse-movement-export-to"
                   onChange={(event) => setTo(event.target.value)}
@@ -1141,7 +1141,7 @@ function BulkStockActionDialog({
       setMessage(
         caughtError instanceof Error
           ? caughtError.message
-          : "Falha ao concluir acao.",
+          : "Falha ao concluir ação.",
       );
       setSaving(false);
     }
@@ -1182,7 +1182,7 @@ function BulkStockActionDialog({
                 type="button"
                 variant="outline"
               >
-                {allSelected ? "Limpar selecao" : "Selecionar todos"}
+                {allSelected ? "Limpar seleção" : "Selecionar todos"}
               </Button>
             </div>
             <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-2">
@@ -1484,13 +1484,13 @@ function StockTable({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar estoque minimo</DialogTitle>
+            <DialogTitle>Editar estoque mínimo</DialogTitle>
             <DialogDescription>{editingStock?.product.name}</DialogDescription>
           </DialogHeader>
           {editingStock ? (
             <Form onSubmit={saveMinimum}>
               <FormField>
-                <Label htmlFor="minimum-stock">Estoque minimo</Label>
+                <Label htmlFor="minimum-stock">Estoque mínimo</Label>
                 <Input
                   id="minimum-stock"
                   min="0"
@@ -1500,7 +1500,7 @@ function StockTable({
                   value={minimum}
                 />
               </FormField>
-              <Button type="submit">Salvar estoque minimo</Button>
+              <Button type="submit">Salvar estoque mínimo</Button>
             </Form>
           ) : null}
         </DialogContent>
@@ -1582,7 +1582,7 @@ function WarehouseOverview({
         <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
           <AlertTitle>Estoque acompanhado</AlertTitle>
           <AlertDescription className="text-emerald-900">
-            Nenhum item deste almoxarifado esta abaixo do minimo.
+            Nenhum item deste almoxarifado esta abaixo do mínimo.
           </AlertDescription>
         </Alert>
       )}
@@ -1614,9 +1614,9 @@ function WarehouseOverview({
         <section className="rounded-lg border bg-card p-4">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="font-semibold">Distribuicao por categoria</h3>
+              <h3 className="font-semibold">Distribuição por categoria</h3>
               <p className="text-sm text-muted-foreground">
-                Participacao por valor total em estoque.
+                Participação por valor total em estoque.
               </p>
             </div>
             <Badge variant="outline">{categoryStats.length} categorias</Badge>
@@ -1658,7 +1658,7 @@ function WarehouseOverview({
 
         <section className="rounded-lg border bg-card p-4">
           <div className="mb-4">
-            <h3 className="font-semibold">Ultimas movimentacoes</h3>
+            <h3 className="font-semibold">Ultimas movimentações</h3>
             <p className="text-sm text-muted-foreground">
               Atividade recente deste almoxarifado.
             </p>
@@ -1694,7 +1694,7 @@ function WarehouseOverview({
             </div>
           ) : (
             <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Nenhuma movimentacao registrada no periodo.
+              Nenhuma movimentação registrada no periodo.
             </p>
           )}
         </section>
@@ -1962,7 +1962,7 @@ function WarehouseCsvImportDialog({
                       <TableHead>Produto no CSV</TableHead>
                       <TableHead className="text-right">Qtd.</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
-                      <TableHead className="min-w-72">Acao</TableHead>
+                      <TableHead className="min-w-72">Ação</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2110,11 +2110,11 @@ export function WarehouseTabs({
           </TabsTrigger>
           <TabsTrigger onClick={() => selectTab("overview")} value="overview">
             <ChartArea size={15} className="mr-1" />
-            Visao geral
+            Visão geral
           </TabsTrigger>
           <TabsTrigger onClick={() => selectTab("history")} value="history">
             <Clock size={15} className="mr-1" />
-            Historico
+            Histórico
           </TabsTrigger>
         </TabsList>
         <div className="flex flex-wrap gap-2">

@@ -88,7 +88,7 @@ export const invoiceXmlPreviewInput = z.object({
 });
 
 const optionalUrl = optionalText.refine(
-  (value) => !value || /^https?:\/\//i.test(value) || value.startsWith("data:image/"),
+  (value) => !value || /^https?:\/\//i.test(value) || value.startsWith("/uploads/"),
   "Informe uma URL valida.",
 );
 

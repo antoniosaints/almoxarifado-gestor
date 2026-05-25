@@ -1,4 +1,6 @@
 import { UserRole } from "@prisma/client";
+import { existsSync, rmSync } from "node:fs";
+import path from "node:path";
 import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "./app.js";
@@ -23,10 +25,18 @@ function countPdfPages(body: Buffer) {
 describe("api", () => {
   beforeEach(async () => {
     await resetDatabase(prisma);
+    rmSync(path.join(process.cwd(), "uploads", "settings"), {
+      force: true,
+      recursive: true,
+    });
   });
 
   afterAll(async () => {
     await resetDatabase(prisma);
+    rmSync(path.join(process.cwd(), "uploads", "settings"), {
+      force: true,
+      recursive: true,
+    });
     await prisma.$disconnect();
   });
 
@@ -781,39 +791,78 @@ describe("api", () => {
     await expect(prisma.warehouseCategory.count()).resolves.toBe(0);
   });
 
-  it("saves favicon and image data urls in system settings", async () => {
+  it("uploads one settings asset per slot and stores only the public URL", async () => {
     const { user } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({
       where: { id: user.id },
       data: { role: UserRole.ADMIN },
     });
-    const imageDataUrl =
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
+    const uploadRoot = path.join(process.cwd(), "uploads", "settings");
+
+    const firstUpload = await request(app)
+      .post("/uploads/settings/favicon")
+      .set("Authorization", authorizationFor(admin))
+      .set("Content-Type", "image/png")
+      .send(Buffer.from("png-content"));
+
+    expect(firstUpload.status).toBe(201);
+    expect(firstUpload.body).toMatchObject({
+      field: "faviconUrl",
+      url: expect.stringMatching(/^\/uploads\/settings\/favicon\.png\?v=\d+$/),
+    });
+    expect(existsSync(path.join(uploadRoot, "favicon.png"))).toBe(true);
+    await expect(
+      prisma.systemSettings.findUniqueOrThrow({ where: { id: "system" } }),
+    ).resolves.toMatchObject({
+      faviconUrl: firstUpload.body.url,
+    });
+
+    const secondUpload = await request(app)
+      .post("/uploads/settings/favicon")
+      .set("Authorization", authorizationFor(admin))
+      .set("Content-Type", "image/jpeg")
+      .send(Buffer.from("jpeg-content"));
+
+    expect(secondUpload.status).toBe(201);
+    expect(secondUpload.body.url).toMatch(
+      /^\/uploads\/settings\/favicon\.jpg\?v=\d+$/,
+    );
+    expect(existsSync(path.join(uploadRoot, "favicon.png"))).toBe(false);
+    expect(existsSync(path.join(uploadRoot, "favicon.jpg"))).toBe(true);
+    await expect(
+      prisma.systemSettings.findUniqueOrThrow({ where: { id: "system" } }),
+    ).resolves.toMatchObject({
+      faviconUrl: secondUpload.body.url,
+    });
+  });
+
+  it("rejects base64 image data in system settings payloads", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
 
     const response = await request(app)
       .put("/settings")
       .set("Authorization", authorizationFor(admin))
       .send({
-        faviconUrl: imageDataUrl,
-        loginBackgroundUrl: imageDataUrl,
-        loginImageUrl: imageDataUrl,
+        faviconUrl: "data:image/png;base64,iVBORw0KGgo=",
+        loginBackgroundUrl: null,
+        loginImageUrl: null,
         loginSubtitle: "Entre com seguranca.",
         loginTitle: "Almoxarifado",
-        logoUrl: imageDataUrl,
+        logoUrl: null,
         primaryColor: "#112233",
         reportFooterText: "Rodape do relatorio.",
-        reportLogoUrl: imageDataUrl,
+        reportLogoUrl: null,
         reportPrimaryColor: "#445566",
         reportTitle: "Relatorio Municipal",
         systemName: "ALMOX",
       });
 
-    expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({
-      faviconUrl: imageDataUrl,
-      logoUrl: imageDataUrl,
-      reportLogoUrl: imageDataUrl,
-    });
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe("Informe uma URL valida.");
   });
 
   it("deletes invoices without deleting stock movements", async () => {

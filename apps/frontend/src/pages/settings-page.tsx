@@ -27,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/lib/api";
+import { api, apiUpload } from "@/lib/api";
 import {
   defaultSystemSettings,
   useSystemSettings,
@@ -40,28 +40,32 @@ type SettingsMessage = {
 };
 
 const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
-const maxImageSize = 512 * 1024;
+const maxImageSize = 1024 * 1024;
+const settingsUploadSlots: Partial<Record<keyof SystemSettings, string>> = {
+  faviconUrl: "favicon",
+  loginBackgroundUrl: "login-background",
+  loginImageUrl: "login-image",
+  logoUrl: "brand-logo",
+  reportLogoUrl: "report-logo",
+};
+
+type SettingsUploadResponse = {
+  field: keyof SystemSettings;
+  url: string;
+};
 
 function normalizeColor(color: string, fallback = defaultSystemSettings.primaryColor) {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
 }
 
-function readImageDataUrl(file: File) {
+function validateImageFile(file: File) {
   if (!acceptedImageTypes.includes(file.type)) {
     throw new Error("Use PNG, JPG, WEBP ou SVG.");
   }
 
   if (file.size > maxImageSize) {
-    throw new Error("A imagem deve ter no maximo 512 KB.");
+    throw new Error("A imagem deve ter no maximo 1 MB.");
   }
-
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Falha ao ler imagem."));
-    reader.readAsDataURL(file);
-  });
 }
 
 function ImageUrlField({
@@ -69,6 +73,7 @@ function ImageUrlField({
   label,
   onUpload,
   placeholder = "https://...",
+  uploading,
   updateDraft,
   value,
 }: {
@@ -76,6 +81,7 @@ function ImageUrlField({
   label: string;
   onUpload: (field: keyof SystemSettings, file?: File) => void;
   placeholder?: string;
+  uploading?: boolean;
   updateDraft: (field: keyof SystemSettings, value: string) => void;
   value?: string | null;
 }) {
@@ -93,9 +99,13 @@ function ImageUrlField({
           value={value ?? ""}
         />
         <Button asChild type="button" variant="outline">
-          <label className="cursor-pointer" htmlFor={uploadId}>
+          <label
+            aria-disabled={uploading}
+            className={`cursor-pointer ${uploading ? "pointer-events-none opacity-60" : ""}`}
+            htmlFor={uploadId}
+          >
             <Upload className="h-4 w-4" />
-            Upload
+            {uploading ? "Enviando..." : "Upload"}
           </label>
         </Button>
       </div>
@@ -103,7 +113,10 @@ function ImageUrlField({
         accept={acceptedImageTypes.join(",")}
         className="sr-only"
         id={uploadId}
-        onChange={(event) => onUpload(field, event.target.files?.[0])}
+        onChange={(event) => {
+          onUpload(field, event.target.files?.[0]);
+          event.currentTarget.value = "";
+        }}
         type="file"
       />
     </FormField>
@@ -128,6 +141,9 @@ export function SettingsPage() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [uploadingField, setUploadingField] = useState<keyof SystemSettings | null>(
+    null,
+  );
 
   useEffect(() => {
     setDraft(settings);
@@ -146,9 +162,24 @@ export function SettingsPage() {
     }
 
     setMessage(null);
+    setUploadingField(field);
 
     try {
-      updateDraft(field, await readImageDataUrl(file));
+      validateImageFile(file);
+
+      const slot = settingsUploadSlots[field];
+
+      if (!slot) {
+        throw new Error("Campo de upload invalido.");
+      }
+
+      const uploaded = await apiUpload<SettingsUploadResponse>(
+        `/uploads/settings/${slot}`,
+        file,
+      );
+
+      updateDraft(field, uploaded.url);
+      setMessage({ kind: "success", text: "Imagem enviada." });
     } catch (caughtError) {
       setMessage({
         kind: "error",
@@ -157,6 +188,8 @@ export function SettingsPage() {
             ? caughtError.message
             : "Falha ao carregar imagem.",
       });
+    } finally {
+      setUploadingField(null);
     }
   }
 
@@ -344,6 +377,7 @@ export function SettingsPage() {
                 field="faviconUrl"
                 label="Favicon"
                 onUpload={(field, file) => void uploadImage(field, file)}
+                uploading={uploadingField === "faviconUrl"}
                 updateDraft={updateDraft}
                 value={draft.faviconUrl}
               />
@@ -366,6 +400,7 @@ export function SettingsPage() {
                   field="logoUrl"
                   label="Logo"
                   onUpload={(field, file) => void uploadImage(field, file)}
+                  uploading={uploadingField === "logoUrl"}
                   updateDraft={updateDraft}
                   value={draft.logoUrl}
                 />
@@ -417,6 +452,7 @@ export function SettingsPage() {
                   field="loginBackgroundUrl"
                   label="Background do login"
                   onUpload={(field, file) => void uploadImage(field, file)}
+                  uploading={uploadingField === "loginBackgroundUrl"}
                   updateDraft={updateDraft}
                   value={draft.loginBackgroundUrl}
                 />
@@ -424,6 +460,7 @@ export function SettingsPage() {
                   field="loginImageUrl"
                   label="Imagem do login"
                   onUpload={(field, file) => void uploadImage(field, file)}
+                  uploading={uploadingField === "loginImageUrl"}
                   updateDraft={updateDraft}
                   value={draft.loginImageUrl}
                 />
@@ -492,6 +529,7 @@ export function SettingsPage() {
                   field="reportLogoUrl"
                   label="Logo do relatorio"
                   onUpload={(field, file) => void uploadImage(field, file)}
+                  uploading={uploadingField === "reportLogoUrl"}
                   updateDraft={updateDraft}
                   value={draft.reportLogoUrl}
                 />

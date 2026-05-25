@@ -256,8 +256,8 @@ export function ReportsPage() {
   return (
     <section className="space-y-5">
       <div>
-        <p className="text-sm text-muted-foreground">Exportacoes</p>
-        <h2 className="text-2xl font-semibold">Relatorios</h2>
+        <p className="text-sm text-muted-foreground">Exportações</p>
+        <h2 className="text-2xl font-semibold">Relatórios</h2>
       </div>
 
       {message || warehouses.error ? (
@@ -302,7 +302,7 @@ export function ReportsPage() {
             <div className="mb-2 grid h-10 w-10 place-items-center rounded-lg bg-muted text-primary">
               <ClipboardCheck className="h-5 w-5" />
             </div>
-            <CardTitle>Movimentacoes de estoque</CardTitle>
+            <CardTitle>Movimentações de estoque</CardTitle>
             <CardDescription>Entradas, saidas e transferencias por almoxarifado.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -347,7 +347,7 @@ export function ReportsPage() {
               <FileText className="h-5 w-5" />
             </div>
             <CardTitle>Relatorios por notas</CardTitle>
-            <CardDescription>Notas fiscais e movimentacoes vinculadas.</CardDescription>
+            <CardDescription>Notas fiscais e movimentações vinculadas.</CardDescription>
           </CardHeader>
           <CardContent>
             <InvoiceReportDialog

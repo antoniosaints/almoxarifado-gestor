@@ -257,7 +257,7 @@ export function MovementsPage() {
     <section className="space-y-5">
       <div>
         <p className="text-sm text-muted-foreground">Auditoria</p>
-        <h2 className="text-2xl font-semibold">Movimentacoes</h2>
+        <h2 className="text-2xl font-semibold">Movimentações</h2>
       </div>
       {actionMessage ? (
         <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
@@ -327,7 +327,7 @@ export function MovementsPage() {
           <Input id="movement-from" onChange={(event) => setFrom(event.target.value)} type="date" value={from} />
         </FormField>
         <FormField>
-          <Label htmlFor="movement-to">Ate</Label>
+          <Label htmlFor="movement-to">Até</Label>
           <Input id="movement-to" onChange={(event) => setTo(event.target.value)} type="date" value={to} />
         </FormField>
       </div>
@@ -347,9 +347,9 @@ export function MovementsPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Excluir movimentacao</DialogTitle>
+            <DialogTitle>Excluir movimentação</DialogTitle>
             <DialogDescription>
-              Esta movimentacao sera removida do historico do estoque.
+              Esta movimentação sera removida do histórico do estoque.
             </DialogDescription>
           </DialogHeader>
           {movementToDelete ? (

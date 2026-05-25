@@ -461,7 +461,7 @@ export function RequestsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">Pendencias internas</p>
-          <h2 className="text-2xl font-semibold">Solicitacoes</h2>
+          <h2 className="text-2xl font-semibold">Solicitações</h2>
         </div>
         <DirectEntryRequestDialog
           onCreated={requestCreated}

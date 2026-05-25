@@ -32,6 +32,6 @@ describe("AppShell", () => {
     expect(screen.queryByText("Usuarios")).not.toBeInTheDocument();
     expect(screen.getByText("Notas fiscais")).toBeInTheDocument();
     expect(screen.getByText("Relatorios")).toBeInTheDocument();
-    expect(screen.getByText("Movimentacoes")).toBeInTheDocument();
+    expect(screen.getByText("Movimentações")).toBeInTheDocument();
   });
 });
