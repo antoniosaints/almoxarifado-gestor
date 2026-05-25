@@ -181,6 +181,9 @@ export const warehouseCsvImportInput = warehouseCsvPreviewInput.extend({
 
 export const systemResetInput = z.object({
   password: z.string().min(1, "Informe sua senha para confirmar."),
+  productCategories: z.enum(["KEEP", "RESET_DEFAULTS"]).default("RESET_DEFAULTS"),
+  units: z.enum(["KEEP", "RESET_DEFAULTS"]).default("RESET_DEFAULTS"),
+  warehouseCategories: z.enum(["KEEP", "RESET_DEFAULTS"]).default("RESET_DEFAULTS"),
 });
 
 const movementBase = z.object({

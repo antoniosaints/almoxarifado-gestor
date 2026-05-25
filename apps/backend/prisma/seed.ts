@@ -1,5 +1,10 @@
 import { MovementType, PrismaClient, UserRole } from "@prisma/client";
 import { hashPassword } from "../src/services/auth-service.js";
+import {
+  restoreDefaultProductCategories,
+  restoreDefaultUnits,
+  restoreDefaultWarehouseCategories,
+} from "../src/services/default-catalog-service.js";
 
 const prisma = new PrismaClient();
 
@@ -23,20 +28,7 @@ async function main() {
     },
   });
 
-  const categories = await Promise.all(
-    [
-      ["Geral", "Estoque central da prefeitura", "#0f766e", "warehouse"],
-      ["Saúde", "Materiais das unidades de saude", "#dc2626", "heart-pulse"],
-      ["Educação", "Materiais da rede de ensino", "#2563eb", "book-open"],
-      ["Obras", "Materiais de manutencao e obras", "#d97706", "hard-hat"],
-    ].map(([name, description, color, icon]) =>
-      prisma.warehouseCategory.upsert({
-        where: { name },
-        update: { description, color, icon },
-        create: { name, description, color, icon },
-      }),
-    ),
-  );
+  const categories = await restoreDefaultWarehouseCategories(prisma);
 
   const [generalCategory, healthCategory, educationCategory, worksCategory] =
     categories;
@@ -120,91 +112,9 @@ async function main() {
     },
   });
 
-  const productCategories = await Promise.all(
-    [
-      ["Material de expediente", "Itens usados em rotinas administrativas"],
-      ["Material de limpeza", "Itens de higienizacao"],
-      ["Medicamentos", "Produtos de saude controlados no estoque"],
-      ["Merenda escolar", "Itens para alimentacao escolar"],
-      ["Alimentos", "Produtos alimenticios em geral"],
-      ["Insumos", "Itens usados em rotinas administrativas"],
-      ["Bebidas", "Itens liquidos para consumo"],
-      ["Informatica", "Equipamentos e acessorios de tecnologia"],
-      ["Eletronicos", "Dispositivos e equipamentos eletronicos"],
-      ["Moveis", "Mobilia e itens para ambientes"],
-      ["Ferramentas", "Ferramentas manuais e eletricas"],
-      ["EPI", "Equipamentos de protecao individual"],
-      ["Material escolar", "Itens utilizados em atividades escolares"],
-      ["Papelaria", "Produtos de papelaria e escritorio"],
-      ["Construcao", "Materiais utilizados em obras e manutencao"],
-      ["Hidraulica", "Produtos e pecas hidraulicas"],
-      ["Eletrica", "Materiais e componentes eletricos"],
-      ["Vestuário", "Roupas e uniformes"],
-      ["Calcados", "Sapatos, botas e similares"],
-      ["Higiene pessoal", "Produtos de higiene e cuidados pessoais"],
-      ["Copa e cozinha", "Utensilios e materiais para cozinha"],
-      ["Pereciveis", "Produtos com prazo de validade reduzido"],
-      ["Patrimonio", "Bens permanentes e patrimoniais"],
-      ["Combustiveis", "Gasolina, diesel e derivados"],
-      ["Pecas automotivas", "Componentes e acessorios para veiculos"],
-      ["Servicos", "Itens cadastrados para controle de servicos"],
-      ["Outros", "Itens nao categorizados"],
-    ].map(([name, description]) =>
-      prisma.productCategory.upsert({
-        where: { name },
-        update: { description },
-        create: { name, description },
-      }),
-    ),
-  );
+  const productCategories = await restoreDefaultProductCategories(prisma);
 
-  const units = await Promise.all(
-    [
-      ["Unidade", "UN"],
-      ["Caixa", "CX"],
-      ["Pacote", "PCT"],
-      ["Litro", "L"],
-      ["Quilograma", "KG"],
-      ["Mililitro", "ML"],
-      ["Gramas", "G"],
-      ["Metro", "M"],
-      ["Centimetro", "CM"],
-      ["Milimetro", "MM"],
-      ["Fardo", "FD"],
-      ["Saco", "SC"],
-      ["Rolo", "RL"],
-      ["Galão", "GL"],
-      ["Lata", "LT"],
-      ["Frasco", "FR"],
-      ["Ampola", "AMP"],
-      ["Bisnaga", "BNG"],
-      ["Envelope", "ENV"],
-      ["Par", "PAR"],
-      ["Duzia", "DZ"],
-      ["Cartela", "CRT"],
-      ["Bloco", "BLC"],
-      ["Folha", "FL"],
-      ["Barrica", "BR"],
-      ["Tambor", "TB"],
-      ["Balde", "BD"],
-      ["Resma", "RSM"],
-      ["Pallet", "PLT"],
-      ["Tonelada", "TON"],
-      ["Sache", "SCH"],
-      ["Kit", "KIT"],
-      ["Jogo", "JG"],
-      ["Tubo", "TBO"],
-      ["Peça", "PC"],
-      ["Metragem quadrada", "M2"],
-      ["Metragem cubica", "M3"],
-    ].map(([name, abbreviation]) =>
-      prisma.unitOfMeasure.upsert({
-        where: { abbreviation },
-        update: { name },
-        create: { name, abbreviation },
-      }),
-    ),
-  );
+  const units = await restoreDefaultUnits(prisma);
 
   const [office, cleaning, medicine, food] = productCategories;
   const [unit, box, pack, liter, kilogram] = units;

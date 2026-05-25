@@ -1,9 +1,22 @@
-import { AlertTriangle, ArrowRight, Boxes, PackageCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Boxes,
+  PackageCheck,
+  PackageOpen,
+  Plus,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useApiResource } from "@/lib/api";
 import type { Warehouse } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -13,15 +26,21 @@ function WarehouseFacts({ warehouse }: { warehouse: Warehouse }) {
     <dl className="grid gap-3 text-sm sm:grid-cols-3">
       <div>
         <dt className="text-muted-foreground">Produtos em estoque</dt>
-        <dd className="text-lg font-semibold">{warehouse.summary.stockedProducts}</dd>
+        <dd className="text-lg font-semibold">
+          {warehouse.summary.stockedProducts}
+        </dd>
       </div>
       <div>
         <dt className="text-muted-foreground">Produtos em baixo estoque</dt>
-        <dd className="text-lg font-semibold">{warehouse.summary.lowStockItems}</dd>
+        <dd className="text-lg font-semibold">
+          {warehouse.summary.lowStockItems}
+        </dd>
       </div>
       <div>
         <dt className="text-muted-foreground">Última movimentação</dt>
-        <dd className="font-medium">{formatDate(warehouse.summary.lastMovementAt)}</dd>
+        <dd className="font-medium">
+          {formatDate(warehouse.summary.lastMovementAt)}
+        </dd>
       </div>
     </dl>
   );
@@ -29,7 +48,9 @@ function WarehouseFacts({ warehouse }: { warehouse: Warehouse }) {
 
 export function DashboardContent({ warehouses }: { warehouses: Warehouse[] }) {
   const generalWarehouse = warehouses.find((warehouse) => warehouse.isGeneral);
-  const regularWarehouses = warehouses.filter((warehouse) => !warehouse.isGeneral);
+  const regularWarehouses = warehouses.filter(
+    (warehouse) => !warehouse.isGeneral,
+  );
   const groups = regularWarehouses.reduce((map, warehouse) => {
     const category = warehouse.category?.name ?? "Sem categoria";
     const categoryWarehouses = map.get(category) ?? [];
@@ -37,6 +58,35 @@ export function DashboardContent({ warehouses }: { warehouses: Warehouse[] }) {
     map.set(category, categoryWarehouses);
     return map;
   }, new Map<string, Warehouse[]>());
+
+  if (!generalWarehouse || !regularWarehouses.length) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <Card className="w-full max-w-md border-dashed shadow-sm">
+          <CardContent className="flex flex-col items-center p-8 text-center">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-secondary">
+              <PackageOpen className="h-7 w-7 text-muted-foreground" />
+            </div>
+
+            <h2 className="text-lg font-semibold">
+              Nenhum almoxarifado encontrado
+            </h2>
+
+            <p className="mt-2 text-sm text-muted-foreground">
+              Cadastre o primeiro almoxarifado para começar a operar.
+            </p>
+
+            <Button asChild className="mt-6">
+              <Link to="/warehouses">
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Almoxarifado
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -47,12 +97,17 @@ export function DashboardContent({ warehouses }: { warehouses: Warehouse[] }) {
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge>Geral</Badge>
-                  <Badge variant="outline">{generalWarehouse.category.name}</Badge>
+                  <Badge variant="outline">
+                    {generalWarehouse.category.name}
+                  </Badge>
                 </div>
                 <div>
-                  <CardTitle className="text-2xl">{generalWarehouse.name}</CardTitle>
+                  <CardTitle className="text-2xl">
+                    {generalWarehouse.name}
+                  </CardTitle>
                   <CardDescription className="mt-1 max-w-2xl">
-                    Base principal para reposição e transferência aos demais almoxarifados.
+                    Base principal para reposição e transferência aos demais
+                    almoxarifados.
                   </CardDescription>
                 </div>
               </div>
@@ -68,14 +123,18 @@ export function DashboardContent({ warehouses }: { warehouses: Warehouse[] }) {
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
                   <PackageCheck className="mb-2 h-4 w-4 text-emerald-700 dark:text-emerald-300" />
-                  <p className="text-xs text-emerald-900 dark:text-emerald-200">Sem estoque</p>
+                  <p className="text-xs text-emerald-900 dark:text-emerald-200">
+                    Sem estoque
+                  </p>
                   <p className="text-xl font-semibold">
                     {generalWarehouse.summary.outOfStockItems}
                   </p>
                 </div>
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
                   <AlertTriangle className="mb-2 h-4 w-4 text-amber-700 dark:text-amber-300" />
-                  <p className="text-xs text-amber-900 dark:text-amber-200">Alertas</p>
+                  <p className="text-xs text-amber-900 dark:text-amber-200">
+                    Alertas
+                  </p>
                   <p className="text-xl font-semibold">
                     {generalWarehouse.summary.lowStockItems}
                   </p>

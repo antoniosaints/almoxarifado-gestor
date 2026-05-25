@@ -4,6 +4,11 @@ import { AppError } from "../lib/errors.js";
 import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import { passwordMatches } from "../services/auth-service.js";
+import {
+  restoreDefaultProductCategories,
+  restoreDefaultUnits,
+  restoreDefaultWarehouseCategories,
+} from "../services/default-catalog-service.js";
 import { defaultSettings, getSystemSettings, settingsId } from "../services/settings-service.js";
 import { systemResetInput, systemSettingsInput } from "../validators/inputs.js";
 
@@ -60,18 +65,18 @@ settingsRoutes.post(
   "/reset-data",
   requireRole(UserRole.ADMIN),
   asyncHandler(async (request, response) => {
-    const { password } = systemResetInput.parse(request.body);
+    const input = systemResetInput.parse(request.body);
     const user = currentUser(response);
     const admin = await prisma.user.findUniqueOrThrow({
       where: { id: user.id },
       select: { passwordHash: true },
     });
 
-    if (!passwordMatches(password, admin.passwordHash)) {
+    if (!passwordMatches(input.password, admin.passwordHash)) {
       throw new AppError(401, "Senha do admin inválida.");
     }
 
-    const deleted = await prisma.$transaction(async (transaction) => {
+    const result = await prisma.$transaction(async (transaction) => {
       const auditLogs = await transaction.auditLog.deleteMany();
       const transferRequests = await transaction.transferRequest.deleteMany();
       const entryRequests = await transaction.entryRequest.deleteMany();
@@ -80,27 +85,61 @@ settingsRoutes.post(
       const stocks = await transaction.stock.deleteMany();
       const warehouseAssignments = await transaction.userWarehouse.deleteMany();
       const products = await transaction.product.deleteMany();
-      const units = await transaction.unitOfMeasure.deleteMany();
-      const productCategories = await transaction.productCategory.deleteMany();
       const warehouses = await transaction.warehouse.deleteMany();
-      const warehouseCategories = await transaction.warehouseCategory.deleteMany();
+      const units =
+        input.units === "RESET_DEFAULTS"
+          ? await transaction.unitOfMeasure.deleteMany()
+          : { count: 0 };
+      const productCategories =
+        input.productCategories === "RESET_DEFAULTS"
+          ? await transaction.productCategory.deleteMany()
+          : { count: 0 };
+      const warehouseCategories =
+        input.warehouseCategories === "RESET_DEFAULTS"
+          ? await transaction.warehouseCategory.deleteMany()
+          : { count: 0 };
+      const restored = {
+        productCategories:
+          input.productCategories === "RESET_DEFAULTS"
+            ? (await restoreDefaultProductCategories(transaction)).length
+            : 0,
+        units:
+          input.units === "RESET_DEFAULTS"
+            ? (await restoreDefaultUnits(transaction)).length
+            : 0,
+        warehouseCategories:
+          input.warehouseCategories === "RESET_DEFAULTS"
+            ? (await restoreDefaultWarehouseCategories(transaction)).length
+            : 0,
+      };
 
       return {
-        auditLogs: auditLogs.count,
-        entryRequests: entryRequests.count,
-        invoices: invoices.count,
-        movements: movements.count,
-        productCategories: productCategories.count,
-        products: products.count,
-        stocks: stocks.count,
-        transferRequests: transferRequests.count,
-        units: units.count,
-        warehouseAssignments: warehouseAssignments.count,
-        warehouseCategories: warehouseCategories.count,
-        warehouses: warehouses.count,
+        deleted: {
+          auditLogs: auditLogs.count,
+          entryRequests: entryRequests.count,
+          invoices: invoices.count,
+          movements: movements.count,
+          productCategories: productCategories.count,
+          products: products.count,
+          stocks: stocks.count,
+          transferRequests: transferRequests.count,
+          units: units.count,
+          warehouseAssignments: warehouseAssignments.count,
+          warehouseCategories: warehouseCategories.count,
+          warehouses: warehouses.count,
+        },
+        restored,
       };
     });
 
-    response.json({ deleted, ok: true });
+    response.json({
+      ...result,
+      catalogReset: {
+        productCategories: input.productCategories,
+        units: input.units,
+        warehouseCategories: input.warehouseCategories,
+      },
+      ok: true,
+    });
   }),
 );

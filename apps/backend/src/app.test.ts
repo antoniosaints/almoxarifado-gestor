@@ -765,7 +765,12 @@ describe("api", () => {
     const response = await request(app)
       .post("/settings/reset-data")
       .set("Authorization", authorizationFor(admin))
-      .send({ password: "admin123" });
+      .send({
+        password: "admin123",
+        productCategories: "KEEP",
+        units: "KEEP",
+        warehouseCategories: "KEEP",
+      });
 
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
@@ -785,10 +790,87 @@ describe("api", () => {
     await expect(prisma.stock.count()).resolves.toBe(0);
     await expect(prisma.userWarehouse.count()).resolves.toBe(0);
     await expect(prisma.product.count()).resolves.toBe(0);
-    await expect(prisma.unitOfMeasure.count()).resolves.toBe(0);
-    await expect(prisma.productCategory.count()).resolves.toBe(0);
+    await expect(prisma.unitOfMeasure.count()).resolves.toBe(1);
+    await expect(prisma.productCategory.count()).resolves.toBe(1);
     await expect(prisma.warehouse.count()).resolves.toBe(0);
-    await expect(prisma.warehouseCategory.count()).resolves.toBe(0);
+    await expect(prisma.warehouseCategory.count()).resolves.toBe(1);
+  });
+
+  it("restores default product, warehouse category and unit catalogs when requested", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await hashPassword("admin123"),
+        role: UserRole.ADMIN,
+      },
+    });
+    await prisma.productCategory.create({
+      data: {
+        description: "Temporaria",
+        name: "Categoria temporaria",
+      },
+    });
+    await prisma.unitOfMeasure.create({
+      data: {
+        abbreviation: "TMP",
+        name: "Temporaria",
+      },
+    });
+    await prisma.warehouseCategory.create({
+      data: {
+        color: "#000000",
+        icon: "box",
+        name: "Categoria temporaria de almoxarifado",
+      },
+    });
+
+    const response = await request(app)
+      .post("/settings/reset-data")
+      .set("Authorization", authorizationFor(admin))
+      .send({
+        password: "admin123",
+        productCategories: "RESET_DEFAULTS",
+        units: "RESET_DEFAULTS",
+        warehouseCategories: "RESET_DEFAULTS",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(response.body.restored).toMatchObject({
+      productCategories: expect.any(Number),
+      units: expect.any(Number),
+      warehouseCategories: expect.any(Number),
+    });
+    expect(response.body.restored.productCategories).toBeGreaterThan(0);
+    expect(response.body.restored.units).toBeGreaterThan(0);
+    expect(response.body.restored.warehouseCategories).toBeGreaterThan(0);
+    await expect(prisma.product.count()).resolves.toBe(0);
+    await expect(prisma.warehouse.count()).resolves.toBe(0);
+    await expect(
+      prisma.productCategory.findUnique({
+        where: { name: "Categoria temporaria" },
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.unitOfMeasure.findUnique({ where: { abbreviation: "TMP" } }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.warehouseCategory.findUnique({
+        where: { name: "Categoria temporaria de almoxarifado" },
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.productCategory.findUnique({
+        where: { name: "Material de expediente" },
+      }),
+    ).resolves.toMatchObject({ name: "Material de expediente" });
+    await expect(
+      prisma.unitOfMeasure.findUnique({ where: { abbreviation: "UN" } }),
+    ).resolves.toMatchObject({ name: "Unidade" });
+    await expect(
+      prisma.warehouseCategory.findUnique({ where: { name: "Geral" } }),
+    ).resolves.toMatchObject({ name: "Geral" });
   });
 
   it("uploads one settings asset per slot and stores only the public URL", async () => {

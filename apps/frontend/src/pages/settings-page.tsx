@@ -24,6 +24,7 @@ import {
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +41,14 @@ type SettingsMessage = {
   text: string;
 };
 
+type ResetCatalogMode = "KEEP" | "RESET_DEFAULTS";
+
+type ResetCatalogOptions = {
+  productCategories: ResetCatalogMode;
+  units: ResetCatalogMode;
+  warehouseCategories: ResetCatalogMode;
+};
+
 const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const maxImageSize = 1024 * 1024;
 const settingsUploadSlots: Partial<Record<keyof SystemSettings, string>> = {
@@ -53,6 +62,17 @@ const settingsUploadSlots: Partial<Record<keyof SystemSettings, string>> = {
 type SettingsUploadResponse = {
   field: keyof SystemSettings;
   url: string;
+};
+
+const defaultResetCatalogOptions: ResetCatalogOptions = {
+  productCategories: "RESET_DEFAULTS",
+  units: "RESET_DEFAULTS",
+  warehouseCategories: "RESET_DEFAULTS",
+};
+
+const resetCatalogModeLabels: Record<ResetCatalogMode, string> = {
+  KEEP: "Manter atuais",
+  RESET_DEFAULTS: "Restaurar padrão do sistema",
 };
 
 function normalizeColor(color: string, fallback = defaultSystemSettings.primaryColor) {
@@ -142,6 +162,8 @@ export function SettingsPage() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [resetCatalogOptions, setResetCatalogOptions] =
+    useState<ResetCatalogOptions>(defaultResetCatalogOptions);
   const [uploadingField, setUploadingField] = useState<keyof SystemSettings | null>(
     null,
   );
@@ -228,6 +250,7 @@ export function SettingsPage() {
     setMessage(null);
     setResetError(null);
     setResetPassword("");
+    setResetCatalogOptions(defaultResetCatalogOptions);
     setResetStep("password");
   }
 
@@ -239,6 +262,16 @@ export function SettingsPage() {
     setResetError(null);
     setResetPassword("");
     setResetStep("closed");
+  }
+
+  function updateResetCatalogOption(
+    field: keyof ResetCatalogOptions,
+    value: ResetCatalogMode,
+  ) {
+    setResetCatalogOptions((current) => ({
+      ...current,
+      [field]: value,
+    }));
   }
 
   function continueReset(event: FormEvent<HTMLFormElement>) {
@@ -260,12 +293,17 @@ export function SettingsPage() {
 
     try {
       await api("/settings/reset-data", {
-        body: JSON.stringify({ password: resetPassword }),
+        body: JSON.stringify({
+          password: resetPassword,
+          productCategories: resetCatalogOptions.productCategories,
+          units: resetCatalogOptions.units,
+          warehouseCategories: resetCatalogOptions.warehouseCategories,
+        }),
         method: "POST",
       });
       setMessage({
         kind: "success",
-        text: "Dados do sistema apagados. Usuários preservados.",
+        text: "Dados do sistema apagados. Usuários, configurações e catálogos foram tratados conforme selecionado.",
       });
       setResetPassword("");
       setResetStep("closed");
@@ -287,6 +325,11 @@ export function SettingsPage() {
   const draftLogoUrl = resolveAssetUrl(draft.logoUrl);
   const draftLoginImageUrl = resolveAssetUrl(draft.loginImageUrl);
   const draftReportLogoUrl = resolveAssetUrl(draft.reportLogoUrl);
+  const resetProductCategoryLabel =
+    resetCatalogModeLabels[resetCatalogOptions.productCategories];
+  const resetWarehouseCategoryLabel =
+    resetCatalogModeLabels[resetCatalogOptions.warehouseCategories];
+  const resetUnitLabel = resetCatalogModeLabels[resetCatalogOptions.units];
 
   return (
     <section className="space-y-5">
@@ -601,7 +644,8 @@ export function SettingsPage() {
             <p className="max-w-3xl text-sm text-red-900">
               Apaga almoxarifados, produtos, estoques, movimentações, notas,
               solicitações e vínculos de almoxarifado. Usuários e configurações
-              permanecem.
+              permanecem. Categorias e unidades podem ser mantidas ou restauradas
+              para o padrão do sistema na próxima etapa.
             </p>
           </div>
         </div>
@@ -626,7 +670,7 @@ export function SettingsPage() {
                 <DialogTitle>Confirmar senha do admin</DialogTitle>
                 <DialogDescription>
                   Os dados do sistema serão apagados e os usuários serão
-                  mantidos.
+                  mantidos. Escolha também o que fazer com categorias e unidades.
                 </DialogDescription>
               </DialogHeader>
               <form className="space-y-4" onSubmit={continueReset}>
@@ -641,6 +685,60 @@ export function SettingsPage() {
                     value={resetPassword}
                   />
                 </FormField>
+                <div className="grid gap-3">
+                  <FormField>
+                    <Label htmlFor="settings-reset-product-categories">
+                      Categorias de produtos
+                    </Label>
+                    <Select
+                      id="settings-reset-product-categories"
+                      onChange={(event) =>
+                        updateResetCatalogOption(
+                          "productCategories",
+                          event.target.value as ResetCatalogMode,
+                        )
+                      }
+                      value={resetCatalogOptions.productCategories}
+                    >
+                      <option value="RESET_DEFAULTS">Restaurar padrão do sistema</option>
+                      <option value="KEEP">Manter atuais</option>
+                    </Select>
+                  </FormField>
+                  <FormField>
+                    <Label htmlFor="settings-reset-warehouse-categories">
+                      Categorias de almoxarifados
+                    </Label>
+                    <Select
+                      id="settings-reset-warehouse-categories"
+                      onChange={(event) =>
+                        updateResetCatalogOption(
+                          "warehouseCategories",
+                          event.target.value as ResetCatalogMode,
+                        )
+                      }
+                      value={resetCatalogOptions.warehouseCategories}
+                    >
+                      <option value="RESET_DEFAULTS">Restaurar padrão do sistema</option>
+                      <option value="KEEP">Manter atuais</option>
+                    </Select>
+                  </FormField>
+                  <FormField>
+                    <Label htmlFor="settings-reset-units">Unidades de medida</Label>
+                    <Select
+                      id="settings-reset-units"
+                      onChange={(event) =>
+                        updateResetCatalogOption(
+                          "units",
+                          event.target.value as ResetCatalogMode,
+                        )
+                      }
+                      value={resetCatalogOptions.units}
+                    >
+                      <option value="RESET_DEFAULTS">Restaurar padrão do sistema</option>
+                      <option value="KEEP">Manter atuais</option>
+                    </Select>
+                  </FormField>
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button onClick={closeResetDialog} type="button" variant="outline">
                     Cancelar
@@ -665,6 +763,27 @@ export function SettingsPage() {
                   Almoxarifados, produtos, estoques, movimentações, notas fiscais
                   e solicitações serão removidos permanentemente.
                 </p>
+              </div>
+              <div className="rounded-md border bg-muted/40 p-3 text-sm">
+                <p className="font-medium">Catálogos após o reset</p>
+                <dl className="mt-2 grid gap-1 text-muted-foreground">
+                  <div className="flex justify-between gap-3">
+                    <dt>Categorias de produtos</dt>
+                    <dd className="text-right text-foreground">
+                      {resetProductCategoryLabel}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt>Categorias de almoxarifados</dt>
+                    <dd className="text-right text-foreground">
+                      {resetWarehouseCategoryLabel}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt>Unidades de medida</dt>
+                    <dd className="text-right text-foreground">{resetUnitLabel}</dd>
+                  </div>
+                </dl>
               </div>
               {resetError ? <ResourceError message={resetError} /> : null}
               <div className="flex justify-end gap-2">
