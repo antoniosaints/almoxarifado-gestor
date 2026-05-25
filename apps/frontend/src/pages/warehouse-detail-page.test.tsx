@@ -210,6 +210,70 @@ describe("WarehouseTabs", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows entry requests to admins outside the general warehouse", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[]}
+            warehouse={warehouse}
+            warehouses={[warehouse]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openStockTab();
+
+    expect(screen.getByRole("button", { name: "Solicitar" })).toBeInTheDocument();
+  });
+
+  it("hides entry requests in the general warehouse", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={generalWarehouseWithStock}
+            warehouses={[generalWarehouseWithStock, warehouse]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openStockTab();
+
+    expect(screen.queryByRole("button", { name: "Solicitar" })).not.toBeInTheDocument();
+  });
+
   it("only offers products already stocked in the warehouse for operator requests", () => {
     render(
       <MemoryRouter>

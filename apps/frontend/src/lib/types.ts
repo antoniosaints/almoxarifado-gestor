@@ -86,6 +86,7 @@ export type Session = {
 };
 
 export type SystemSettings = {
+  faviconUrl?: string | null;
   id: string;
   loginBackgroundUrl?: string | null;
   loginImageUrl?: string | null;
@@ -239,4 +240,29 @@ export type Insights = {
   topProducts: TopProductInsight[];
   totals: InsightsSummary;
   warehouseRisk: WarehouseRiskInsight[];
+};
+
+export type WarehouseCsvPreviewRow = {
+  canImport: boolean;
+  cnpj: string;
+  companyName: string;
+  errors: string[];
+  index: number;
+  invoiceNumber: string;
+  issueDate?: string | null;
+  observation?: string | null;
+  productCode: string;
+  productName: string;
+  quantity: number;
+  rowNumber: number;
+  suggestedProduct?: Pick<Product, "code" | "id" | "name" | "unit"> | null;
+  suggestedUnit?: UnitOfMeasure | null;
+  totalValue: number;
+  unit: string;
+  unitPrice: number;
+  warnings: string[];
+};
+
+export type WarehouseCsvPreview = {
+  rows: WarehouseCsvPreviewRow[];
 };

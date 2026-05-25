@@ -264,6 +264,76 @@ describe("api", () => {
     expect(response.body.movement.unitPrice).toBe("99");
   });
 
+  it("lets admins create entry requests without changing stock", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    const destinationWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: destinationWarehouse.id,
+      },
+    });
+
+    const response = await request(app)
+      .post("/entry-requests")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }))
+      .send({
+        movementDate: "2026-05-25T12:00:00.000Z",
+        productId: product.id,
+        quantity: 3,
+        warehouseId: destinationWarehouse.id,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      productId: product.id,
+      quantity: 3,
+      status: "PENDING",
+      warehouseId: destinationWarehouse.id,
+    });
+    await expect(
+      prisma.stock.findUniqueOrThrow({
+        where: {
+          warehouseId_productId: {
+            productId: product.id,
+            warehouseId: generalWarehouse.id,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({ currentQuantity: 10 });
+    await expect(
+      prisma.stock.findUniqueOrThrow({
+        where: {
+          warehouseId_productId: {
+            productId: product.id,
+            warehouseId: destinationWarehouse.id,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({ currentQuantity: 0 });
+  });
+
   it("lets admins create operators assigned to warehouses", async () => {
     const { user, warehouseCategory } = await createBaseFixture(prisma);
     const warehouse = await prisma.warehouse.create({
@@ -709,6 +779,41 @@ describe("api", () => {
     await expect(prisma.productCategory.count()).resolves.toBe(0);
     await expect(prisma.warehouse.count()).resolves.toBe(0);
     await expect(prisma.warehouseCategory.count()).resolves.toBe(0);
+  });
+
+  it("saves favicon and image data urls in system settings", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const imageDataUrl =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
+
+    const response = await request(app)
+      .put("/settings")
+      .set("Authorization", authorizationFor(admin))
+      .send({
+        faviconUrl: imageDataUrl,
+        loginBackgroundUrl: imageDataUrl,
+        loginImageUrl: imageDataUrl,
+        loginSubtitle: "Entre com seguranca.",
+        loginTitle: "Almoxarifado",
+        logoUrl: imageDataUrl,
+        primaryColor: "#112233",
+        reportFooterText: "Rodape do relatorio.",
+        reportLogoUrl: imageDataUrl,
+        reportPrimaryColor: "#445566",
+        reportTitle: "Relatorio Municipal",
+        systemName: "ALMOX",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      faviconUrl: imageDataUrl,
+      logoUrl: imageDataUrl,
+      reportLogoUrl: imageDataUrl,
+    });
   });
 
   it("deletes invoices without deleting stock movements", async () => {

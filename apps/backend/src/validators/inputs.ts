@@ -93,6 +93,7 @@ const optionalUrl = optionalText.refine(
 );
 
 export const systemSettingsInput = z.object({
+  faviconUrl: optionalUrl,
   loginBackgroundUrl: optionalUrl,
   loginImageUrl: optionalUrl,
   loginSubtitle: z.string().trim().min(2, "Informe o subtitulo do login."),
@@ -148,6 +149,29 @@ export const minimumStockInput = z.object({
 export const stockBulkAdminInput = z.object({
   password: z.string().min(1, "Informe sua senha para confirmar."),
   stockIds: z.array(z.string().min(1)).min(1, "Selecione ao menos um estoque."),
+});
+
+export const warehouseCsvPreviewInput = z.object({
+  csv: z.string().min(1, "Selecione o CSV da compra."),
+});
+
+export const warehouseCsvImportInput = warehouseCsvPreviewInput.extend({
+  categoryId: z.string().min(1).optional().nullable(),
+  minimumQuantity: z.coerce
+    .number()
+    .int()
+    .min(0, "O estoque minimo nao pode ser negativo.")
+    .default(0),
+  rows: z
+    .array(
+      z.object({
+        action: z.enum(["IMPORT", "SKIP"]),
+        createProduct: z.boolean().optional().default(false),
+        productId: z.string().min(1).optional().nullable(),
+        rowIndex: z.coerce.number().int().min(0),
+      }),
+    )
+    .default([]),
 });
 
 export const systemResetInput = z.object({
