@@ -117,7 +117,7 @@ const generalWarehouseWithStock: Warehouse = {
 };
 
 function openOverviewTab() {
-  const overviewTab = screen.getByRole("tab", { name: "Visao geral" });
+  const overviewTab = screen.getByRole("tab", { name: "Visão geral" });
 
   fireEvent.pointerDown(overviewTab, { button: 0, ctrlKey: false });
   fireEvent.click(overviewTab);
@@ -131,7 +131,7 @@ function openStockTab() {
 }
 
 function openHistoryTab() {
-  const historyTab = screen.getByRole("tab", { name: "Historico" });
+  const historyTab = screen.getByRole("tab", { name: "Histórico" });
 
   fireEvent.pointerDown(historyTab, { button: 0, ctrlKey: false });
   fireEvent.click(historyTab);
@@ -208,6 +208,70 @@ describe("WarehouseTabs", () => {
     expect(
       screen.queryByRole("tab", { name: "Solicitar" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows entry requests to admins outside the general warehouse", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[]}
+            warehouse={warehouse}
+            warehouses={[warehouse]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openStockTab();
+
+    expect(screen.getByRole("button", { name: "Solicitar" })).toBeInTheDocument();
+  });
+
+  it("hides entry requests in the general warehouse", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={generalWarehouseWithStock}
+            warehouses={[generalWarehouseWithStock, warehouse]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openStockTab();
+
+    expect(screen.queryByRole("button", { name: "Solicitar" })).not.toBeInTheDocument();
   });
 
   it("only offers products already stocked in the warehouse for operator requests", () => {
@@ -428,9 +492,9 @@ describe("WarehouseTabs", () => {
     );
 
     openHistoryTab();
-    fireEvent.click(screen.getByRole("button", { name: "Exportar movimentacoes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Exportar movimentações" }));
 
-    expect(screen.getByRole("dialog", { name: "Exportar movimentacoes" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Exportar movimentações" })).toBeInTheDocument();
     expect(screen.getByLabelText("Periodo de")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Filtrar nota fiscal" })).toHaveTextContent(
       "Todas as notas",
@@ -474,7 +538,7 @@ describe("WarehouseTabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Selecionar todos" }));
 
     expect(screen.getByText("1 de 1 estoque(s) selecionado(s).")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Limpar selecao" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Limpar seleção" })).toBeInTheDocument();
   });
 
   it("shows statistical overview instead of duplicating the stock table", () => {
@@ -508,7 +572,7 @@ describe("WarehouseTabs", () => {
 
     expect(screen.queryByLabelText("Buscar produto no estoque...")).not.toBeInTheDocument();
     expect(screen.getByText("Valor total em estoque")).toBeInTheDocument();
-    expect(screen.getByText("Distribuicao por categoria")).toBeInTheDocument();
+    expect(screen.getByText("Distribuição por categoria")).toBeInTheDocument();
   });
 
   it("uses stock as the first tab and remembers the selected tab", () => {
@@ -571,7 +635,7 @@ describe("WarehouseTabs", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Exportar movimentacoes" }),
+      screen.getByRole("button", { name: "Exportar movimentações" }),
     ).toBeInTheDocument();
   });
 

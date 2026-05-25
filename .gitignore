@@ -9,3 +9,5 @@ dist
 coverage
 apps/backend/prisma/dev.db
 apps/backend/prisma/test.db
+apps/backend/prisma/schema.generated.prisma
+apps/backend/uploads

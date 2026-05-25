@@ -16,10 +16,12 @@ import {
 } from "./routes/settings-routes.js";
 import { stockRoutes } from "./routes/stock-routes.js";
 import { transferRequestRoutes } from "./routes/transfer-request-routes.js";
+import { uploadRoutes } from "./routes/upload-routes.js";
 import { unitRoutes } from "./routes/unit-routes.js";
 import { userRoutes } from "./routes/user-routes.js";
 import { warehouseCategoryRoutes } from "./routes/warehouse-category-routes.js";
 import { warehouseRoutes } from "./routes/warehouse-routes.js";
+import { getLocalUploadRoot } from "./services/upload-service.js";
 
 export const app = express();
 
@@ -28,7 +30,8 @@ app.use(
     origin: process.env.FRONTEND_URL ?? "http://127.0.0.1:5173",
   }),
 );
-app.use(express.json());
+app.use("/uploads", express.static(getLocalUploadRoot()));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT ?? "1mb" }));
 
 app.get("/health", (_request, response) => {
   response.json({ ok: true });
@@ -37,6 +40,7 @@ app.get("/health", (_request, response) => {
 app.use("/auth", authRoutes);
 app.use("/settings", publicSettingsRoutes);
 app.use(authenticate);
+app.use("/uploads", uploadRoutes);
 app.use("/entry-requests", entryRequestRoutes);
 app.use("/insights", insightRoutes);
 app.use("/invoices", invoiceRoutes);

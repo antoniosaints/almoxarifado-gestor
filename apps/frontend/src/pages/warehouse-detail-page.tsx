@@ -14,6 +14,7 @@ import {
   Plus,
   Trash2,
   TriangleAlert,
+  Upload,
 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -41,6 +42,14 @@ import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { api, apiFile, useApiResource } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -52,6 +61,7 @@ import type {
   Stock,
   UnitOfMeasure,
   Warehouse,
+  WarehouseCsvPreview,
 } from "@/lib/types";
 import { formatCurrency, formatDate, todayInputValue } from "@/lib/utils";
 import { movementLabels, MovementsTable } from "./movements-page";
@@ -94,6 +104,8 @@ type ProductDraft = {
 };
 
 const warehouseTabValues = ["stock", "overview", "history"] as const;
+const createProductCsvValue = "__create_product__";
+const skipCsvRowValue = "__skip_row__";
 
 function readStoredWarehouseTab(warehouseId: string) {
   if (typeof window === "undefined") {
@@ -219,7 +231,7 @@ function NewProductInlineDialog({
               />
             </FormField>
             <FormField>
-              <Label htmlFor="stock-product-description">Descricao</Label>
+              <Label htmlFor="stock-product-description">Descrição</Label>
               <Textarea
                 id="stock-product-description"
                 onChange={(event) =>
@@ -390,7 +402,7 @@ function InvoiceFields({
                 />
               </FormField>
               <FormField>
-                <Label htmlFor="invoice-number">Numero da nota</Label>
+                <Label htmlFor="invoice-number">Número da nota</Label>
                 <Input
                   id="invoice-number"
                   onChange={(event) =>
@@ -414,7 +426,7 @@ function InvoiceFields({
               />
             </FormField>
             <FormField>
-              <Label htmlFor="invoice-observation">Observacao adicional</Label>
+              <Label htmlFor="invoice-observation">Observação adicional</Label>
               <Textarea
                 id="invoice-observation"
                 onChange={(event) =>
@@ -667,7 +679,7 @@ function MovementForm({
 
       <div className="grid gap-4">
         <FormField>
-          <Label htmlFor={`${kind}-date`}>Data da movimentacao</Label>
+          <Label htmlFor={`${kind}-date`}>Data da movimentação</Label>
           <Input
             id={`${kind}-date`}
             onChange={(event) => setMovementDate(event.target.value)}
@@ -677,7 +689,7 @@ function MovementForm({
           />
         </FormField>
         <FormField>
-          <Label htmlFor={`${kind}-observation`}>Observacao</Label>
+          <Label htmlFor={`${kind}-observation`}>Observação</Label>
           <Textarea
             id={`${kind}-observation`}
             onChange={(event) => setObservation(event.target.value)}
@@ -694,7 +706,7 @@ function MovementForm({
         ) : (
           <ArrowRightLeft className="h-4 w-4" />
         )}
-        {kind === "entryRequest" ? "Enviar solicitacao" : "Registrar"}
+        {kind === "entryRequest" ? "Enviar solicitação" : "Registrar"}
       </Button>
     </Form>
   );
@@ -772,7 +784,7 @@ function latestMovementForStock(movements: Movement[], stock: Stock) {
 
 function movementSummary(movement: Movement | null) {
   if (!movement) {
-    return "Sem movimentacao";
+    return "Sem movimentação";
   }
 
   return `${movementLabels[movement.type]} - ${formatDate(movement.movementDate)}`;
@@ -844,7 +856,7 @@ function StockMovementsDialog({
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
-            <DialogTitle>Movimentacoes de {stock.product.name}</DialogTitle>
+            <DialogTitle>Movimentações de {stock.product.name}</DialogTitle>
             <DialogDescription>
               Entradas e saidas registradas neste almoxarifado.
             </DialogDescription>
@@ -859,7 +871,7 @@ function StockMovementsDialog({
           <MovementsTable movements={visibleMovements} showInvoiceAction />
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {visibleMovements.length} movimentacao(oes) no filtro atual.
+              {visibleMovements.length} movimentação(ões) no filtro atual.
             </p>
             <Button
               disabled={exporting}
@@ -992,12 +1004,12 @@ function WarehouseMovementsExportDialog({
     <>
       <Button onClick={() => setOpen(true)} type="button" variant="outline">
         <FileDown className="h-4 w-4" />
-        Exportar movimentacoes
+        Exportar movimentações
       </Button>
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Exportar movimentacoes</DialogTitle>
+            <DialogTitle>Exportar movimentações</DialogTitle>
             <DialogDescription>
               Exporte todo o historico ou filtre por periodo, nota e produto.
             </DialogDescription>
@@ -1015,7 +1027,7 @@ function WarehouseMovementsExportDialog({
                 />
               </FormField>
               <FormField>
-                <Label htmlFor="warehouse-movement-export-to">Periodo ate</Label>
+                <Label htmlFor="warehouse-movement-export-to">Período até</Label>
                 <Input
                   id="warehouse-movement-export-to"
                   onChange={(event) => setTo(event.target.value)}
@@ -1129,7 +1141,7 @@ function BulkStockActionDialog({
       setMessage(
         caughtError instanceof Error
           ? caughtError.message
-          : "Falha ao concluir acao.",
+          : "Falha ao concluir ação.",
       );
       setSaving(false);
     }
@@ -1170,7 +1182,7 @@ function BulkStockActionDialog({
                 type="button"
                 variant="outline"
               >
-                {allSelected ? "Limpar selecao" : "Selecionar todos"}
+                {allSelected ? "Limpar seleção" : "Selecionar todos"}
               </Button>
             </div>
             <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-2">
@@ -1472,13 +1484,13 @@ function StockTable({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar estoque minimo</DialogTitle>
+            <DialogTitle>Editar estoque mínimo</DialogTitle>
             <DialogDescription>{editingStock?.product.name}</DialogDescription>
           </DialogHeader>
           {editingStock ? (
             <Form onSubmit={saveMinimum}>
               <FormField>
-                <Label htmlFor="minimum-stock">Estoque minimo</Label>
+                <Label htmlFor="minimum-stock">Estoque mínimo</Label>
                 <Input
                   id="minimum-stock"
                   min="0"
@@ -1488,7 +1500,7 @@ function StockTable({
                   value={minimum}
                 />
               </FormField>
-              <Button type="submit">Salvar estoque minimo</Button>
+              <Button type="submit">Salvar estoque mínimo</Button>
             </Form>
           ) : null}
         </DialogContent>
@@ -1570,7 +1582,7 @@ function WarehouseOverview({
         <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
           <AlertTitle>Estoque acompanhado</AlertTitle>
           <AlertDescription className="text-emerald-900">
-            Nenhum item deste almoxarifado esta abaixo do minimo.
+            Nenhum item deste almoxarifado esta abaixo do mínimo.
           </AlertDescription>
         </Alert>
       )}
@@ -1602,9 +1614,9 @@ function WarehouseOverview({
         <section className="rounded-lg border bg-card p-4">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="font-semibold">Distribuicao por categoria</h3>
+              <h3 className="font-semibold">Distribuição por categoria</h3>
               <p className="text-sm text-muted-foreground">
-                Participacao por valor total em estoque.
+                Participação por valor total em estoque.
               </p>
             </div>
             <Badge variant="outline">{categoryStats.length} categorias</Badge>
@@ -1646,7 +1658,7 @@ function WarehouseOverview({
 
         <section className="rounded-lg border bg-card p-4">
           <div className="mb-4">
-            <h3 className="font-semibold">Ultimas movimentacoes</h3>
+            <h3 className="font-semibold">Ultimas movimentações</h3>
             <p className="text-sm text-muted-foreground">
               Atividade recente deste almoxarifado.
             </p>
@@ -1682,7 +1694,7 @@ function WarehouseOverview({
             </div>
           ) : (
             <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Nenhuma movimentacao registrada no periodo.
+              Nenhuma movimentação registrada no periodo.
             </p>
           )}
         </section>
@@ -1694,6 +1706,345 @@ function WarehouseOverview({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function WarehouseCsvImportDialog({
+  onImported,
+  productCategories,
+  products,
+  warehouse,
+}: {
+  onImported: () => Promise<void>;
+  productCategories: ProductCategory[];
+  products: Product[];
+  warehouse: Warehouse;
+}) {
+  const [open, setOpen] = useState(false);
+  const [csv, setCsv] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [categoryId, setCategoryId] = useState(productCategories[0]?.id ?? "");
+  const [minimumQuantity, setMinimumQuantity] = useState("0");
+  const [preview, setPreview] = useState<WarehouseCsvPreview | null>(null);
+  const [rowActions, setRowActions] = useState<Record<number, string>>({});
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const productOptions = [
+    {
+      label: "Nao importar esta linha",
+      searchText: "ignorar pular",
+      value: skipCsvRowValue,
+    },
+    {
+      label: "Criar produto",
+      searchText: "novo cadastrar",
+      value: createProductCsvValue,
+    },
+    ...products.map((product) => ({
+      label: `${product.code} - ${product.name}`,
+      searchText: `${product.category.name} ${product.unit.abbreviation}`,
+      value: product.id,
+    })),
+  ];
+  const needsCategory = (preview?.rows ?? []).some(
+    (row) => (rowActions[row.index] ?? createProductCsvValue) === createProductCsvValue,
+  );
+  const canSubmit =
+    Boolean(preview) &&
+    (!needsCategory || Boolean(categoryId)) &&
+    (preview?.rows ?? []).every(
+      (row) => row.canImport || rowActions[row.index] === skipCsvRowValue,
+    );
+
+  function openDialog() {
+    setCsv("");
+    setFileName("");
+    setCategoryId(productCategories[0]?.id ?? "");
+    setMinimumQuantity("0");
+    setPreview(null);
+    setRowActions({});
+    setMessage(null);
+    setOpen(true);
+  }
+
+  function downloadTemplate() {
+    const content = [
+      "numero_nota;cnpj_empresa;nome_empresa;data_nota;codigo_produto;nome_produto;unidade;quantidade;valor_unitario;valor_total;observacao",
+      "NF-001;12345678000190;Fornecedor Municipal;2026-05-25;PAP-A4;Papel A4;PCT;10;25,50;255,00;Compra mensal",
+    ].join("\n");
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = "modelo-importacao-estoque.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function selectCsv(file?: File) {
+    setMessage(null);
+
+    if (!file) {
+      setCsv("");
+      setFileName("");
+      setPreview(null);
+      setRowActions({});
+      return;
+    }
+
+    if (!file.name.toLocaleLowerCase("pt-BR").endsWith(".csv")) {
+      setMessage("Selecione um arquivo CSV.");
+      return;
+    }
+
+    const selectedCsv = await file.text();
+
+    setCsv(selectedCsv);
+    setFileName(file.name);
+    setPreview(null);
+    setRowActions({});
+    setPreviewLoading(true);
+
+    try {
+      const nextPreview = await api<WarehouseCsvPreview>(
+        `/warehouses/${warehouse.id}/import-csv/preview`,
+        {
+          body: JSON.stringify({ csv: selectedCsv }),
+          method: "POST",
+        },
+      );
+
+      setPreview(nextPreview);
+      setRowActions(
+        Object.fromEntries(
+          nextPreview.rows.map((row) => [
+            row.index,
+            row.canImport
+              ? row.suggestedProduct?.id ?? createProductCsvValue
+              : skipCsvRowValue,
+          ]),
+        ),
+      );
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error ? caughtError.message : "Falha ao ler CSV.",
+      );
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      await api(`/warehouses/${warehouse.id}/import-csv`, {
+        body: JSON.stringify({
+          categoryId: categoryId || undefined,
+          csv,
+          minimumQuantity,
+          rows: (preview?.rows ?? []).map((row) => {
+            const action = rowActions[row.index] ?? createProductCsvValue;
+
+            if (action === skipCsvRowValue) {
+              return {
+                action: "SKIP",
+                rowIndex: row.index,
+              };
+            }
+
+            return {
+              action: "IMPORT",
+              createProduct: action === createProductCsvValue,
+              productId: action !== createProductCsvValue ? action : null,
+              rowIndex: row.index,
+            };
+          }),
+        }),
+        method: "POST",
+      });
+      await onImported();
+      setOpen(false);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error ? caughtError.message : "Falha ao importar CSV.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={openDialog} type="button" variant="outline">
+        <Upload className="h-4 w-4" />
+        Importar CSV
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>Importar CSV da compra</DialogTitle>
+            <DialogDescription>
+              Confira cada linha antes de atualizar o estoque de {warehouse.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={submit}>
+            {message ? <ResourceError message={message} /> : null}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_14rem]">
+              <FormField>
+                <Label htmlFor="stock-csv-file">Arquivo CSV</Label>
+                <Input
+                  accept=".csv,text/csv"
+                  id="stock-csv-file"
+                  onChange={(event) => void selectCsv(event.target.files?.[0])}
+                  type="file"
+                />
+                {fileName ? (
+                  <p className="text-xs text-muted-foreground">{fileName}</p>
+                ) : null}
+              </FormField>
+              <div className="flex items-end">
+                <Button
+                  className="w-full"
+                  onClick={downloadTemplate}
+                  type="button"
+                  variant="outline"
+                >
+                  <FileDown className="h-4 w-4" />
+                  Baixar modelo
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField>
+                <Label htmlFor="stock-csv-category">Categoria para novos produtos</Label>
+                <SearchSelect
+                  ariaLabel="Categoria para novos produtos"
+                  id="stock-csv-category"
+                  onValueChange={setCategoryId}
+                  options={productCategories.map((category) => ({
+                    label: category.name,
+                    value: category.id,
+                  }))}
+                  placeholder="Selecione"
+                  value={categoryId}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="stock-csv-minimum">Estoque minimo inicial</Label>
+                <Input
+                  id="stock-csv-minimum"
+                  min="0"
+                  onChange={(event) => setMinimumQuantity(event.target.value)}
+                  required
+                  type="number"
+                  value={minimumQuantity}
+                />
+              </FormField>
+            </div>
+
+            {previewLoading ? <LoadingLine /> : null}
+
+            {preview ? (
+              <div className="overflow-hidden rounded-lg border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Linha</TableHead>
+                      <TableHead>Nota / fornecedor</TableHead>
+                      <TableHead>Produto no CSV</TableHead>
+                      <TableHead className="text-right">Qtd.</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="min-w-72">Ação</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {preview.rows.map((row) => (
+                      <TableRow key={row.index}>
+                        <TableCell>{row.rowNumber}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-medium">
+                              {row.invoiceNumber || "Sem nota"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {[row.companyName, row.cnpj]
+                                .filter(Boolean)
+                                .join(" - ") || "-"}
+                            </p>
+                            {row.errors.map((error) => (
+                              <Badge key={error} variant="zero">
+                                {error}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-medium">{row.productName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {[row.productCode || "-", row.unit].join(" / ")}
+                            </p>
+                            {row.suggestedProduct ? (
+                              <Badge variant="success">Sugerido</Badge>
+                            ) : (
+                              <Badge variant="outline">Novo</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {row.quantity} {row.unit}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="space-y-1">
+                            <p>{formatCurrency(row.totalValue)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatCurrency(row.unitPrice)}
+                            </p>
+                            {row.warnings.map((warning) => (
+                              <p className="text-xs text-amber-600" key={warning}>
+                                {warning}
+                              </p>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <SearchSelect
+                            ariaLabel={`Acao da linha ${row.rowNumber}`}
+                            id={`stock-csv-row-${row.index}`}
+                            onValueChange={(value) =>
+                              setRowActions((current) => ({
+                                ...current,
+                                [row.index]: value,
+                              }))
+                            }
+                            options={productOptions}
+                            placeholder="Selecione"
+                            value={rowActions[row.index] ?? createProductCsvValue}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : null}
+
+            <Button disabled={!canSubmit || saving || previewLoading} type="submit">
+              <Upload className="h-4 w-4" />
+              {saving ? "Importando..." : "Confirmar importacao"}
+            </Button>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -1759,27 +2110,37 @@ export function WarehouseTabs({
           </TabsTrigger>
           <TabsTrigger onClick={() => selectTab("overview")} value="overview">
             <ChartArea size={15} className="mr-1" />
-            Visao geral
+            Visão geral
           </TabsTrigger>
           <TabsTrigger onClick={() => selectTab("history")} value="history">
             <Clock size={15} className="mr-1" />
-            Historico
+            Histórico
           </TabsTrigger>
         </TabsList>
         <div className="flex flex-wrap gap-2">
           {activeTab === "stock" ? (
-            <MovementDialog
-              kind="entry"
-              onSaved={onMovementSaved}
-              onProductCreated={onProductCreated}
-              productCategories={productCategories}
-              products={products}
-              units={units}
-              warehouse={warehouse}
-              warehouses={warehouses}
-            />
+            <>
+              <WarehouseCsvImportDialog
+                onImported={onMovementSaved}
+                productCategories={productCategories ?? []}
+                products={products}
+                warehouse={warehouse}
+              />
+              <MovementDialog
+                kind="entry"
+                onSaved={onMovementSaved}
+                onProductCreated={onProductCreated}
+                productCategories={productCategories}
+                products={products}
+                units={units}
+                warehouse={warehouse}
+                warehouses={warehouses}
+              />
+            </>
           ) : null}
-          {operator && activeTab === "stock" && !warehouse.isGeneral ? (
+          {(operator || session?.user.role === "ADMIN") &&
+          activeTab === "stock" &&
+          !warehouse.isGeneral ? (
             <MovementDialog
               kind="entryRequest"
               onSaved={onMovementSaved}

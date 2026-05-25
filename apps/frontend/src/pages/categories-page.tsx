@@ -163,7 +163,7 @@ function CategoryPanel<T extends { description?: string | null; id: string; name
                 />
               </FormField>
               <FormField>
-                <Label htmlFor={`${path}-description`}>Descricao</Label>
+                <Label htmlFor={`${path}-description`}>Descrição</Label>
                 <Textarea
                   id={`${path}-description`}
                   onChange={(event) =>
@@ -225,7 +225,7 @@ export function CategoriesPage() {
   return (
     <section className="space-y-5">
       <div>
-        <p className="text-sm text-muted-foreground">Organizacao</p>
+        <p className="text-sm text-muted-foreground">Organização</p>
         <h2 className="text-2xl font-semibold">Categorias</h2>
       </div>
       <Tabs defaultValue="warehouses">

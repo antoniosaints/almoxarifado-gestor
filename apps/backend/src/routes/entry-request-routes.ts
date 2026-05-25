@@ -96,7 +96,7 @@ entryRequestRoutes.get(
 
 entryRequestRoutes.post(
   "/",
-  requireRole(UserRole.OPERATOR),
+  requireRole(UserRole.ADMIN, UserRole.OPERATOR),
   asyncHandler(async (request, response) => {
     const user = currentUser(response);
     const input = entryRequestInput.parse(request.body);

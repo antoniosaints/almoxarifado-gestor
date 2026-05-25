@@ -99,15 +99,15 @@ export function InsightsPage() {
   }
 
   if (!insights.data) {
-    return <ResourceError message="Nao foi possivel carregar os indicadores." />;
+    return <ResourceError message="Não foi possivel carregar os indicadores." />;
   }
 
   const { totals } = insights.data;
   const movementChartData = [
     { name: "Entradas", path: "/movements", value: totals.monthlyEntries },
     { name: "Saidas", path: "/movements", value: totals.monthlyOutputs },
-    { name: "Transferencias", path: "/requests", value: totals.monthlyTransfers },
-    { name: "Pendencias", path: "/requests", value: totals.pendingRequests },
+    { name: "Transferências", path: "/requests", value: totals.monthlyTransfers },
+    { name: "Pendências", path: "/requests", value: totals.pendingRequests },
   ];
   const alertChartData = [
     { name: "Baixo estoque", value: totals.lowStockItems },
@@ -123,7 +123,7 @@ export function InsightsPage() {
   return (
     <section className="space-y-6">
       <div>
-        <p className="text-sm text-muted-foreground">Inteligencia operacional</p>
+        <p className="text-sm text-muted-foreground">Inteligência operacional</p>
         <h2 className="text-2xl font-semibold">Insights</h2>
       </div>
 
@@ -148,7 +148,7 @@ export function InsightsPage() {
         <button className="text-left" onClick={() => navigate("/requests")} type="button">
           <SummaryCard
             icon={<ClipboardList className="h-4 w-4" />}
-            label="Pendencias"
+            label="Pendências"
             value={formatInteger(totals.pendingRequests)}
           />
         </button>
@@ -157,7 +157,7 @@ export function InsightsPage() {
       <div className="grid min-w-0 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="min-w-0">
           <CardHeader>
-            <CardTitle>Movimentacao e pendencias</CardTitle>
+            <CardTitle>Movimentação e pendências</CardTitle>
             <CardDescription>
               Clique em uma barra para abrir o fluxo relacionado.
             </CardDescription>
@@ -191,7 +191,7 @@ export function InsightsPage() {
         <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Alertas de estoque</CardTitle>
-            <CardDescription>Baixo estoque e itens zerados para reposicao.</CardDescription>
+            <CardDescription>Baixo estoque e itens zerados para reposição.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 lg:grid-cols-[13rem_1fr]">
             <div className={chartContainerClass("h-52 min-h-52")}>
@@ -237,7 +237,7 @@ export function InsightsPage() {
               </div>
               <Button onClick={scrollToAlertStocks} type="button" variant="outline">
                 <PackagePlus className="h-4 w-4" />
-                Ver reposicao
+                Ver reposição
               </Button>
             </div>
           </CardContent>
@@ -260,7 +260,7 @@ export function InsightsPage() {
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
-                <p className="text-xs text-muted-foreground">Quantidade fisica</p>
+                <p className="text-xs text-muted-foreground">Quantidade física</p>
                 <p className="text-xl font-semibold">
                   {formatInteger(totals.stockQuantity)}
                 </p>
@@ -269,7 +269,7 @@ export function InsightsPage() {
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
-                <p className="text-xs text-muted-foreground">Valor movimentado no mes</p>
+                <p className="text-xs text-muted-foreground">Valor movimentado no mês</p>
                 <p className="text-xl font-semibold">
                   {formatCurrency(totals.monthlyValue)}
                 </p>
@@ -281,8 +281,8 @@ export function InsightsPage() {
 
         <Card className="min-w-0">
           <CardHeader>
-            <CardTitle>Top produtos do mes</CardTitle>
-            <CardDescription>Clique em uma barra para acessar o catalogo.</CardDescription>
+            <CardTitle>Top produtos do mês</CardTitle>
+            <CardDescription>Clique em uma barra para acessar o catálogo.</CardDescription>
           </CardHeader>
           <CardContent className={chartContainerClass("h-72 min-h-72")}>
             <ResponsiveContainer height="100%" minWidth={0} width="100%">
@@ -329,9 +329,9 @@ export function InsightsPage() {
 
       <section className="space-y-3" id="alert-stocks">
         <div>
-          <h3 className="text-lg font-semibold">Itens em alerta para reposicao</h3>
+          <h3 className="text-lg font-semibold">Itens em alerta para reposição</h3>
           <p className="text-sm text-muted-foreground">
-            Estoques baixos ou zerados com acesso rapido ao almoxarifado.
+            Estoques baixos ou zerados com acesso rápido ao almoxarifado.
           </p>
         </div>
         <DataTable
@@ -410,7 +410,7 @@ export function InsightsPage() {
         <div>
           <h3 className="text-lg font-semibold">Almoxarifados com risco</h3>
           <p className="text-sm text-muted-foreground">
-            Priorizacao por baixo estoque e itens zerados.
+            Priorização por baixo estoque e itens zerados.
           </p>
         </div>
         <DataTable
@@ -483,7 +483,7 @@ export function InsightsPage() {
         <section className="space-y-3">
           <div>
             <h3 className="text-lg font-semibold">Produtos mais movimentados</h3>
-            <p className="text-sm text-muted-foreground">Top 5 do mes corrente.</p>
+            <p className="text-sm text-muted-foreground">Top 5 do mês corrente.</p>
           </div>
           <DataTable
             columns={[

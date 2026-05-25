@@ -217,7 +217,7 @@ export function WarehousesPage() {
                 />
               </FormField>
               <FormField>
-                <Label htmlFor="warehouse-description">Descricao</Label>
+                <Label htmlFor="warehouse-description">Descrição</Label>
                 <Textarea
                   id="warehouse-description"
                   onChange={(event) =>

@@ -3,9 +3,15 @@ import { Router } from "express";
 import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
 import { assertWarehouseAccess, warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
+import {
+  importWarehouseCsv,
+  previewWarehouseCsvImport,
+} from "../services/stock-csv-import-service.js";
 import { createWarehouse, updateWarehouse } from "../services/warehouse-service.js";
 import {
   idParam,
+  warehouseCsvImportInput,
+  warehouseCsvPreviewInput,
   warehouseIdParam,
   warehouseInput,
 } from "../validators/inputs.js";
@@ -88,6 +94,40 @@ warehouseRoutes.get(
           },
         },
         orderBy: { product: { name: "asc" } },
+      }),
+    );
+  }),
+);
+
+warehouseRoutes.post(
+  "/:warehouseId/import-csv/preview",
+  asyncHandler(async (request, response) => {
+    const { warehouseId } = warehouseIdParam.parse(request.params);
+    const input = warehouseCsvPreviewInput.parse(request.body);
+    await assertWarehouseAccess(prisma, currentUser(response), warehouseId);
+
+    response.json(
+      await previewWarehouseCsvImport(prisma, {
+        ...input,
+        warehouseId,
+      }),
+    );
+  }),
+);
+
+warehouseRoutes.post(
+  "/:warehouseId/import-csv",
+  asyncHandler(async (request, response) => {
+    const { warehouseId } = warehouseIdParam.parse(request.params);
+    const user = currentUser(response);
+    const input = warehouseCsvImportInput.parse(request.body);
+    await assertWarehouseAccess(prisma, user, warehouseId);
+
+    response.status(201).json(
+      await importWarehouseCsv(prisma, {
+        ...input,
+        userId: user.id,
+        warehouseId,
       }),
     );
   }),

@@ -308,7 +308,7 @@ function InvoiceXmlImportDialog({
               />
             </FormField>
             <FormField>
-              <Label htmlFor="invoice-import-category">Categoria padrao</Label>
+              <Label htmlFor="invoice-import-category">Categoria padrão</Label>
               <SearchSelect
                 ariaLabel="Categoria padrao dos novos produtos"
                 id="invoice-import-category"
@@ -412,7 +412,7 @@ function InvoiceXmlImportDialog({
                         <TableHead>Produto no XML</TableHead>
                         <TableHead className="text-right">Qtd.</TableHead>
                         <TableHead className="text-right">Valor</TableHead>
-                        <TableHead className="min-w-72">Produto no catalogo</TableHead>
+                        <TableHead className="min-w-72">Produto no catálogo</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -565,6 +565,7 @@ function InvoiceExportDialog({
                 <Label htmlFor="invoice-export-company">Empresa</Label>
                 <Input
                   id="invoice-export-company"
+                  placeholder="Empresa"
                   onChange={(event) => setCompanyName(event.target.value)}
                   value={companyName}
                 />
@@ -573,6 +574,7 @@ function InvoiceExportDialog({
                 <Label htmlFor="invoice-export-cnpj">CNPJ</Label>
                 <Input
                   id="invoice-export-cnpj"
+                  placeholder="CNPJ"
                   onChange={(event) => setCnpj(event.target.value)}
                   value={cnpj}
                 />
@@ -582,6 +584,7 @@ function InvoiceExportDialog({
               <Label htmlFor="invoice-export-number">Numero da nota</Label>
               <Input
                 id="invoice-export-number"
+                placeholder="010101"
                 onChange={(event) => setNumber(event.target.value)}
                 value={number}
               />
@@ -622,7 +625,7 @@ export function InvoiceMovementsDialog({
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
-            <DialogTitle>Movimentacoes da nota {invoice.number}</DialogTitle>
+            <DialogTitle>Movimentações da nota {invoice.number}</DialogTitle>
             <DialogDescription>
               {invoice.companyName} em {formatDate(invoice.issueDate)}
             </DialogDescription>
@@ -675,7 +678,7 @@ export function InvoiceMovementsDialog({
             <MovementsTable movements={movements} />
           ) : (
             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Nenhuma movimentacao vinculada a esta nota.
+              Nenhuma movimentação vinculada a esta nota.
             </div>
           )}
           <div className="flex flex-col gap-1 rounded-lg border bg-card p-3 text-right">
@@ -830,7 +833,7 @@ export function InvoicesPage() {
 
       <div className="grid gap-4 rounded-lg border bg-card p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto]">
         <FormField>
-          <Label htmlFor="invoice-from">Emissao de</Label>
+          <Label htmlFor="invoice-from">Emissão de</Label>
           <Input
             id="invoice-from"
             onChange={(event) => setFrom(event.target.value)}
@@ -839,7 +842,7 @@ export function InvoicesPage() {
           />
         </FormField>
         <FormField>
-          <Label htmlFor="invoice-to">Emissao ate</Label>
+          <Label htmlFor="invoice-to">Emissão ate</Label>
           <Input
             id="invoice-to"
             onChange={(event) => setTo(event.target.value)}
@@ -848,15 +851,15 @@ export function InvoicesPage() {
           />
         </FormField>
         <FormField>
-          <Label htmlFor="invoice-movements">Movimentacoes</Label>
+          <Label htmlFor="invoice-movements">Movimentações</Label>
           <Select
             id="invoice-movements"
             onChange={(event) => setMovementFilter(event.target.value)}
             value={movementFilter}
           >
             <option value="all">Todas</option>
-            <option value="linked">Com movimentacoes</option>
-            <option value="unlinked">Sem movimentacoes</option>
+            <option value="linked">Com movimentações</option>
+            <option value="unlinked">Sem movimentações</option>
           </Select>
         </FormField>
         <Button className="self-end" onClick={clearFilters} type="button" variant="outline">

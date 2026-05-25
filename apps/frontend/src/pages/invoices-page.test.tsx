@@ -57,7 +57,7 @@ describe("InvoiceMovementsDialog", () => {
 
     fireEvent.click(screen.getByLabelText("Consultar movimentacoes da nota NF-101"));
 
-    expect(screen.getByText("Movimentacoes da nota NF-101")).toBeInTheDocument();
+    expect(screen.getByText("Movimentações da nota NF-101")).toBeInTheDocument();
     expect(screen.getByText("Papel A4")).toBeInTheDocument();
     expect(screen.getByText("Almoxarifado da Saude")).toBeInTheDocument();
     expect(screen.getByText("3 PCT")).toBeInTheDocument();

@@ -8,6 +8,7 @@ import {
   RotateCcw,
   Save,
   Sun,
+  Upload,
 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
@@ -26,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/lib/api";
+import { api, apiUpload } from "@/lib/api";
 import {
   defaultSystemSettings,
   useSystemSettings,
@@ -38,8 +39,88 @@ type SettingsMessage = {
   text: string;
 };
 
+const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+const maxImageSize = 1024 * 1024;
+const settingsUploadSlots: Partial<Record<keyof SystemSettings, string>> = {
+  faviconUrl: "favicon",
+  loginBackgroundUrl: "login-background",
+  loginImageUrl: "login-image",
+  logoUrl: "brand-logo",
+  reportLogoUrl: "report-logo",
+};
+
+type SettingsUploadResponse = {
+  field: keyof SystemSettings;
+  url: string;
+};
+
 function normalizeColor(color: string, fallback = defaultSystemSettings.primaryColor) {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
+}
+
+function validateImageFile(file: File) {
+  if (!acceptedImageTypes.includes(file.type)) {
+    throw new Error("Use PNG, JPG, WEBP ou SVG.");
+  }
+
+  if (file.size > maxImageSize) {
+    throw new Error("A imagem deve ter no maximo 1 MB.");
+  }
+}
+
+function ImageUrlField({
+  field,
+  label,
+  onUpload,
+  placeholder = "https://...",
+  uploading,
+  updateDraft,
+  value,
+}: {
+  field: keyof SystemSettings;
+  label: string;
+  onUpload: (field: keyof SystemSettings, file?: File) => void;
+  placeholder?: string;
+  uploading?: boolean;
+  updateDraft: (field: keyof SystemSettings, value: string) => void;
+  value?: string | null;
+}) {
+  const inputId = `settings-${String(field)}`;
+  const uploadId = `${inputId}-upload`;
+
+  return (
+    <FormField>
+      <Label htmlFor={inputId}>{label}</Label>
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <Input
+          id={inputId}
+          onChange={(event) => updateDraft(field, event.target.value)}
+          placeholder={placeholder}
+          value={value ?? ""}
+        />
+        <Button asChild type="button" variant="outline">
+          <label
+            aria-disabled={uploading}
+            className={`cursor-pointer ${uploading ? "pointer-events-none opacity-60" : ""}`}
+            htmlFor={uploadId}
+          >
+            <Upload className="h-4 w-4" />
+            {uploading ? "Enviando..." : "Upload"}
+          </label>
+        </Button>
+      </div>
+      <Input
+        accept={acceptedImageTypes.join(",")}
+        className="sr-only"
+        id={uploadId}
+        onChange={(event) => {
+          onUpload(field, event.target.files?.[0]);
+          event.currentTarget.value = "";
+        }}
+        type="file"
+      />
+    </FormField>
+  );
 }
 
 export function SettingsPage() {
@@ -60,6 +141,9 @@ export function SettingsPage() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [uploadingField, setUploadingField] = useState<keyof SystemSettings | null>(
+    null,
+  );
 
   useEffect(() => {
     setDraft(settings);
@@ -70,6 +154,43 @@ export function SettingsPage() {
       ...current,
       [field]: value,
     }));
+  }
+
+  async function uploadImage(field: keyof SystemSettings, file?: File) {
+    if (!file) {
+      return;
+    }
+
+    setMessage(null);
+    setUploadingField(field);
+
+    try {
+      validateImageFile(file);
+
+      const slot = settingsUploadSlots[field];
+
+      if (!slot) {
+        throw new Error("Campo de upload invalido.");
+      }
+
+      const uploaded = await apiUpload<SettingsUploadResponse>(
+        `/uploads/settings/${slot}`,
+        file,
+      );
+
+      updateDraft(field, uploaded.url);
+      setMessage({ kind: "success", text: "Imagem enviada." });
+    } catch (caughtError) {
+      setMessage({
+        kind: "error",
+        text:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Falha ao carregar imagem.",
+      });
+    } finally {
+      setUploadingField(null);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -252,6 +373,14 @@ export function SettingsPage() {
                   />
                 </FormField>
               </div>
+              <ImageUrlField
+                field="faviconUrl"
+                label="Favicon"
+                onUpload={(field, file) => void uploadImage(field, file)}
+                uploading={uploadingField === "faviconUrl"}
+                updateDraft={updateDraft}
+                value={draft.faviconUrl}
+              />
             </section>
           </TabsContent>
 
@@ -267,15 +396,14 @@ export function SettingsPage() {
                     value={draft.systemName}
                   />
                 </FormField>
-                <FormField>
-                  <Label htmlFor="settings-logo-url">Logo</Label>
-                  <Input
-                    id="settings-logo-url"
-                    onChange={(event) => updateDraft("logoUrl", event.target.value)}
-                    placeholder="https://..."
-                    value={draft.logoUrl ?? ""}
-                  />
-                </FormField>
+                <ImageUrlField
+                  field="logoUrl"
+                  label="Logo"
+                  onUpload={(field, file) => void uploadImage(field, file)}
+                  uploading={uploadingField === "logoUrl"}
+                  updateDraft={updateDraft}
+                  value={draft.logoUrl}
+                />
               </div>
               <div className="rounded-lg border bg-background p-4">
                 <div className="flex items-center gap-3">
@@ -320,26 +448,22 @@ export function SettingsPage() {
                     value={draft.loginSubtitle}
                   />
                 </FormField>
-                <FormField>
-                  <Label htmlFor="settings-login-background-url">Background do login</Label>
-                  <Input
-                    id="settings-login-background-url"
-                    onChange={(event) =>
-                      updateDraft("loginBackgroundUrl", event.target.value)
-                    }
-                    placeholder="https://..."
-                    value={draft.loginBackgroundUrl ?? ""}
-                  />
-                </FormField>
-                <FormField>
-                  <Label htmlFor="settings-login-image-url">Imagem do login</Label>
-                  <Input
-                    id="settings-login-image-url"
-                    onChange={(event) => updateDraft("loginImageUrl", event.target.value)}
-                    placeholder="https://..."
-                    value={draft.loginImageUrl ?? ""}
-                  />
-                </FormField>
+                <ImageUrlField
+                  field="loginBackgroundUrl"
+                  label="Background do login"
+                  onUpload={(field, file) => void uploadImage(field, file)}
+                  uploading={uploadingField === "loginBackgroundUrl"}
+                  updateDraft={updateDraft}
+                  value={draft.loginBackgroundUrl}
+                />
+                <ImageUrlField
+                  field="loginImageUrl"
+                  label="Imagem do login"
+                  onUpload={(field, file) => void uploadImage(field, file)}
+                  uploading={uploadingField === "loginImageUrl"}
+                  updateDraft={updateDraft}
+                  value={draft.loginImageUrl}
+                />
               </div>
               <div className="overflow-hidden rounded-lg border bg-background">
                 {draft.loginImageUrl ? (
@@ -401,15 +525,14 @@ export function SettingsPage() {
                     value={draft.reportTitle}
                   />
                 </FormField>
-                <FormField>
-                  <Label htmlFor="settings-report-logo-url">Logo do relatorio</Label>
-                  <Input
-                    id="settings-report-logo-url"
-                    onChange={(event) => updateDraft("reportLogoUrl", event.target.value)}
-                    placeholder="https://..."
-                    value={draft.reportLogoUrl ?? ""}
-                  />
-                </FormField>
+                <ImageUrlField
+                  field="reportLogoUrl"
+                  label="Logo do relatorio"
+                  onUpload={(field, file) => void uploadImage(field, file)}
+                  uploading={uploadingField === "reportLogoUrl"}
+                  updateDraft={updateDraft}
+                  value={draft.reportLogoUrl}
+                />
                 <FormField>
                   <Label htmlFor="settings-report-footer">Rodape</Label>
                   <Textarea

@@ -7,9 +7,11 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
     "test": "vitest run",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "prisma db seed"
+    "db:prepare": "node scripts/prepare-prisma-schema.mjs",
+    "db:generate": "pnpm db:prepare && prisma generate --schema prisma/schema.generated.prisma",
+    "db:migrate": "pnpm db:prepare && prisma migrate dev --schema prisma/schema.generated.prisma",
+    "db:push": "pnpm db:prepare && prisma db push --schema prisma/schema.generated.prisma",
+    "db:seed": "pnpm db:prepare && prisma db seed --schema prisma/schema.generated.prisma"
   },
   "dependencies": {
     "@prisma/client": "^6.8.2",

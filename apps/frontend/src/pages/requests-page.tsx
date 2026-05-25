@@ -1,5 +1,5 @@
 import { Check, PackagePlus, Warehouse, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
@@ -16,10 +16,19 @@ import {
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Form, FormField } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import type { EntryRequest, Invoice, TransferRequest } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import type {
+  EntryRequest,
+  Invoice,
+  Product,
+  TransferRequest,
+  Warehouse as WarehouseType,
+} from "@/lib/types";
+import { formatDate, todayInputValue } from "@/lib/utils";
 
 function StatusBadge({ status }: { status: string }) {
   const label = {
@@ -144,11 +153,229 @@ function ReceiveDialog({
   );
 }
 
+function DirectEntryRequestDialog({
+  onCreated,
+  warehouses,
+}: {
+  onCreated: () => Promise<void>;
+  warehouses: WarehouseType[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [warehouseId, setWarehouseId] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [movementDate, setMovementDate] = useState(todayInputValue());
+  const [observation, setObservation] = useState("");
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const availableWarehouses = warehouses.filter((warehouse) => !warehouse.isGeneral);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const firstWarehouse = availableWarehouses[0]?.id ?? "";
+
+    setWarehouseId((current) => current || firstWarehouse);
+  }, [availableWarehouses, open]);
+
+  useEffect(() => {
+    if (!open || !warehouseId) {
+      setProducts([]);
+      setProductId("");
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadProducts() {
+      setLoadingProducts(true);
+      setMessage(null);
+
+      try {
+        const params = new URLSearchParams({ warehouseId });
+        const nextProducts = await api<Product[]>(
+          `/entry-requests/available-products?${params.toString()}`,
+        );
+
+        if (!ignore) {
+          setProducts(nextProducts);
+          setProductId((current) =>
+            nextProducts.some((product) => product.id === current)
+              ? current
+              : nextProducts[0]?.id ?? "",
+          );
+        }
+      } catch (caughtError) {
+        if (!ignore) {
+          setMessage(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Falha ao carregar produtos.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingProducts(false);
+        }
+      }
+    }
+
+    void loadProducts();
+
+    return () => {
+      ignore = true;
+    };
+  }, [open, warehouseId]);
+
+  function openDialog() {
+    setMessage(null);
+    setQuantity("1");
+    setMovementDate(todayInputValue());
+    setObservation("");
+    setOpen(true);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      await api("/entry-requests", {
+        body: JSON.stringify({
+          movementDate,
+          observation,
+          productId,
+          quantity,
+          warehouseId,
+        }),
+        method: "POST",
+      });
+      await onCreated();
+      setOpen(false);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao enviar solicitacao.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button disabled={!availableWarehouses.length} onClick={openDialog} type="button">
+        <PackagePlus className="h-4 w-4" />
+        Solicitar
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Solicitar entrada</DialogTitle>
+            <DialogDescription>
+              Informe o almoxarifado de destino antes de escolher o produto.
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={submit}>
+            {message ? <ResourceError message={message} /> : null}
+            <FormField>
+              <Label htmlFor="request-warehouse">Almoxarifado destino</Label>
+              <SearchSelect
+                ariaLabel="Almoxarifado destino"
+                id="request-warehouse"
+                onValueChange={(nextWarehouseId) => {
+                  setWarehouseId(nextWarehouseId);
+                  setProductId("");
+                }}
+                options={availableWarehouses.map((warehouse) => ({
+                  label: warehouse.name,
+                  searchText: warehouse.category.name,
+                  value: warehouse.id,
+                }))}
+                placeholder="Selecione"
+                value={warehouseId}
+              />
+            </FormField>
+            <FormField>
+              <Label htmlFor="request-product">Produto</Label>
+              <SearchSelect
+                ariaLabel="Produto"
+                disabled={!warehouseId || loadingProducts}
+                emptyMessage={
+                  loadingProducts
+                    ? "Carregando produtos..."
+                    : "Nenhum produto disponivel."
+                }
+                id="request-product"
+                onValueChange={setProductId}
+                options={products.map((product) => ({
+                  label: `${product.code} - ${product.name}`,
+                  searchText: `${product.category.name} ${product.unit.abbreviation}`,
+                  value: product.id,
+                }))}
+                placeholder={
+                  loadingProducts ? "Carregando..." : "Selecione"
+                }
+                value={productId}
+              />
+            </FormField>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField>
+                <Label htmlFor="request-quantity">Quantidade</Label>
+                <Input
+                  id="request-quantity"
+                  min="1"
+                  onChange={(event) => setQuantity(event.target.value)}
+                  required
+                  type="number"
+                  value={quantity}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="request-date">Data da movimentacao</Label>
+                <Input
+                  id="request-date"
+                  onChange={(event) => setMovementDate(event.target.value)}
+                  required
+                  type="datetime-local"
+                  value={movementDate}
+                />
+              </FormField>
+            </div>
+            <FormField>
+              <Label htmlFor="request-observation">Observacao</Label>
+              <Textarea
+                id="request-observation"
+                onChange={(event) => setObservation(event.target.value)}
+                value={observation}
+              />
+            </FormField>
+            <Button
+              disabled={!warehouseId || !productId || saving || loadingProducts}
+              type="submit"
+            >
+              <PackagePlus className="h-4 w-4" />
+              {saving ? "Enviando..." : "Enviar solicitacao"}
+            </Button>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function RequestsPage() {
   const { session } = useSession();
   const entries = useApiResource<EntryRequest[]>("/entry-requests", []);
   const transfers = useApiResource<TransferRequest[]>("/transfer-requests", []);
   const invoices = useApiResource<Invoice[]>("/invoices", []);
+  const warehouses = useApiResource<WarehouseType[]>("/warehouses", []);
   const [activeTab, setActiveTab] = useState("entries");
   const [message, setMessage] = useState<{
     error: boolean;
@@ -201,21 +428,45 @@ export function RequestsPage() {
     }
   }
 
-  if (entries.loading || transfers.loading || (admin && invoices.loading)) {
+  async function requestCreated() {
+    setMessage({ error: false, text: "Solicitacao enviada." });
+    await entries.reload();
+  }
+
+  if (
+    entries.loading ||
+    transfers.loading ||
+    warehouses.loading ||
+    (admin && invoices.loading)
+  ) {
     return <LoadingLine />;
   }
 
-  if (entries.error || transfers.error || (admin && invoices.error)) {
+  if (entries.error || transfers.error || warehouses.error || (admin && invoices.error)) {
     return (
-      <ResourceError message={entries.error ?? transfers.error ?? invoices.error ?? ""} />
+      <ResourceError
+        message={
+          entries.error ??
+          transfers.error ??
+          warehouses.error ??
+          invoices.error ??
+          ""
+        }
+      />
     );
   }
 
   return (
     <section className="space-y-5">
-      <div>
-        <p className="text-sm text-muted-foreground">Pendencias internas</p>
-        <h2 className="text-2xl font-semibold">Solicitacoes</h2>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">Pendencias internas</p>
+          <h2 className="text-2xl font-semibold">Solicitações</h2>
+        </div>
+        <DirectEntryRequestDialog
+          onCreated={requestCreated}
+          warehouses={warehouses.data}
+        />
       </div>
 
       {message ? (

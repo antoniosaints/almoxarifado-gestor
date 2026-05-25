@@ -52,7 +52,7 @@ export function DashboardContent({ warehouses }: { warehouses: Warehouse[] }) {
                 <div>
                   <CardTitle className="text-2xl">{generalWarehouse.name}</CardTitle>
                   <CardDescription className="mt-1 max-w-2xl">
-                    Base principal para reposicao e transferencia aos demais almoxarifados.
+                    Base principal para reposição e transferência aos demais almoxarifados.
                   </CardDescription>
                 </div>
               </div>
@@ -91,7 +91,7 @@ export function DashboardContent({ warehouses }: { warehouses: Warehouse[] }) {
           <div>
             <h2 className="text-lg font-semibold">{category}</h2>
             <p className="text-sm text-muted-foreground">
-              Almoxarifados desta area para operacao diaria.
+              Almoxarifados desta área para operação diaria.
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

@@ -7,7 +7,7 @@ de uma prefeitura.
 
 - Monorepo com `pnpm` workspaces.
 - Frontend em React, Vite, TypeScript, Tailwind CSS e componentes shadcn/ui.
-- Backend em Node.js, Express, TypeScript, Prisma e SQLite.
+- Backend em Node.js, Express, TypeScript, Prisma e SQLite por padrao, com preparo para PostgreSQL ou MySQL via `.env`.
 
 ## Estrutura
 
@@ -57,6 +57,15 @@ de uma prefeitura.
 
    O SQLite usa por padrao `apps/backend/prisma/dev.db`.
 
+   Para hospedar em outro banco sem alterar codigo, ajuste no `.env`:
+
+   ```env
+   DATABASE_PROVIDER="postgresql"
+   DATABASE_URL="postgresql://usuario:senha@host:5432/almoxarifado?schema=public"
+   ```
+
+   Tambem sao aceitos `DATABASE_PROVIDER="sqlite"` e `DATABASE_PROVIDER="mysql"`.
+
 3. Rode a migration Prisma:
 
    ```bash
@@ -88,8 +97,27 @@ pnpm build
 pnpm test
 pnpm db:generate
 pnpm db:migrate
+pnpm db:push
 pnpm db:seed
 ```
+
+`pnpm db:generate`, `pnpm db:migrate` e `pnpm db:push` preparam automaticamente o schema Prisma conforme `DATABASE_PROVIDER`. Em uma hospedagem nova com PostgreSQL/MySQL, prefira `pnpm db:push` para criar a estrutura inicial a partir do schema atual.
+
+## Uploads
+
+Os uploads de logos e favicon sao salvos em `apps/backend/uploads` quando nao houver S3 configurado. O banco guarda apenas a URL do arquivo.
+
+Para usar S3 sem mudar codigo, configure no backend:
+
+```env
+S3_BUCKET="almoxarifado-uploads"
+S3_REGION="sa-east-1"
+S3_ACCESS_KEY_ID="..."
+S3_SECRET_ACCESS_KEY="..."
+S3_PUBLIC_URL="https://cdn.seudominio.com"
+```
+
+Tambem e possivel usar `S3_ENDPOINT` e `S3_FORCE_PATH_STYLE="true"` para storage compativel com S3.
 
 ## Login do MVP
 

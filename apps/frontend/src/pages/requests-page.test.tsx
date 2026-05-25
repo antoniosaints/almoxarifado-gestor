@@ -125,4 +125,54 @@ describe("RequestsPage", () => {
       }),
     ).toHaveAttribute("href", "/warehouses/health");
   });
+
+  it("opens a direct request dialog with warehouse and product fields", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input));
+        const payload =
+          url.pathname === "/entry-requests"
+            ? []
+            : url.pathname === "/transfer-requests"
+              ? []
+              : url.pathname === "/warehouses"
+                ? [warehouse]
+                : url.pathname === "/entry-requests/available-products"
+                  ? [product]
+                  : [];
+
+        return new Response(JSON.stringify(payload), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <RequestsPage />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Solicitar" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "Solicitar entrada" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Almoxarifado destino")).toBeInTheDocument();
+    expect(screen.getByLabelText("Produto")).toBeInTheDocument();
+  });
 });

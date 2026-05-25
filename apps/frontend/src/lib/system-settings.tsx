@@ -13,6 +13,7 @@ import type { SystemSettings } from "./types";
 const themeKey = "almoxarifado-theme";
 
 export const defaultSystemSettings: SystemSettings = {
+  faviconUrl: null,
   id: "system",
   loginBackgroundUrl: null,
   loginImageUrl: null,
@@ -115,6 +116,21 @@ function applyBranding(settings: SystemSettings, darkMode: boolean) {
   root.style.setProperty("--primary", hexToHsl(primaryColor));
   root.style.setProperty("--ring", hexToHsl(primaryColor));
   root.style.setProperty("--primary-foreground", foregroundFor(primaryColor));
+
+  const faviconUrl = settings.faviconUrl?.trim();
+  let favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+
+  if (!favicon && faviconUrl) {
+    favicon = document.createElement("link");
+    favicon.rel = "icon";
+    document.head.appendChild(favicon);
+  }
+
+  if (favicon && faviconUrl) {
+    favicon.href = faviconUrl;
+  } else if (favicon && !faviconUrl) {
+    favicon.remove();
+  }
 }
 
 export function SystemSettingsProvider({ children }: { children: ReactNode }) {

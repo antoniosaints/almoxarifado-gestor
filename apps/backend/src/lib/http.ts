@@ -75,6 +75,11 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
     return;
   }
 
+  if (isPayloadTooLargeError(error)) {
+    response.status(413).json({ message: "Arquivo muito grande para envio." });
+    return;
+  }
+
   if (error instanceof ZodError) {
     response.status(400).json({
       message: error.issues[0]?.message ?? "Revise os dados informados.",
@@ -105,3 +110,12 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
   console.error(error);
   response.status(500).json({ message: "Ocorreu um erro inesperado." });
 };
+
+function isPayloadTooLargeError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "type" in error &&
+    error.type === "entity.too.large"
+  );
+}

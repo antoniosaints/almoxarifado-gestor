@@ -1,4 +1,6 @@
 import { UserRole } from "@prisma/client";
+import { existsSync, rmSync } from "node:fs";
+import path from "node:path";
 import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "./app.js";
@@ -23,10 +25,18 @@ function countPdfPages(body: Buffer) {
 describe("api", () => {
   beforeEach(async () => {
     await resetDatabase(prisma);
+    rmSync(path.join(process.cwd(), "uploads", "settings"), {
+      force: true,
+      recursive: true,
+    });
   });
 
   afterAll(async () => {
     await resetDatabase(prisma);
+    rmSync(path.join(process.cwd(), "uploads", "settings"), {
+      force: true,
+      recursive: true,
+    });
     await prisma.$disconnect();
   });
 
@@ -262,6 +272,76 @@ describe("api", () => {
     });
     expect(response.body.movement.invoiceId).toBeNull();
     expect(response.body.movement.unitPrice).toBe("99");
+  });
+
+  it("lets admins create entry requests without changing stock", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    const destinationWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: destinationWarehouse.id,
+      },
+    });
+
+    const response = await request(app)
+      .post("/entry-requests")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }))
+      .send({
+        movementDate: "2026-05-25T12:00:00.000Z",
+        productId: product.id,
+        quantity: 3,
+        warehouseId: destinationWarehouse.id,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      productId: product.id,
+      quantity: 3,
+      status: "PENDING",
+      warehouseId: destinationWarehouse.id,
+    });
+    await expect(
+      prisma.stock.findUniqueOrThrow({
+        where: {
+          warehouseId_productId: {
+            productId: product.id,
+            warehouseId: generalWarehouse.id,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({ currentQuantity: 10 });
+    await expect(
+      prisma.stock.findUniqueOrThrow({
+        where: {
+          warehouseId_productId: {
+            productId: product.id,
+            warehouseId: destinationWarehouse.id,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({ currentQuantity: 0 });
   });
 
   it("lets admins create operators assigned to warehouses", async () => {
@@ -709,6 +789,80 @@ describe("api", () => {
     await expect(prisma.productCategory.count()).resolves.toBe(0);
     await expect(prisma.warehouse.count()).resolves.toBe(0);
     await expect(prisma.warehouseCategory.count()).resolves.toBe(0);
+  });
+
+  it("uploads one settings asset per slot and stores only the public URL", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const uploadRoot = path.join(process.cwd(), "uploads", "settings");
+
+    const firstUpload = await request(app)
+      .post("/uploads/settings/favicon")
+      .set("Authorization", authorizationFor(admin))
+      .set("Content-Type", "image/png")
+      .send(Buffer.from("png-content"));
+
+    expect(firstUpload.status).toBe(201);
+    expect(firstUpload.body).toMatchObject({
+      field: "faviconUrl",
+      url: expect.stringMatching(/^\/uploads\/settings\/favicon\.png\?v=\d+$/),
+    });
+    expect(existsSync(path.join(uploadRoot, "favicon.png"))).toBe(true);
+    await expect(
+      prisma.systemSettings.findUniqueOrThrow({ where: { id: "system" } }),
+    ).resolves.toMatchObject({
+      faviconUrl: firstUpload.body.url,
+    });
+
+    const secondUpload = await request(app)
+      .post("/uploads/settings/favicon")
+      .set("Authorization", authorizationFor(admin))
+      .set("Content-Type", "image/jpeg")
+      .send(Buffer.from("jpeg-content"));
+
+    expect(secondUpload.status).toBe(201);
+    expect(secondUpload.body.url).toMatch(
+      /^\/uploads\/settings\/favicon\.jpg\?v=\d+$/,
+    );
+    expect(existsSync(path.join(uploadRoot, "favicon.png"))).toBe(false);
+    expect(existsSync(path.join(uploadRoot, "favicon.jpg"))).toBe(true);
+    await expect(
+      prisma.systemSettings.findUniqueOrThrow({ where: { id: "system" } }),
+    ).resolves.toMatchObject({
+      faviconUrl: secondUpload.body.url,
+    });
+  });
+
+  it("rejects base64 image data in system settings payloads", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+
+    const response = await request(app)
+      .put("/settings")
+      .set("Authorization", authorizationFor(admin))
+      .send({
+        faviconUrl: "data:image/png;base64,iVBORw0KGgo=",
+        loginBackgroundUrl: null,
+        loginImageUrl: null,
+        loginSubtitle: "Entre com seguranca.",
+        loginTitle: "Almoxarifado",
+        logoUrl: null,
+        primaryColor: "#112233",
+        reportFooterText: "Rodape do relatorio.",
+        reportLogoUrl: null,
+        reportPrimaryColor: "#445566",
+        reportTitle: "Relatorio Municipal",
+        systemName: "ALMOX",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe("Informe uma URL valida.");
   });
 
   it("deletes invoices without deleting stock movements", async () => {
