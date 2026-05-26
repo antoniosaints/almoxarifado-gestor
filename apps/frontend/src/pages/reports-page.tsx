@@ -13,8 +13,9 @@ import {
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchSelect } from "@/components/ui/search-select";
 import { apiFile, useApiResource } from "@/lib/api";
-import type { Warehouse } from "@/lib/types";
+import type { Supplier, Warehouse } from "@/lib/types";
 
 type ReportKey = "invoices" | "movements" | "stocks";
 
@@ -54,10 +55,12 @@ function InvoiceReportDialog({
   onExport: (path: string) => Promise<void>;
   to: string;
 }) {
+  const suppliers = useApiResource<Supplier[]>("/suppliers?active=true", []);
   const [open, setOpen] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [cnpj, setCnpj] = useState("");
   const [number, setNumber] = useState("");
+  const [supplierId, setSupplierId] = useState("");
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,6 +69,7 @@ function InvoiceReportDialog({
         companyName,
         cnpj,
         number,
+        supplierId,
       })}`,
     ).then(() => setOpen(false));
   }
@@ -90,6 +94,24 @@ function InvoiceReportDialog({
             </DialogDescription>
           </DialogHeader>
           <Form onSubmit={submit}>
+            <FormField>
+              <Label htmlFor="report-invoice-supplier">Fornecedor</Label>
+              <SearchSelect
+                ariaLabel="Fornecedor"
+                id="report-invoice-supplier"
+                onValueChange={setSupplierId}
+                options={[
+                  { label: "Todos os fornecedores", value: "" },
+                  ...suppliers.data.map((supplier) => ({
+                    label: supplier.name,
+                    searchText: `${supplier.tradeName ?? ""} ${supplier.cnpj}`,
+                    value: supplier.id,
+                  })),
+                ]}
+                placeholder="Todos os fornecedores"
+                value={supplierId}
+              />
+            </FormField>
             <FormField>
               <Label htmlFor="report-invoice-company">Empresa</Label>
               <Input

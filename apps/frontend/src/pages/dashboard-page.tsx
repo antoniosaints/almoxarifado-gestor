@@ -59,7 +59,7 @@ export function DashboardContent({ warehouses }: { warehouses: Warehouse[] }) {
     return map;
   }, new Map<string, Warehouse[]>());
 
-  if (!generalWarehouse || !regularWarehouses.length) {
+  if (!warehouses.length) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center px-4">
         <Card className="w-full max-w-md border-dashed shadow-sm">

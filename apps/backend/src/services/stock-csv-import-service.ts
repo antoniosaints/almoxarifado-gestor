@@ -2,6 +2,10 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { AppError } from "../lib/errors.js";
 import { createEntry } from "./movement-service.js";
 import { nextProductCode } from "./product-code.js";
+import {
+  invoiceSnapshotFromDocument,
+  resolveSupplierByDocument,
+} from "./supplier-service.js";
 
 type PrismaWriter = PrismaClient | Prisma.TransactionClient;
 
@@ -527,12 +531,19 @@ async function ensureInvoice(
     );
   }
 
-  const data = {
+  const supplier = await resolveSupplierByDocument(transaction, {
     cnpj: row.cnpj,
-    companyName: row.companyName,
+    name: row.companyName,
+  });
+  const data = {
     issueDate: row.issueDate ?? new Date(),
     number: row.invoiceNumber,
     observation: "Importada por CSV.",
+    supplierId: supplier.id,
+    ...invoiceSnapshotFromDocument({
+      cnpj: row.cnpj,
+      name: row.companyName,
+    }),
     totalValue: roundCurrency(totalValue),
   };
 

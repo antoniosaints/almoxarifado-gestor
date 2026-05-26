@@ -42,6 +42,26 @@ function mockReportFetch() {
         });
       }
 
+      if (url.pathname === "/suppliers") {
+        return new Response(
+          JSON.stringify([
+            {
+              active: true,
+              cnpj: "12345678000190",
+              createdAt: "2026-05-23T12:00:00.000Z",
+              id: "supplier-1",
+              name: "Papelaria Central",
+              tradeName: "Papelaria",
+              updatedAt: "2026-05-23T12:00:00.000Z",
+            },
+          ]),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
       return new Response(new Blob(["pdf"], { type: "application/pdf" }), {
         headers: { "Content-Type": "application/pdf" },
         status: 200,

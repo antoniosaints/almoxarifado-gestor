@@ -145,11 +145,17 @@ warehouseRoutes.get(
         movements: {
           include: {
             destinationWarehouse: true,
+            invoice: {
+              include: {
+                supplier: true,
+              },
+            },
             product: {
               include: {
                 unit: true,
               },
             },
+            responsibleUser: true,
             sourceWarehouse: true,
           },
           orderBy: { movementDate: "desc" },

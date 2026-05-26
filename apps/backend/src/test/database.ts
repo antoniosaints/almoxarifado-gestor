@@ -2,10 +2,12 @@ import type { PrismaClient } from "@prisma/client";
 
 export async function resetDatabase(prisma: PrismaClient) {
   await prisma.auditLog.deleteMany();
+  await prisma.officeLetterTemplate.deleteMany();
   await prisma.transferRequest.deleteMany();
   await prisma.entryRequest.deleteMany();
   await prisma.stockMovement.deleteMany();
   await prisma.invoice.deleteMany();
+  await prisma.supplier.deleteMany();
   await prisma.stock.deleteMany();
   await prisma.userWarehouse.deleteMany();
   await prisma.product.deleteMany();

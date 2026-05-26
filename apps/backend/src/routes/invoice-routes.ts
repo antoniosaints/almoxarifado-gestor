@@ -8,18 +8,26 @@ import {
   previewInvoiceXml,
 } from "../services/invoice-xml-service.js";
 import {
+  getActiveSupplierOrThrow,
+  invoiceSnapshotFromSupplier,
+} from "../services/supplier-service.js";
+import {
   idParam,
-  invoiceInput,
   invoiceXmlImportInput,
   invoiceXmlPreviewInput,
+  supplierBackedInvoiceInput,
 } from "../validators/inputs.js";
 
 export const invoiceRoutes = Router();
 
 invoiceRoutes.get(
   "/",
-  asyncHandler(async (_request, response) => {
+  asyncHandler(async (request, response) => {
     const user = currentUser(response);
+    const supplierId =
+      typeof request.query.supplierId === "string" && request.query.supplierId
+        ? request.query.supplierId
+        : undefined;
     const scopedMovementWhere = {
       warehouse: warehouseScope(user),
     };
@@ -27,6 +35,7 @@ invoiceRoutes.get(
     response.json(
       await prisma.invoice.findMany({
         include: {
+          supplier: true,
           movements: {
             where: user.role === UserRole.ADMIN ? undefined : scopedMovementWhere,
             include: {
@@ -46,8 +55,9 @@ invoiceRoutes.get(
         orderBy: [{ issueDate: "desc" }, { number: "asc" }],
         where:
           user.role === UserRole.ADMIN
-            ? undefined
+            ? { supplierId }
             : {
+                supplierId,
                 movements: {
                   some: scopedMovementWhere,
                 },
@@ -60,10 +70,21 @@ invoiceRoutes.get(
 invoiceRoutes.post(
   "/",
   asyncHandler(async (request, response) => {
-    const input = invoiceInput.parse(request.body);
+    const input = supplierBackedInvoiceInput.parse(request.body);
+    const supplier = await getActiveSupplierOrThrow(prisma, input.supplierId);
     response.status(201).json(
       await prisma.invoice.create({
-        data: input,
+        data: {
+          invoiceKey: input.invoiceKey,
+          issueDate: input.issueDate,
+          number: input.number,
+          observation: input.observation,
+          series: input.series,
+          supplierId: supplier.id,
+          totalValue: input.totalValue ?? 0,
+          ...invoiceSnapshotFromSupplier(supplier),
+        },
+        include: { supplier: true },
       }),
     );
   }),

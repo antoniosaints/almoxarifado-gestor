@@ -1,4 +1,4 @@
-import { FileText, Trash2 } from "lucide-react";
+import { Eye, FileDown, FileText, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
@@ -17,7 +17,7 @@ import { FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
-import { api, useApiResource } from "@/lib/api";
+import { api, apiFile, useApiResource } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import type { Movement, MovementType, Product, Warehouse } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -28,6 +28,145 @@ export const movementLabels: Record<MovementType, string> = {
   TRANSFERENCIA_ENTRADA: "Transferência recebida",
   TRANSFERENCIA_SAIDA: "Transferência enviada",
 };
+
+function movementUnitPrice(movement: Movement) {
+  const unitPrice =
+    movement.unitPrice === null || movement.unitPrice === undefined
+      ? null
+      : Number(movement.unitPrice);
+
+  return unitPrice === null || Number.isNaN(unitPrice) ? null : unitPrice;
+}
+
+function movementTotalValue(movement: Movement) {
+  const unitPrice = movementUnitPrice(movement);
+
+  return unitPrice === null ? null : unitPrice * movement.quantity;
+}
+
+function movementAuditFileName(movement: Movement) {
+  return `movimentacao-${movement.id}.pdf`;
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-muted/30 p-3">
+      <p className="text-xs font-medium uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 break-words text-sm font-medium">{value || "-"}</p>
+    </div>
+  );
+}
+
+function MovementDetailsDialog({
+  movement,
+  onOpenChange,
+}: {
+  movement: Movement | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [exporting, setExporting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function exportPdf() {
+    if (!movement) {
+      return;
+    }
+
+    setExporting(true);
+    setMessage(null);
+
+    try {
+      const blob = await apiFile(`/reports/movements/${movement.id}`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = movementAuditFileName(movement);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao exportar auditoria.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const unitPrice = movement ? movementUnitPrice(movement) : null;
+  const totalValue = movement ? movementTotalValue(movement) : null;
+
+  return (
+    <Dialog onOpenChange={onOpenChange} open={Boolean(movement)}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Auditoria da movimentacao</DialogTitle>
+          <DialogDescription>
+            Detalhes completos da operacao registrada no estoque.
+          </DialogDescription>
+        </DialogHeader>
+        {movement ? (
+          <div className="space-y-4">
+            {message ? <ResourceError message={message} /> : null}
+            <div className="flex justify-end">
+              <Button disabled={exporting} onClick={exportPdf} type="button">
+                <FileDown className="h-4 w-4" />
+                {exporting ? "Exportando..." : "Exportar PDF"}
+              </Button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <DetailItem label="Tipo" value={movementLabels[movement.type]} />
+              <DetailItem label="Data e hora" value={formatDate(movement.movementDate)} />
+              <DetailItem
+                label="Operado por"
+                value={movement.responsibleUser?.name ?? "-"}
+              />
+              <DetailItem label="Produto" value={`${movement.product.code} - ${movement.product.name}`} />
+              <DetailItem label="Almoxarifado" value={movement.warehouse.name} />
+              <DetailItem label="Origem" value={movement.sourceWarehouse?.name ?? "-"} />
+              <DetailItem
+                label="Destino"
+                value={
+                  movement.destinationWarehouse?.name ??
+                  movement.destinationNote ??
+                  "-"
+                }
+              />
+              <DetailItem
+                label="Quantidade"
+                value={`${movement.quantity} ${movement.product.unit.abbreviation}`}
+              />
+              <DetailItem
+                label="Valor unitario"
+                value={unitPrice === null ? "-" : formatCurrency(unitPrice)}
+              />
+              <DetailItem
+                label="Valor total"
+                value={totalValue === null ? "-" : formatCurrency(totalValue)}
+              />
+              <DetailItem
+                label="Nota"
+                value={
+                  movement.invoice
+                    ? `${movement.invoice.number} - ${
+                        movement.invoice.supplier?.name ??
+                        movement.invoice.companyName
+                      }`
+                    : "-"
+                }
+              />
+              <DetailItem label="Observacao" value={movement.observation ?? "-"} />
+            </div>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function MovementsTable({
   deletingMovementId = null,
@@ -40,8 +179,11 @@ export function MovementsTable({
   onDeleteMovement?: (movement: Movement) => void;
   showInvoiceAction?: boolean;
 }) {
+  const [movementToView, setMovementToView] = useState<Movement | null>(null);
+
   return (
-    <DataTable
+    <>
+      <DataTable
       columns={[
         {
           cell: (movement) => formatDate(movement.movementDate),
@@ -56,6 +198,11 @@ export function MovementsTable({
           ),
           header: "Tipo",
           key: "type",
+        },
+        {
+          cell: (movement) => movement.responsibleUser?.name ?? "-",
+          header: "Operado por",
+          key: "responsible",
         },
         {
           cell: (movement) => (
@@ -88,28 +235,18 @@ export function MovementsTable({
         },
         {
           cell: (movement) => {
-            const unitPrice =
-              movement.unitPrice === null || movement.unitPrice === undefined
-                ? null
-                : Number(movement.unitPrice);
+            const unitPrice = movementUnitPrice(movement);
 
-            return unitPrice === null || Number.isNaN(unitPrice)
-              ? "-"
-              : formatCurrency(unitPrice);
+            return unitPrice === null ? "-" : formatCurrency(unitPrice);
           },
           header: "Valor unitário",
           key: "unit-price",
         },
         {
           cell: (movement) => {
-            const unitPrice =
-              movement.unitPrice === null || movement.unitPrice === undefined
-                ? null
-                : Number(movement.unitPrice);
+            const totalValue = movementTotalValue(movement);
 
-            return unitPrice === null || Number.isNaN(unitPrice)
-              ? "-"
-              : formatCurrency(unitPrice * movement.quantity);
+            return totalValue === null ? "-" : formatCurrency(totalValue);
           },
           header: "Valor total",
           key: "total",
@@ -140,6 +277,23 @@ export function MovementsTable({
               },
             ]
           : []),
+        {
+          cell: (movement: Movement) => (
+            <Button
+              aria-label={`Visualizar movimentacao de ${movement.product.name}`}
+              onClick={() => setMovementToView(movement)}
+              size="icon"
+              type="button"
+              variant="outline"
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+          ),
+          cellClassName: "text-right",
+          header: "Auditoria",
+          headerClassName: "text-right",
+          key: "view-action",
+        },
         ...(onDeleteMovement
           ? [
               {
@@ -174,6 +328,7 @@ export function MovementsTable({
           movement.product.name,
           movement.product.code,
           movement.product.unit.abbreviation,
+          movement.responsibleUser?.name,
           movement.warehouse.name,
           movement.sourceWarehouse?.name,
           movement.destinationWarehouse?.name,
@@ -183,6 +338,15 @@ export function MovementsTable({
         ].join(" ")
       }
     />
+      <MovementDetailsDialog
+        movement={movementToView}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMovementToView(null);
+          }
+        }}
+      />
+    </>
   );
 }
 

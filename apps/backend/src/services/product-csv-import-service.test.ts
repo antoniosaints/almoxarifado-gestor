@@ -76,4 +76,85 @@ describe("product CSV import service", () => {
       name: "Detergente",
     });
   });
+
+  it("reuses catalog references and preserves product names with special characters", async () => {
+    const { unit } = await createBaseFixture(prisma);
+    const category = await prisma.productCategory.create({
+      data: {
+        description: "Bens permanentes",
+        name: "Patrimônio",
+      },
+    });
+    const productName = "Açúcar cristal çãõêáà `´";
+    const csv = [
+      csvHeader,
+      `;${productName};UNIDADE;3;Patrimonio`,
+    ].join("\n");
+
+    const result = await importProductsCsv(prisma, { csv });
+
+    expect(result).toMatchObject({
+      importedRows: 1,
+      skippedRows: 0,
+    });
+    await expect(
+      prisma.product.findFirstOrThrow({
+        where: { name: productName },
+        include: { category: true, unit: true },
+      }),
+    ).resolves.toMatchObject({
+      categoryId: category.id,
+      name: productName,
+      unitId: unit.id,
+      category: { name: "Patrimônio" },
+      unit: { abbreviation: "UN" },
+    });
+    await expect(prisma.unitOfMeasure.count()).resolves.toBe(1);
+    await expect(prisma.productCategory.count()).resolves.toBe(2);
+  });
+
+  it("skips existing products and imports only missing rows when the same CSV is rerun", async () => {
+    await createBaseFixture(prisma);
+    const firstCsv = [
+      csvHeader,
+      ";Clips galvanizado;CX;12;Expediente",
+    ].join("\n");
+    const rerunCsv = [
+      csvHeader,
+      ";Clips galvanizado;CX;12;Expediente",
+      ";Caneta azul;UN;4;Expediente",
+    ].join("\n");
+
+    await importProductsCsv(prisma, { csv: firstCsv });
+
+    const preview = await previewProductsCsvImport(prisma, { csv: rerunCsv });
+
+    expect(preview.rows[0]).toMatchObject({
+      canImport: true,
+      productName: "Clips galvanizado",
+      warnings: ["Produto já cadastrado; esta linha será ignorada."],
+      willImport: false,
+    });
+    expect(preview.rows[1]).toMatchObject({
+      canImport: true,
+      productName: "Caneta azul",
+      willImport: true,
+    });
+
+    const result = await importProductsCsv(prisma, { csv: rerunCsv });
+
+    expect(result).toMatchObject({
+      importedRows: 1,
+      skippedRows: 1,
+    });
+    await expect(
+      prisma.product.count({ where: { name: "Clips galvanizado" } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.product.findFirstOrThrow({ where: { name: "Caneta azul" } }),
+    ).resolves.toMatchObject({
+      code: "0000003",
+      minimumQuantity: 4,
+    });
+  });
 });

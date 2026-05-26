@@ -102,6 +102,23 @@ export type SystemSettings = {
   systemName: string;
 };
 
+export type Supplier = {
+  active: boolean;
+  address?: string | null;
+  city?: string | null;
+  cnpj: string;
+  email?: string | null;
+  id: string;
+  municipalRegistration?: string | null;
+  name: string;
+  notes?: string | null;
+  phone?: string | null;
+  state?: string | null;
+  stateRegistration?: string | null;
+  tradeName?: string | null;
+  zipCode?: string | null;
+};
+
 export type Invoice = {
   cnpj: string;
   companyAddress?: string | null;
@@ -120,6 +137,8 @@ export type Invoice = {
   observation?: string | null;
   series?: string | null;
   stateRegistration?: string | null;
+  supplier?: Supplier | null;
+  supplierId?: string | null;
   totalValue?: number | string;
 };
 
@@ -172,6 +191,7 @@ export type TransferRequest = {
 };
 
 export type Movement = {
+  createdAt?: string;
   destinationNote?: string | null;
   destinationWarehouse?: Pick<Warehouse, "id" | "name"> | null;
   id: string;
@@ -186,8 +206,19 @@ export type Movement = {
   sourceWarehouse?: Pick<Warehouse, "id" | "name"> | null;
   type: MovementType;
   unitPrice?: number | string | null;
+  updatedAt?: string;
   warehouse: Pick<Warehouse, "id" | "name">;
   warehouseId: string;
+};
+
+export type OfficeLetterTemplate = {
+  active: boolean;
+  contentHtml: string;
+  description?: string | null;
+  id: string;
+  name: string;
+  subject: string;
+  variables: string[];
 };
 
 export type InsightsSummary = {
@@ -279,6 +310,7 @@ export type ProductCsvPreviewRow = {
   rowNumber: number;
   unit: string;
   warnings: string[];
+  willImport: boolean;
 };
 
 export type ProductCsvPreview = {

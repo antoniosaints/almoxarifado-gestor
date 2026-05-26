@@ -2,6 +2,10 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { AppError } from "../lib/errors.js";
 import { nextProductCode } from "./product-code.js";
 import { createEntry } from "./movement-service.js";
+import {
+  invoiceSnapshotFromDocument,
+  resolveSupplierByDocument,
+} from "./supplier-service.js";
 
 type InvoiceXmlImportInput = {
   categoryId?: string | null;
@@ -366,23 +370,26 @@ export async function previewInvoiceXml(
   };
 }
 
-function invoiceData(parsed: ParsedInvoiceXml) {
+function invoiceData(parsed: ParsedInvoiceXml, supplierId: string) {
   return {
-    cnpj: parsed.cnpj,
-    companyAddress: parsed.companyAddress,
-    companyCity: parsed.companyCity,
-    companyName: parsed.companyName,
-    companyPhone: parsed.companyPhone,
-    companyState: parsed.companyState,
-    companyTradeName: parsed.companyTradeName,
-    companyZipCode: parsed.companyZipCode,
     invoiceKey: parsed.invoiceKey,
     issueDate: parsed.issueDate,
-    municipalRegistration: parsed.municipalRegistration,
     number: parsed.number,
     observation: "Importada por XML.",
     series: parsed.series,
-    stateRegistration: parsed.stateRegistration,
+    supplierId,
+    ...invoiceSnapshotFromDocument({
+      address: parsed.companyAddress,
+      city: parsed.companyCity,
+      cnpj: parsed.cnpj,
+      municipalRegistration: parsed.municipalRegistration,
+      name: parsed.companyName,
+      phone: parsed.companyPhone,
+      state: parsed.companyState,
+      stateRegistration: parsed.stateRegistration,
+      tradeName: parsed.companyTradeName,
+      zipCode: parsed.companyZipCode,
+    }),
     totalValue: parsed.totalValue,
   };
 }
@@ -395,6 +402,18 @@ export async function importInvoiceXml(
 
   return prisma.$transaction(async (transaction) => {
     const category = await ensureCategory(transaction, input.categoryId);
+    const supplier = await resolveSupplierByDocument(transaction, {
+      address: parsed.companyAddress,
+      city: parsed.companyCity,
+      cnpj: parsed.cnpj,
+      municipalRegistration: parsed.municipalRegistration,
+      name: parsed.companyName,
+      phone: parsed.companyPhone,
+      state: parsed.companyState,
+      stateRegistration: parsed.stateRegistration,
+      tradeName: parsed.companyTradeName,
+      zipCode: parsed.companyZipCode,
+    });
     const productMappings = new Map(
       input.productMappings.map((mapping) => [
         mapping.itemIndex,
@@ -421,10 +440,10 @@ export async function importInvoiceXml(
     const invoice = existingInvoice
       ? await transaction.invoice.update({
           where: { id: existingInvoice.id },
-          data: invoiceData(parsed),
+          data: invoiceData(parsed, supplier.id),
         })
       : await transaction.invoice.create({
-          data: invoiceData(parsed),
+          data: invoiceData(parsed, supplier.id),
         });
 
     const importedItems: Array<{
@@ -479,6 +498,7 @@ export async function importInvoiceXml(
               warehouse: true,
             },
           },
+          supplier: true,
         },
       }),
       items: importedItems,
