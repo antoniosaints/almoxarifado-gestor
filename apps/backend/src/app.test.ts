@@ -880,6 +880,144 @@ describe("api", () => {
     ).resolves.toMatchObject({ name: "Geral" });
   });
 
+  it("manages suppliers and requires supplier selection for manual invoices", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const auth = authorizationFor(admin);
+
+    const missingSupplier = await request(app)
+      .post("/invoices")
+      .set("Authorization", auth)
+      .send({
+        issueDate: "2026-05-20T12:00:00.000Z",
+        number: "NF-FORNECEDOR",
+      });
+
+    expect(missingSupplier.status).toBe(400);
+    expect(missingSupplier.body.message).toBe("Escolha um fornecedor.");
+
+    const createdSupplier = await request(app)
+      .post("/suppliers")
+      .set("Authorization", auth)
+      .send({
+        address: "Rua Central, 100",
+        city: "Curitiba",
+        cnpj: "12.345.678/0001-90",
+        name: "Papelaria Municipal LTDA",
+        phone: "4133334444",
+        state: "PR",
+        tradeName: "Papelaria Centro",
+        zipCode: "80000000",
+      });
+
+    expect(createdSupplier.status).toBe(201);
+    expect(createdSupplier.body).toMatchObject({
+      active: true,
+      cnpj: "12345678000190",
+      name: "Papelaria Municipal LTDA",
+      tradeName: "Papelaria Centro",
+    });
+
+    const duplicateSupplier = await request(app)
+      .post("/suppliers")
+      .set("Authorization", auth)
+      .send({
+        cnpj: "12345678000190",
+        name: "Fornecedor duplicado",
+      });
+
+    expect(duplicateSupplier.status).toBe(409);
+
+    const list = await request(app)
+      .get("/suppliers?search=papelaria")
+      .set("Authorization", auth);
+
+    expect(list.status).toBe(200);
+    expect(list.body[0]).toMatchObject({
+      id: createdSupplier.body.id,
+      name: "Papelaria Municipal LTDA",
+    });
+
+    const invoice = await request(app)
+      .post("/invoices")
+      .set("Authorization", auth)
+      .send({
+        issueDate: "2026-05-21T12:00:00.000Z",
+        number: "NF-101",
+        supplierId: createdSupplier.body.id,
+      });
+
+    expect(invoice.status).toBe(201);
+    expect(invoice.body).toMatchObject({
+      cnpj: "12345678000190",
+      companyAddress: "Rua Central, 100",
+      companyCity: "Curitiba",
+      companyName: "Papelaria Municipal LTDA",
+      companyPhone: "4133334444",
+      companyState: "PR",
+      companyTradeName: "Papelaria Centro",
+      companyZipCode: "80000000",
+      supplier: {
+        id: createdSupplier.body.id,
+        name: "Papelaria Municipal LTDA",
+      },
+      supplierId: createdSupplier.body.id,
+    });
+  });
+
+  it("manages office letter templates and rejects unknown variables", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const auth = authorizationFor(admin);
+
+    const invalid = await request(app)
+      .post("/office-templates")
+      .set("Authorization", auth)
+      .send({
+        contentHtml: "<p>{{variavel_invalida}}</p>",
+        name: "Oficio invalido",
+        subject: "Assunto",
+      });
+
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.message).toBe(
+      "Variavel de oficio nao permitida: {{variavel_invalida}}.",
+    );
+
+    const created = await request(app)
+      .post("/office-templates")
+      .set("Authorization", auth)
+      .send({
+        contentHtml: "<p>Empresa {{nome_empresa}} - {{cnpj_empresa}}</p>",
+        description: "Modelo para fornecedores",
+        name: "Comunicado ao fornecedor",
+        subject: "Comunicado para {{nome_empresa}}",
+      });
+
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      active: true,
+      name: "Comunicado ao fornecedor",
+      variables: ["nome_empresa", "cnpj_empresa"],
+    });
+
+    const list = await request(app)
+      .get("/office-templates")
+      .set("Authorization", auth);
+
+    expect(list.status).toBe(200);
+    expect(list.body[0]).toMatchObject({
+      id: created.body.id,
+      subject: "Comunicado para {{nome_empresa}}",
+    });
+  });
+
   it("uploads one settings asset per slot and stores only the public URL", async () => {
     const { user } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({
@@ -1370,7 +1508,12 @@ describe("api", () => {
       number: "123",
       series: "1",
       stateRegistration: "1234567890",
+      supplier: {
+        cnpj: "12345678000190",
+        name: "Fornecedor Municipal LTDA",
+      },
     });
+    expect(response.body.invoice.supplierId).toEqual(expect.any(String));
     expect(response.body.invoice.movements).toHaveLength(2);
 
     await expect(
@@ -1443,6 +1586,83 @@ describe("api", () => {
     expect(response.headers["content-type"]).toContain("application/pdf");
     expect(response.headers["content-disposition"]).toContain("relatorio-saldos.pdf");
     expect(countPdfPages(response.body)).toBe(1);
+  });
+
+  it("exports one movement audit record as a PDF with warehouse scope", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const auth = authorizationFor(admin);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const blockedWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Obras",
+      },
+    });
+    const supplier = await request(app)
+      .post("/suppliers")
+      .set("Authorization", auth)
+      .send({
+        cnpj: "17404232000108",
+        name: "CAS Internet",
+      });
+    const invoice = await request(app)
+      .post("/invoices")
+      .set("Authorization", auth)
+      .send({
+        issueDate: "2026-05-21T12:00:00.000Z",
+        number: "41425387",
+        supplierId: supplier.body.id,
+      });
+    const movement = await prisma.stockMovement.create({
+      data: {
+        invoiceId: invoice.body.id,
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 10,
+        responsibleUserId: admin.id,
+        type: "ENTRADA",
+        unitPrice: 35,
+        warehouseId: warehouse.id,
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+        warehouseAssignments: {
+          create: {
+            warehouseId: blockedWarehouse.id,
+          },
+        },
+      },
+    });
+
+    const response = await request(app)
+      .get(`/reports/movements/${movement.id}`)
+      .set("Authorization", auth);
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/pdf");
+    expect(response.headers["content-disposition"]).toContain(
+      `movimentacao-${movement.id}.pdf`,
+    );
+    expect(countPdfPages(response.body)).toBe(1);
+
+    const denied = await request(app)
+      .get(`/reports/movements/${movement.id}`)
+      .set("Authorization", authorizationFor(operator));
+
+    expect(denied.status).toBe(404);
   });
 
   it("embeds uploaded report logos from local uploads in PDFs", async () => {

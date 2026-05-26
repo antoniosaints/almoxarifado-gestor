@@ -40,6 +40,10 @@ function normalize(value: string) {
     .trim();
 }
 
+function normalizeProductName(value: string) {
+  return value.normalize("NFC").toLocaleLowerCase("pt-BR").trim();
+}
+
 function parseCsvLine(line: string, delimiter: string) {
   const cells: string[] = [];
   let current = "";
@@ -120,13 +124,17 @@ function parseCsv(csv: string) {
     const value = (header: string) => cells[headerIndex.get(header) ?? -1] ?? "";
 
     return {
-      categoryName: value(headerMap.categoryName).trim(),
+      categoryName: value(headerMap.categoryName).trim().normalize("NFC"),
       code: normalizeCode(value(headerMap.code)),
       index,
       minimumQuantity: parseMinimumQuantity(value(headerMap.minimumQuantity)),
-      productName: value(headerMap.productName).trim(),
+      productName: value(headerMap.productName).trim().normalize("NFC"),
       rowNumber: index + 2,
-      unit: value(headerMap.unit).trim().toLocaleUpperCase("pt-BR").slice(0, 10),
+      unit: value(headerMap.unit)
+        .trim()
+        .normalize("NFC")
+        .toLocaleUpperCase("pt-BR")
+        .slice(0, 10),
     } satisfies ParsedProductCsvRow;
   });
 }
@@ -149,7 +157,10 @@ function validateRows(
     existingProducts.map((product) => [product.code, product]),
   );
   const existingNames = new Map(
-    existingProducts.map((product) => [normalize(product.name), product]),
+    existingProducts.map((product) => [
+      normalizeProductName(product.name),
+      product,
+    ]),
   );
   const csvCodes = new Map<string, number>();
   const csvNames = new Map<string, number>();
@@ -157,7 +168,7 @@ function validateRows(
   return rows.map((row) => {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const normalizedName = normalize(row.productName);
+    const normalizedName = normalizeProductName(row.productName);
 
     if (row.code && !/^\d{7}$/.test(row.code)) {
       errors.push("Informe o id com até 7 dígitos numéricos.");
@@ -167,30 +178,59 @@ function validateRows(
       errors.push("Informe o nome do produto.");
     }
 
-    if (!row.unit) {
+    const existingByCode = row.code ? existingCodes.get(row.code) : null;
+    const existingByName = normalizedName ? existingNames.get(normalizedName) : null;
+    let existingProduct = existingByCode ?? existingByName;
+
+    if (existingByCode && existingByName && existingByCode.id !== existingByName.id) {
+      errors.push(
+        `O id ${row.code} pertence ao produto ${existingByCode.name}, mas o nome informado pertence ao produto ${existingByName.name}.`,
+      );
+      existingProduct = null;
+    }
+
+    if (
+      existingByCode &&
+      normalizedName &&
+      normalizeProductName(existingByCode.name) !== normalizedName &&
+      !existingByName
+    ) {
+      errors.push(
+        `O id ${row.code} já está cadastrado para o produto ${existingByCode.name}.`,
+      );
+      existingProduct = null;
+    }
+
+    if (
+      existingByName &&
+      row.code &&
+      existingByName.code !== row.code &&
+      !existingByCode
+    ) {
+      errors.push(
+        `O produto ${existingByName.name} já está cadastrado com o id ${existingByName.code}.`,
+      );
+      existingProduct = null;
+    }
+
+    const shouldImport = !existingProduct;
+
+    if (shouldImport && !row.unit) {
       errors.push("Informe a unidade de medida.");
     }
 
-    if (!Number.isInteger(row.minimumQuantity) || row.minimumQuantity < 0) {
+    if (
+      shouldImport &&
+      (!Number.isInteger(row.minimumQuantity) || row.minimumQuantity < 0)
+    ) {
       errors.push("Informe o mínimo como número inteiro maior ou igual a zero.");
     }
 
-    if (!row.categoryName || row.categoryName.length < 2) {
+    if (shouldImport && (!row.categoryName || row.categoryName.length < 2)) {
       errors.push("Informe a categoria.");
     }
 
-    const existingByCode = row.code ? existingCodes.get(row.code) : null;
-    const existingByName = normalizedName ? existingNames.get(normalizedName) : null;
-
-    if (existingByCode) {
-      errors.push(`O id ${row.code} já está cadastrado.`);
-    }
-
-    if (existingByName) {
-      errors.push(`O produto ${existingByName.name} já está cadastrado.`);
-    }
-
-    if (row.code) {
+    if (shouldImport && row.code) {
       const firstRow = csvCodes.get(row.code);
 
       if (firstRow !== undefined) {
@@ -200,7 +240,7 @@ function validateRows(
       }
     }
 
-    if (normalizedName) {
+    if (shouldImport && normalizedName) {
       const firstRow = csvNames.get(normalizedName);
 
       if (firstRow !== undefined) {
@@ -210,12 +250,20 @@ function validateRows(
       }
     }
 
+    const canImport = errors.length === 0;
+    const willImport = canImport && shouldImport;
+
+    if (canImport && existingProduct) {
+      warnings.push("Produto já cadastrado; esta linha será ignorada.");
+    }
+
     return {
       ...row,
-      canImport: errors.length === 0,
+      canImport,
       errors,
-      existingProduct: summarizeProduct(existingByCode ?? existingByName),
+      existingProduct: summarizeProduct(existingProduct),
       warnings,
+      willImport,
     };
   });
 }
@@ -265,8 +313,11 @@ async function ensureCategory(
 
 async function ensureUnit(transaction: Prisma.TransactionClient, abbreviation: string) {
   const units = await transaction.unitOfMeasure.findMany();
+  const normalizedUnit = normalize(abbreviation);
   const existing = units.find(
-    (unit) => normalize(unit.abbreviation) === normalize(abbreviation),
+    (unit) =>
+      normalize(unit.abbreviation) === normalizedUnit ||
+      normalize(unit.name) === normalizedUnit,
   );
 
   if (existing) {
@@ -309,6 +360,7 @@ export async function importProductsCsv(prisma: PrismaWriter, input: CsvInput) {
     const existingProducts = await loadExistingProducts(transaction);
     const previewRows = validateRows(rows, existingProducts);
     const invalidRow = previewRows.find((row) => row.errors.length);
+    const rowsToImport = previewRows.filter((row) => row.willImport);
 
     if (invalidRow) {
       throw new AppError(
@@ -323,12 +375,12 @@ export async function importProductsCsv(prisma: PrismaWriter, input: CsvInput) {
     });
     const usedCodes = new Set([
       ...existingProducts.map((product) => product.code),
-      ...rows.flatMap((row) => (row.code ? [row.code] : [])),
+      ...rowsToImport.flatMap((row) => (row.code ? [row.code] : [])),
     ]);
     let generatedCursor = lastProduct?.code;
     let importedRows = 0;
 
-    for (const row of rows) {
+    for (const row of rowsToImport) {
       const category = await ensureCategory(transaction, row.categoryName);
       const unit = await ensureUnit(transaction, row.unit);
       const code = row.code ?? nextAvailableCode(generatedCursor, usedCodes);

@@ -45,7 +45,11 @@ movementRoutes.get(
         },
         include: {
           destinationWarehouse: true,
-          invoice: true,
+          invoice: {
+            include: {
+              supplier: true,
+            },
+          },
           product: {
             include: {
               unit: true,

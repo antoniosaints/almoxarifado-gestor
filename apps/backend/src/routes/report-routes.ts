@@ -4,11 +4,13 @@ import path from "node:path";
 import PDFDocument from "pdfkit";
 import { Router, type Response } from "express";
 import type { SessionUser } from "../lib/auth.js";
+import { AppError } from "../lib/errors.js";
 import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
 import { warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import { getSystemSettings } from "../services/settings-service.js";
 import { getLocalUploadRoot } from "../services/upload-service.js";
+import { idParam } from "../validators/inputs.js";
 
 export const reportRoutes = Router();
 
@@ -559,6 +561,13 @@ function movementValue(movement: { quantity: number; unitPrice?: unknown }) {
   return Number.isFinite(unitPrice) ? unitPrice * movement.quantity : 0;
 }
 
+function movementTypeLabel(type: string) {
+  return type
+    .replaceAll("_", " ")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/(^|\s)\S/g, (value) => value.toLocaleUpperCase("pt-BR"));
+}
+
 function sendPdf(response: Response, fileName: string, buffer: Buffer) {
   response.setHeader("Content-Type", "application/pdf");
   response.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -649,6 +658,83 @@ reportRoutes.get(
 );
 
 reportRoutes.get(
+  "/movements/:id",
+  asyncHandler(async (request, response) => {
+    const user = currentUser(response);
+    const { id } = idParam.parse(request.params);
+    const movement = await prisma.stockMovement.findFirst({
+      where: {
+        id,
+        warehouse: warehouseScope(user),
+      },
+      include: {
+        destinationWarehouse: true,
+        invoice: {
+          include: {
+            supplier: true,
+          },
+        },
+        product: {
+          include: {
+            unit: true,
+          },
+        },
+        responsibleUser: true,
+        sourceWarehouse: true,
+        warehouse: true,
+      },
+    });
+
+    if (!movement) {
+      throw new AppError(404, "Registro nao encontrado.");
+    }
+
+    const unitPrice =
+      movement.unitPrice === null || movement.unitPrice === undefined
+        ? 0
+        : Number(movement.unitPrice);
+    const totalValue = unitPrice * movement.quantity;
+    const buffer = await buildPdf(
+      "Auditoria de movimentacao",
+      "Registro detalhado da operacao de estoque.",
+      user,
+      (document) => {
+        writeSectionTitle(document, "Operacao");
+        writeFieldRows(document, [
+          ["Tipo", movementTypeLabel(movement.type)],
+          ["Data e hora", formatDate(movement.movementDate)],
+          ["Operado por", movement.responsibleUser?.name ?? "-"],
+          ["Almoxarifado", movement.warehouse.name],
+          ["Origem", movement.sourceWarehouse?.name ?? "-"],
+          [
+            "Destino",
+            movement.destinationWarehouse?.name ?? movement.destinationNote ?? "-",
+          ],
+        ]);
+
+        writeSectionTitle(document, "Produto e valores");
+        writeFieldRows(document, [
+          ["Produto", `${movement.product.code} - ${movement.product.name}`],
+          ["Quantidade", `${movement.quantity} ${movement.product.unit.abbreviation}`],
+          ["Valor unitario", unitPrice ? formatCurrency(unitPrice) : "-"],
+          ["Valor total", unitPrice ? formatCurrency(totalValue) : "-"],
+          ["Observacao", movement.observation ?? "-"],
+        ]);
+
+        writeSectionTitle(document, "Nota fiscal");
+        writeFieldRows(document, [
+          ["Nota", movement.invoice?.number ?? "-"],
+          ["Fornecedor", movement.invoice?.supplier?.name ?? movement.invoice?.companyName ?? "-"],
+          ["CNPJ", movement.invoice?.supplier?.cnpj ?? movement.invoice?.cnpj ?? "-"],
+        ]);
+      },
+    );
+
+    sendPdf(response, `movimentacao-${movement.id}.pdf`, buffer);
+  }),
+);
+
+reportRoutes.get(
   "/stocks",
   asyncHandler(async (request, response) => {
     const user = currentUser(response);
@@ -718,6 +804,7 @@ reportRoutes.get(
     const cnpj = queryString(request.query, "cnpj");
     const invoiceId = queryString(request.query, "invoiceId");
     const number = queryString(request.query, "number");
+    const supplierId = queryString(request.query, "supplierId");
     const scopedMovementWhere = {
       warehouse: warehouseScope(user),
     };
@@ -725,6 +812,7 @@ reportRoutes.get(
       user.role === UserRole.ADMIN ? { some: {} } : { some: scopedMovementWhere };
     const invoices = await prisma.invoice.findMany({
       include: {
+        supplier: true,
         movements: {
           where: user.role === UserRole.ADMIN ? undefined : scopedMovementWhere,
           include: {
@@ -758,6 +846,7 @@ reportRoutes.get(
             : undefined,
         movements: scopedInvoiceMovements,
         number: number ? { contains: number } : undefined,
+        supplierId,
       },
     });
 

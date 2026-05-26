@@ -277,6 +277,7 @@ model TransferRequest {
 
 model Invoice {
   id                    String          @id @default(cuid())
+  supplierId            String?
   companyName           String
   companyTradeName      String?
   cnpj                  String
@@ -295,7 +296,10 @@ model Invoice {
   observation           String?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
+  supplier              Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   movements             StockMovement[]
+
+  @@index([supplierId])
 }
 
 model AuditLog {
@@ -309,6 +313,44 @@ model AuditLog {
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([entity, entityId])
+}
+
+model Supplier {
+  id                    String    @id @default(cuid())
+  name                  String
+  tradeName             String?
+  cnpj                  String    @unique
+  stateRegistration     String?
+  municipalRegistration String?
+  address               String?
+  city                  String?
+  state                 String?
+  zipCode               String?
+  phone                 String?
+  email                 String?
+  notes                 String?
+  active                Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  invoices              Invoice[]
+
+  @@index([active])
+  @@index([name])
+}
+
+model OfficeLetterTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  subject     String
+  contentHtml String
+  variables   String   @default("[]")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
+  @@index([name])
 }
 
 model SystemSettings {

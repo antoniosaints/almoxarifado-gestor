@@ -78,6 +78,78 @@ export const invoiceInput = z.object({
   totalValue: z.coerce.number().min(0).optional(),
 });
 
+export const supplierBackedInvoiceInput = z.object({
+  invoiceKey: optionalText,
+  issueDate: z.coerce.date(),
+  number: z.string().trim().min(1, "Informe o numero da nota."),
+  observation: optionalText,
+  series: optionalText,
+  supplierId: z
+    .string({ required_error: "Escolha um fornecedor." })
+    .min(1, "Escolha um fornecedor."),
+  totalValue: z.coerce.number().min(0).optional(),
+});
+
+export const supplierInput = z.object({
+  active: z.boolean().default(true),
+  address: optionalText,
+  city: optionalText,
+  cnpj: z
+    .string()
+    .trim()
+    .min(11, "Informe o CNPJ do fornecedor.")
+    .transform((value) => value.replace(/\D/g, ""))
+    .refine((value) => value.length >= 11, "Informe o CNPJ do fornecedor."),
+  email: optionalText.refine(
+    (value) => !value || z.string().email().safeParse(value).success,
+    "Informe um email valido.",
+  ),
+  municipalRegistration: optionalText,
+  name: z.string().trim().min(2, "Informe o nome do fornecedor."),
+  notes: optionalText,
+  phone: optionalText,
+  state: optionalText,
+  stateRegistration: optionalText,
+  tradeName: optionalText,
+  zipCode: optionalText,
+});
+
+const allowedOfficeVariables = [
+  "cnpj_empresa",
+  "data_atual",
+  "data_nota",
+  "nome_empresa",
+  "nome_fantasia_empresa",
+  "numero_nota",
+  "usuario_logado",
+  "valor_nota",
+] as const;
+
+export const officeTemplateInput = z.object({
+  active: z.boolean().default(true),
+  contentHtml: z.string().trim().min(3, "Informe o conteudo do oficio."),
+  description: optionalText,
+  name: z.string().trim().min(2, "Informe o nome do modelo."),
+  subject: z.string().trim().min(2, "Informe o assunto do oficio."),
+});
+
+export function extractOfficeTemplateVariables(content: string, subject = "") {
+  const variables = new Set<string>();
+  const allowed = new Set<string>(allowedOfficeVariables);
+
+  for (const match of `${subject}\n${content}`.matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)) {
+    const variable = match[1] ?? "";
+
+    if (!allowed.has(variable)) {
+      throw new Error(`Variavel de oficio nao permitida: {{${variable}}}.`);
+    }
+
+    variables.add(variable);
+  }
+
+  return Array.from(variables);
+}
+
 export const invoiceXmlImportInput = z.object({
   categoryId: z.string().min(1).optional().nullable(),
   minimumQuantity: z.coerce.number().int().min(0).default(0),

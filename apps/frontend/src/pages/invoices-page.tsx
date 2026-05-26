@@ -1,4 +1,4 @@
-import { FileDown, FileSearch, Trash2, Upload } from "lucide-react";
+import { Building2, FileDown, FileSearch, Trash2, Upload } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/table";
 import { api, apiFile, useApiResource } from "@/lib/api";
 import { getStoredSession } from "@/lib/session";
-import type { Invoice, Product, ProductCategory, Warehouse } from "@/lib/types";
+import type { Invoice, Product, ProductCategory, Supplier, Warehouse } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { MovementsTable } from "./movements-page";
 
@@ -86,6 +86,7 @@ function invoiceReportQuery(filters: {
   from?: string;
   invoiceId?: string;
   number?: string;
+  supplierId?: string;
   to?: string;
 }) {
   const params = new URLSearchParams();
@@ -136,6 +137,160 @@ function InvoicePdfButton({
       <FileDown className="h-4 w-4" />
       {size === "icon" ? null : "Exportar nota"}
     </Button>
+  );
+}
+
+function SupplierManagementDialog({
+  onSaved,
+  suppliers,
+}: {
+  onSaved: () => Promise<void>;
+  suppliers: Supplier[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState({
+    cnpj: "",
+    name: "",
+    phone: "",
+    tradeName: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      await api<Supplier>("/suppliers", {
+        body: JSON.stringify(draft),
+        method: "POST",
+      });
+      setDraft({ cnpj: "", name: "", phone: "", tradeName: "" });
+      await onSaved();
+      setMessage("Fornecedor salvo.");
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao salvar fornecedor.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={() => setOpen(true)} type="button" variant="outline">
+        <Building2 className="h-4 w-4" />
+        Fornecedores
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Fornecedores</DialogTitle>
+            <DialogDescription>
+              Cadastre empresas para agilizar a criacao de notas fiscais.
+            </DialogDescription>
+          </DialogHeader>
+          {message ? <ResourceError message={message} /> : null}
+          <Form onSubmit={submit}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField>
+                <Label htmlFor="supplier-name">Razao social</Label>
+                <Input
+                  id="supplier-name"
+                  onChange={(event) =>
+                    setDraft({ ...draft, name: event.target.value })
+                  }
+                  required
+                  value={draft.name}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="supplier-trade-name">Nome fantasia</Label>
+                <Input
+                  id="supplier-trade-name"
+                  onChange={(event) =>
+                    setDraft({ ...draft, tradeName: event.target.value })
+                  }
+                  value={draft.tradeName}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="supplier-cnpj">CNPJ</Label>
+                <Input
+                  id="supplier-cnpj"
+                  onChange={(event) =>
+                    setDraft({ ...draft, cnpj: event.target.value })
+                  }
+                  required
+                  value={draft.cnpj}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="supplier-phone">Telefone</Label>
+                <Input
+                  id="supplier-phone"
+                  onChange={(event) =>
+                    setDraft({ ...draft, phone: event.target.value })
+                  }
+                  value={draft.phone}
+                />
+              </FormField>
+            </div>
+            <Button disabled={saving} type="submit">
+              {saving ? "Salvando..." : "Salvar fornecedor"}
+            </Button>
+          </Form>
+          <DataTable
+            columns={[
+              {
+                cell: (supplier) => (
+                  <>
+                    <p className="font-medium">{supplier.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {supplier.tradeName ?? "-"}
+                    </p>
+                  </>
+                ),
+                header: "Fornecedor",
+                key: "supplier",
+              },
+              {
+                cell: (supplier) => supplier.cnpj,
+                header: "CNPJ",
+                key: "cnpj",
+              },
+              {
+                cell: (supplier) => supplier.phone ?? "-",
+                header: "Contato",
+                key: "contact",
+              },
+              {
+                cell: (supplier) => (supplier.active ? "Ativo" : "Inativo"),
+                header: "Status",
+                key: "status",
+              },
+            ]}
+            data={suppliers}
+            emptyMessage="Nenhum fornecedor cadastrado."
+            getRowId={(supplier) => supplier.id}
+            searchPlaceholder="Buscar fornecedor..."
+            searchText={(supplier) =>
+              [
+                supplier.name,
+                supplier.tradeName,
+                supplier.cnpj,
+                supplier.phone,
+              ].join(" ")
+            }
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -494,12 +649,14 @@ function InvoiceExportDialog({
   invoices,
   loading,
   onExport,
+  suppliers,
   to,
 }: {
   from: string;
   invoices: Invoice[];
   loading: boolean;
   onExport: (path: string, fileName: string) => Promise<void>;
+  suppliers: Supplier[];
   to: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -507,6 +664,7 @@ function InvoiceExportDialog({
   const [companyName, setCompanyName] = useState("");
   const [cnpj, setCnpj] = useState("");
   const [number, setNumber] = useState("");
+  const [supplierId, setSupplierId] = useState("");
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -520,6 +678,7 @@ function InvoiceExportDialog({
         from,
         invoiceId,
         number,
+        supplierId,
         to,
       }),
       selectedInvoice ? invoicePdfFileName(selectedInvoice) : "relatorio-notas-fiscais.pdf",
@@ -558,6 +717,24 @@ function InvoiceExportDialog({
                 placeholder="Todas as notas"
                 searchPlaceholder="Buscar por nota, empresa ou CNPJ..."
                 value={invoiceId}
+              />
+            </FormField>
+            <FormField>
+              <Label htmlFor="invoice-export-supplier">Fornecedor</Label>
+              <SearchSelect
+                ariaLabel="Fornecedor"
+                id="invoice-export-supplier"
+                onValueChange={setSupplierId}
+                options={[
+                  { label: "Todos os fornecedores", value: "" },
+                  ...suppliers.map((supplier) => ({
+                    label: supplier.name,
+                    searchText: `${supplier.tradeName ?? ""} ${supplier.cnpj}`,
+                    value: supplier.id,
+                  })),
+                ]}
+                placeholder="Todos os fornecedores"
+                value={supplierId}
               />
             </FormField>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -697,9 +874,11 @@ export function InvoicesPage() {
   const warehouses = useApiResource<Warehouse[]>("/warehouses", []);
   const categories = useApiResource<ProductCategory[]>("/product-categories", []);
   const products = useApiResource<Product[]>("/products", []);
+  const suppliers = useApiResource<Supplier[]>("/suppliers", []);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [movementFilter, setMovementFilter] = useState("all");
+  const [supplierId, setSupplierId] = useState("");
   const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const selectedInvoiceId = searchParams.get("invoiceId");
@@ -715,6 +894,7 @@ export function InvoicesPage() {
 
         return (
           (!selectedInvoiceId || invoice.id === selectedInvoiceId) &&
+          (!supplierId || invoice.supplierId === supplierId) &&
           (!fromDate || issueDate >= fromDate) &&
           (!toDate || issueDate <= toDate) &&
           (movementFilter === "all" ||
@@ -722,11 +902,12 @@ export function InvoicesPage() {
             (movementFilter === "unlinked" && movementCount === 0))
         );
       }),
-    [from, invoices.data, movementFilter, selectedInvoiceId, to],
+    [from, invoices.data, movementFilter, selectedInvoiceId, supplierId, to],
   );
 
   function clearFilters() {
     setFrom("");
+    setSupplierId("");
     setTo("");
     setMovementFilter("all");
   }
@@ -786,11 +967,23 @@ export function InvoicesPage() {
     }
   }
 
-  if (invoices.loading || warehouses.loading || categories.loading || products.loading) {
+  if (
+    invoices.loading ||
+    warehouses.loading ||
+    categories.loading ||
+    products.loading ||
+    suppliers.loading
+  ) {
     return <LoadingLine />;
   }
 
-  if (invoices.error || warehouses.error || categories.error || products.error) {
+  if (
+    invoices.error ||
+    warehouses.error ||
+    categories.error ||
+    products.error ||
+    suppliers.error
+  ) {
     return (
       <ResourceError
         message={
@@ -798,6 +991,7 @@ export function InvoicesPage() {
           warehouses.error ??
           categories.error ??
           products.error ??
+          suppliers.error ??
           ""
         }
       />
@@ -812,6 +1006,10 @@ export function InvoicesPage() {
           <h2 className="text-2xl font-semibold">Notas fiscais</h2>
         </div>
         <div className="flex flex-wrap gap-2">
+          <SupplierManagementDialog
+            onSaved={suppliers.reload}
+            suppliers={suppliers.data}
+          />
           <InvoiceXmlImportDialog
             categories={categories.data}
             loading={exporting}
@@ -824,6 +1022,7 @@ export function InvoicesPage() {
             invoices={invoices.data}
             loading={exporting}
             onExport={downloadReport}
+            suppliers={suppliers.data}
             to={to}
           />
         </div>
@@ -831,7 +1030,7 @@ export function InvoicesPage() {
 
       {message ? <ResourceError message={message} /> : null}
 
-      <div className="grid gap-4 rounded-lg border bg-card p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto]">
+      <div className="grid gap-4 rounded-lg border bg-card p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
         <FormField>
           <Label htmlFor="invoice-from">Emissão de</Label>
           <Input
@@ -861,6 +1060,24 @@ export function InvoicesPage() {
             <option value="linked">Com movimentações</option>
             <option value="unlinked">Sem movimentações</option>
           </Select>
+        </FormField>
+        <FormField>
+          <Label htmlFor="invoice-supplier-filter">Fornecedor</Label>
+          <SearchSelect
+            ariaLabel="Filtrar fornecedor"
+            id="invoice-supplier-filter"
+            onValueChange={setSupplierId}
+            options={[
+              { label: "Todos", value: "" },
+              ...suppliers.data.map((supplier) => ({
+                label: supplier.name,
+                searchText: `${supplier.tradeName ?? ""} ${supplier.cnpj}`,
+                value: supplier.id,
+              })),
+            ]}
+            placeholder="Todos"
+            value={supplierId}
+          />
         </FormField>
         <Button className="self-end" onClick={clearFilters} type="button" variant="outline">
           Limpar filtros

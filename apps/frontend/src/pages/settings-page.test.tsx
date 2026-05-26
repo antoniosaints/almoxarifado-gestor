@@ -57,4 +57,71 @@ describe("SettingsPage", () => {
       );
     });
   });
+
+  it("creates office templates with variable insertion", async () => {
+    let templatePayload: unknown;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/office-templates" && (init?.method ?? "GET") === "POST") {
+        templatePayload = JSON.parse(String(init?.body));
+
+        return new Response(
+          JSON.stringify({
+            active: true,
+            contentHtml: templatePayload
+              ? (templatePayload as { contentHtml: string }).contentHtml
+              : "",
+            id: "template-1",
+            name: "Oficio fornecedor",
+            subject: "Aviso",
+            variables: ["nome_empresa"],
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 201,
+          },
+        );
+      }
+
+      if (url.pathname === "/office-templates") {
+        return new Response(JSON.stringify([]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /oficios/i }));
+    fireEvent.change(screen.getByLabelText("Nome do modelo"), {
+      target: { value: "Oficio fornecedor" },
+    });
+    fireEvent.change(screen.getByLabelText("Assunto"), {
+      target: { value: "Aviso" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "{{nome_empresa}}" }));
+
+    expect(screen.getByLabelText("Conteudo do oficio")).toHaveTextContent(
+      "{{nome_empresa}}",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Salvar modelo" }));
+
+    await waitFor(() => {
+      expect(templatePayload).toMatchObject({
+        contentHtml: expect.stringContaining("{{nome_empresa}}"),
+        name: "Oficio fornecedor",
+        subject: "Aviso",
+      });
+    });
+  });
 });

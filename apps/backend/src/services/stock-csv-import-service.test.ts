@@ -105,6 +105,20 @@ describe("stock CSV import service", () => {
       companyName: "Fornecedor Municipal",
       number: "NF-20",
     });
+    const supplierRows = await prisma.$queryRawUnsafe<
+      Array<{ cnpj: string; name: string; supplierId: string | null }>
+    >(
+      `SELECT s.cnpj, s.name, i.supplierId
+       FROM Invoice i
+       LEFT JOIN Supplier s ON s.id = i.supplierId
+       WHERE i.number = ?`,
+      "NF-20",
+    );
+    expect(supplierRows[0]).toMatchObject({
+      cnpj: "12345678000190",
+      name: "Fornecedor Municipal",
+      supplierId: expect.any(String),
+    });
     await expect(
       prisma.stock.findUnique({
         where: {

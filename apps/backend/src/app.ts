@@ -8,6 +8,7 @@ import { insightRoutes } from "./routes/insight-routes.js";
 import { invoiceRoutes } from "./routes/invoice-routes.js";
 import { managerRoutes } from "./routes/manager-routes.js";
 import { movementRoutes } from "./routes/movement-routes.js";
+import { officeTemplateRoutes } from "./routes/office-template-routes.js";
 import { productCategoryRoutes } from "./routes/product-category-routes.js";
 import { productRoutes } from "./routes/product-routes.js";
 import { reportRoutes } from "./routes/report-routes.js";
@@ -17,6 +18,7 @@ import {
   settingsRoutes,
 } from "./routes/settings-routes.js";
 import { stockRoutes } from "./routes/stock-routes.js";
+import { supplierRoutes } from "./routes/supplier-routes.js";
 import { transferRequestRoutes } from "./routes/transfer-request-routes.js";
 import { uploadRoutes } from "./routes/upload-routes.js";
 import { unitRoutes } from "./routes/unit-routes.js";
@@ -57,7 +59,9 @@ app.use("/products", productRoutes);
 app.use("/product-categories", productCategoryRoutes);
 app.use("/units", unitRoutes);
 app.use("/stocks", stockRoutes);
+app.use("/suppliers", supplierRoutes);
 app.use("/movements", movementRoutes);
 app.use("/reports", reportRoutes);
+app.use("/office-templates", officeTemplateRoutes);
 app.use("/settings", settingsRoutes);
 app.use(errorHandler);

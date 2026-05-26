@@ -59,6 +59,7 @@ import type {
   Product,
   ProductCategory,
   Stock,
+  Supplier,
   UnitOfMeasure,
   Warehouse,
   WarehouseCsvPreview,
@@ -310,15 +311,22 @@ function InvoiceFields({
   onChange: (invoiceId: string) => void;
 }) {
   const invoices = useApiResource<Invoice[]>("/invoices", []);
+  const suppliers = useApiResource<Supplier[]>("/suppliers?active=true", []);
   const [draft, setDraft] = useState({
-    cnpj: "",
-    companyName: "",
     issueDate: todayInputValue().slice(0, 10),
     number: "",
     observation: "",
+    supplierId: "",
+  });
+  const [supplierDraft, setSupplierDraft] = useState({
+    cnpj: "",
+    name: "",
+    tradeName: "",
   });
   const [open, setOpen] = useState(false);
+  const [supplierOpen, setSupplierOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [supplierMessage, setSupplierMessage] = useState<string | null>(null);
 
   async function saveInvoice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -342,6 +350,30 @@ function InvoiceFields({
     }
   }
 
+  async function saveSupplier(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setSupplierMessage(null);
+
+    try {
+      const supplier = await api<Supplier>("/suppliers", {
+        body: JSON.stringify(supplierDraft),
+        method: "POST",
+      });
+
+      setDraft((current) => ({ ...current, supplierId: supplier.id }));
+      setSupplierDraft({ cnpj: "", name: "", tradeName: "" });
+      setSupplierOpen(false);
+      await suppliers.reload();
+    } catch (caughtError) {
+      setSupplierMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao salvar fornecedor.",
+      );
+    }
+  }
+
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
@@ -355,7 +387,7 @@ function InvoiceFields({
               { label: "Sem nota vinculada", value: "" },
               ...invoices.data.map((invoice) => ({
                 label: `${invoice.number} - ${invoice.companyName}`,
-                searchText: invoice.cnpj,
+                searchText: `${invoice.cnpj} ${invoice.supplier?.name ?? ""}`,
                 value: invoice.id,
               })),
             ]}
@@ -378,29 +410,27 @@ function InvoiceFields({
           </DialogHeader>
           <Form onSubmit={saveInvoice}>
             {message ? <ResourceError message={message} /> : null}
-            <FormField>
-              <Label htmlFor="invoice-company">Empresa</Label>
-              <Input
-                id="invoice-company"
-                onChange={(event) =>
-                  setDraft({ ...draft, companyName: event.target.value })
-                }
-                required
-                value={draft.companyName}
-              />
-            </FormField>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
               <FormField>
-                <Label htmlFor="invoice-cnpj">CNPJ</Label>
-                <Input
-                  id="invoice-cnpj"
-                  onChange={(event) =>
-                    setDraft({ ...draft, cnpj: event.target.value })
-                  }
-                  required
-                  value={draft.cnpj}
+                <Label htmlFor="invoice-supplier">Fornecedor</Label>
+                <SearchSelect
+                  ariaLabel="Fornecedor da nota"
+                  id="invoice-supplier"
+                  onValueChange={(supplierId) => setDraft({ ...draft, supplierId })}
+                  options={suppliers.data.map((supplier) => ({
+                    label: supplier.name,
+                    searchText: `${supplier.tradeName ?? ""} ${supplier.cnpj}`,
+                    value: supplier.id,
+                  }))}
+                  placeholder="Selecione o fornecedor"
+                  value={draft.supplierId}
                 />
               </FormField>
+              <Button onClick={() => setSupplierOpen(true)} type="button" variant="outline">
+                Novo fornecedor
+              </Button>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
               <FormField>
                 <Label htmlFor="invoice-number">Número da nota</Label>
                 <Input
@@ -435,7 +465,59 @@ function InvoiceFields({
                 value={draft.observation}
               />
             </FormField>
-            <Button type="submit">Salvar nota fiscal</Button>
+            <Button disabled={!draft.supplierId} type="submit">
+              Salvar nota fiscal
+            </Button>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog onOpenChange={setSupplierOpen} open={supplierOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo fornecedor</DialogTitle>
+            <DialogDescription>
+              Cadastre rapidamente a empresa para vincular a nota fiscal.
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={saveSupplier}>
+            {supplierMessage ? <ResourceError message={supplierMessage} /> : null}
+            <FormField>
+              <Label htmlFor="quick-supplier-name">Razao social</Label>
+              <Input
+                id="quick-supplier-name"
+                onChange={(event) =>
+                  setSupplierDraft({ ...supplierDraft, name: event.target.value })
+                }
+                required
+                value={supplierDraft.name}
+              />
+            </FormField>
+            <FormField>
+              <Label htmlFor="quick-supplier-trade-name">Nome fantasia</Label>
+              <Input
+                id="quick-supplier-trade-name"
+                onChange={(event) =>
+                  setSupplierDraft({
+                    ...supplierDraft,
+                    tradeName: event.target.value,
+                  })
+                }
+                value={supplierDraft.tradeName}
+              />
+            </FormField>
+            <FormField>
+              <Label htmlFor="quick-supplier-cnpj">CNPJ</Label>
+              <Input
+                id="quick-supplier-cnpj"
+                onChange={(event) =>
+                  setSupplierDraft({ ...supplierDraft, cnpj: event.target.value })
+                }
+                required
+                value={supplierDraft.cnpj}
+              />
+            </FormField>
+            <Button type="submit">Salvar fornecedor</Button>
           </Form>
         </DialogContent>
       </Dialog>

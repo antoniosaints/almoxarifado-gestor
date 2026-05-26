@@ -23,8 +23,8 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { setSession } = useSession();
   const { darkMode, settings } = useSystemSettings();
-  const [email, setEmail] = useState("admin@prefeitura.local");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const loginBackgroundUrl = resolveAssetUrl(settings.loginBackgroundUrl);

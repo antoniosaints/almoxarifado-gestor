@@ -75,12 +75,12 @@ const managerItems = [
 
 const fleetItems = [
   { icon: Layers3, label: "Dashboard", to: "/dashboard" },
-  { icon: Boxes, label: "Veiculos", to: "/vehicles" },
+  { icon: Boxes, label: "Veículos", to: "/vehicles" },
   { icon: UsersRound, label: "Motoristas", to: "/drivers" },
-  { icon: ClipboardCheck, label: "Operacoes", to: "/operations" },
+  { icon: ClipboardCheck, label: "Operações", to: "/operations" },
   { icon: Bell, label: "Alertas", to: "/alerts" },
-  { icon: FileDown, label: "Relatorios", to: "/reports" },
-  { icon: Settings, label: "Configuracoes", role: "ADMIN", to: "/settings" },
+  { icon: FileDown, label: "Relatórios", to: "/reports" },
+  { icon: Settings, label: "Configurações", role: "ADMIN", to: "/settings" },
 ] satisfies Array<{
   icon: typeof Boxes;
   label: string;
@@ -270,7 +270,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Sheet>
             <div>
               <p className="text-xs font-medium uppercase text-muted-foreground">
-                {isManagerSystem ? "Gestao" : isFleetSystem ? "Frota" : "Controle"}
+                {isManagerSystem ? "Gestão" : isFleetSystem ? "Frota" : "Controle"}
               </p>
               <h1 className="text-lg font-semibold">{title}</h1>
             </div>

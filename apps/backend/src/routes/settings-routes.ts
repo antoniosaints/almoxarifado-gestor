@@ -78,10 +78,12 @@ settingsRoutes.post(
 
     const result = await prisma.$transaction(async (transaction) => {
       const auditLogs = await transaction.auditLog.deleteMany();
+      const officeTemplates = await transaction.officeLetterTemplate.deleteMany();
       const transferRequests = await transaction.transferRequest.deleteMany();
       const entryRequests = await transaction.entryRequest.deleteMany();
       const movements = await transaction.stockMovement.deleteMany();
       const invoices = await transaction.invoice.deleteMany();
+      const suppliers = await transaction.supplier.deleteMany();
       const stocks = await transaction.stock.deleteMany();
       const warehouseAssignments = await transaction.userWarehouse.deleteMany();
       const products = await transaction.product.deleteMany();
@@ -119,9 +121,11 @@ settingsRoutes.post(
           entryRequests: entryRequests.count,
           invoices: invoices.count,
           movements: movements.count,
+          officeTemplates: officeTemplates.count,
           productCategories: productCategories.count,
           products: products.count,
           stocks: stocks.count,
+          suppliers: suppliers.count,
           transferRequests: transferRequests.count,
           units: units.count,
           warehouseAssignments: warehouseAssignments.count,

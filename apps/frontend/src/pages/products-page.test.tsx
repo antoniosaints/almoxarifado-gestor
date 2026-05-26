@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Product, Stock } from "@/lib/types";
-import { ProductStocksDialog } from "./products-page";
+import { ProductStocksDialog, readCsvFile } from "./products-page";
 
 const product: Product = {
   active: true,
@@ -62,5 +62,24 @@ describe("ProductStocksDialog", () => {
     expect(screen.getByText("Estoques de Papel A4")).toBeInTheDocument();
     expect(screen.getByText("Almoxarifado Central")).toBeInTheDocument();
     expect(screen.getByText("12 PCT")).toBeInTheDocument();
+  });
+});
+
+describe("readCsvFile", () => {
+  it("decodes Windows-1252 CSV files with accented names", async () => {
+    const bytes = Uint8Array.from([
+      ...Array.from("id;nome;unidade;minimo;categoria\n;A").map((char) =>
+        char.charCodeAt(0),
+      ),
+      0xe7,
+      0xfa,
+      ...Array.from("car;UN;1;Patrim").map((char) => char.charCodeAt(0)),
+      0xf4,
+      ...Array.from("nio").map((char) => char.charCodeAt(0)),
+    ]);
+    const file = new File([bytes], "produtos.csv", { type: "text/csv" });
+
+    await expect(readCsvFile(file)).resolves.toContain("Açúcar");
+    await expect(readCsvFile(file)).resolves.toContain("Patrimônio");
   });
 });

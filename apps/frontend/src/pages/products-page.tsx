@@ -60,6 +60,37 @@ function emptyDraft(categoryId = "", unitId = ""): ProductDraft {
   };
 }
 
+function readFileBuffer(file: File) {
+  if (typeof file.arrayBuffer === "function") {
+    return file.arrayBuffer();
+  }
+
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler CSV."));
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Falha ao ler CSV."));
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+export async function readCsvFile(file: File) {
+  const buffer = await readFileBuffer(file);
+
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    return new TextDecoder("windows-1252").decode(buffer);
+  }
+}
+
 export function ProductStocksDialog({
   product,
   stocks,
@@ -181,7 +212,7 @@ function ProductCsvImportDialog({ onImported }: { onImported: () => Promise<void
       return;
     }
 
-    const selectedCsv = await file.text();
+    const selectedCsv = await readCsvFile(file);
 
     setCsv(selectedCsv);
     setFileName(file.name);
@@ -301,8 +332,17 @@ function ProductCsvImportDialog({ onImported }: { onImported: () => Promise<void
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {row.canImport ? (
-                              <Badge variant="success">Pronto</Badge>
+                              row.willImport ? (
+                                <Badge variant="success">Pronto</Badge>
+                              ) : (
+                                <Badge variant="outline">Já cadastrado</Badge>
+                              )
                             ) : null}
+                            {row.warnings.map((warning) => (
+                              <Badge key={warning} variant="low">
+                                {warning}
+                              </Badge>
+                            ))}
                             {row.errors.map((error) => (
                               <Badge key={error} variant="zero">
                                 {error}

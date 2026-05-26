@@ -32,6 +32,12 @@ const invoice: Invoice = {
       },
       productId: "paper",
       quantity: 3,
+      responsibleUser: {
+        email: "admin@prefeitura.local",
+        id: "admin",
+        name: "Administrador",
+        role: "ADMIN",
+      },
       type: "TRANSFERENCIA_ENTRADA",
       unitPrice: 40,
       warehouse: {
@@ -64,6 +70,7 @@ describe("InvoiceMovementsDialog", () => {
     expect(screen.getByText("Papelaria Centro")).toBeInTheDocument();
     expect(screen.getByText("Rua Central, 100, Centro")).toBeInTheDocument();
     expect(screen.getByText("R$ 120,50")).toBeInTheDocument();
+    expect(screen.getByText("Administrador")).toBeInTheDocument();
   });
 
   it("filters the list by invoiceId from the query string", async () => {

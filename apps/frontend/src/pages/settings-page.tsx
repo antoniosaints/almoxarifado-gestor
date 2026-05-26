@@ -1,8 +1,13 @@
 import {
   AlertTriangle,
+  AlignLeft,
+  Bold,
   Building2,
   FileText,
   Image,
+  Italic,
+  List,
+  ListOrdered,
   Moon,
   Palette,
   RotateCcw,
@@ -28,13 +33,13 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { api, apiUpload } from "@/lib/api";
+import { api, apiUpload, useApiResource } from "@/lib/api";
 import { resolveAssetUrl } from "@/lib/assets";
 import {
   defaultSystemSettings,
   useSystemSettings,
 } from "@/lib/system-settings";
-import type { SystemSettings } from "@/lib/types";
+import type { OfficeLetterTemplate, SystemSettings } from "@/lib/types";
 
 type SettingsMessage = {
   kind: "error" | "success";
@@ -144,6 +149,262 @@ function ImageUrlField({
   );
 }
 
+const officeVariables = [
+  "{{nome_empresa}}",
+  "{{cnpj_empresa}}",
+  "{{nome_fantasia_empresa}}",
+  "{{numero_nota}}",
+  "{{data_nota}}",
+  "{{valor_nota}}",
+  "{{data_atual}}",
+  "{{usuario_logado}}",
+];
+
+function OfficeTemplatesTab() {
+  const templates = useApiResource<OfficeLetterTemplate[]>("/office-templates", []);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [draft, setDraft] = useState({
+    active: true,
+    contentHtml: "",
+    description: "",
+    name: "",
+    subject: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<SettingsMessage | null>(null);
+
+  function selectTemplate(template: OfficeLetterTemplate) {
+    setSelectedTemplateId(template.id);
+    setDraft({
+      active: template.active,
+      contentHtml: template.contentHtml,
+      description: template.description ?? "",
+      name: template.name,
+      subject: template.subject,
+    });
+    setMessage(null);
+  }
+
+  function newTemplate() {
+    setSelectedTemplateId("");
+    setDraft({
+      active: true,
+      contentHtml: "",
+      description: "",
+      name: "",
+      subject: "",
+    });
+    setMessage(null);
+  }
+
+  function wrapContent(prefix: string, suffix = prefix) {
+    setDraft((current) => ({
+      ...current,
+      contentHtml: `${current.contentHtml}${prefix}${suffix}`,
+    }));
+  }
+
+  function insertVariable(variable: string) {
+    setDraft((current) => ({
+      ...current,
+      contentHtml: `${current.contentHtml}${variable}`,
+    }));
+  }
+
+  async function saveTemplate() {
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      const saved = await api<OfficeLetterTemplate>(
+        selectedTemplateId
+          ? `/office-templates/${selectedTemplateId}`
+          : "/office-templates",
+        {
+          body: JSON.stringify(draft),
+          method: selectedTemplateId ? "PUT" : "POST",
+        },
+      );
+
+      setSelectedTemplateId(saved.id);
+      setMessage({ kind: "success", text: "Modelo de oficio salvo." });
+      await templates.reload();
+    } catch (caughtError) {
+      setMessage({
+        kind: "error",
+        text:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Falha ao salvar modelo de oficio.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <aside className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-medium">Modelos</p>
+          <Button onClick={newTemplate} size="sm" type="button" variant="outline">
+            Novo
+          </Button>
+        </div>
+        <div className="space-y-2">
+          {templates.data.map((template) => (
+            <button
+              className={`w-full rounded-md border p-3 text-left text-sm transition hover:bg-muted ${
+                selectedTemplateId === template.id ? "border-primary bg-muted" : ""
+              }`}
+              key={template.id}
+              onClick={() => selectTemplate(template)}
+              type="button"
+            >
+              <span className="block font-medium">{template.name}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {template.subject}
+              </span>
+            </button>
+          ))}
+          {!templates.loading && !templates.data.length ? (
+            <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Nenhum modelo cadastrado.
+            </div>
+          ) : null}
+        </div>
+      </aside>
+
+      <div className="space-y-4">
+        {message ? (
+          message.kind === "success" ? (
+            <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
+              <AlertTitle>Pronto</AlertTitle>
+              <AlertDescription className="text-emerald-900">
+                {message.text}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <ResourceError message={message.text} />
+          )
+        ) : null}
+        <div className="grid gap-4 md:grid-cols-2">
+          <FormField>
+            <Label htmlFor="office-template-name">Nome do modelo</Label>
+            <Input
+              id="office-template-name"
+              onChange={(event) =>
+                setDraft({ ...draft, name: event.target.value })
+              }
+              value={draft.name}
+            />
+          </FormField>
+          <FormField>
+            <Label htmlFor="office-template-subject">Assunto</Label>
+            <Input
+              id="office-template-subject"
+              onChange={(event) =>
+                setDraft({ ...draft, subject: event.target.value })
+              }
+              value={draft.subject}
+            />
+          </FormField>
+        </div>
+        <FormField>
+          <Label htmlFor="office-template-description">Descricao</Label>
+          <Input
+            id="office-template-description"
+            onChange={(event) =>
+              setDraft({ ...draft, description: event.target.value })
+            }
+            value={draft.description}
+          />
+        </FormField>
+        <div className="flex flex-wrap gap-2 rounded-md border bg-background p-2">
+          <Button onClick={() => wrapContent("<strong>", "</strong>")} size="icon" type="button" variant="outline">
+            <Bold className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => wrapContent("<em>", "</em>")} size="icon" type="button" variant="outline">
+            <Italic className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => wrapContent("<ul><li>", "</li></ul>")} size="icon" type="button" variant="outline">
+            <List className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => wrapContent("<ol><li>", "</li></ol>")} size="icon" type="button" variant="outline">
+            <ListOrdered className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => wrapContent("<p style=\"text-align:left\">", "</p>")} size="icon" type="button" variant="outline">
+            <AlignLeft className="h-4 w-4" />
+          </Button>
+        </div>
+        <FormField>
+          <Label htmlFor="office-template-content">Conteudo do oficio</Label>
+          <div
+            aria-label="Conteudo do oficio"
+            className="min-h-48 rounded-md border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            contentEditable
+            id="office-template-content"
+            onInput={(event) =>
+              setDraft({
+                ...draft,
+                contentHtml: event.currentTarget.innerHTML,
+              })
+            }
+            role="textbox"
+            suppressContentEditableWarning
+          >
+            {draft.contentHtml}
+          </div>
+        </FormField>
+        <div className="space-y-2 rounded-md border bg-background p-3">
+          <p className="text-xs font-medium uppercase text-muted-foreground">
+            Variaveis
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {officeVariables.map((variable) => (
+              <Button
+                key={variable}
+                onClick={() => insertVariable(variable)}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                {variable}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={draft.active}
+              onCheckedChange={(active) => setDraft({ ...draft, active })}
+            />
+            Modelo ativo
+          </label>
+          <Button
+            disabled={saving || !draft.name || !draft.subject || !draft.contentHtml}
+            onClick={saveTemplate}
+            type="button"
+          >
+            <Save className="h-4 w-4" />
+            {saving ? "Salvando..." : "Salvar modelo"}
+          </Button>
+        </div>
+        <div className="rounded-md border bg-background p-4">
+          <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+            Previa
+          </p>
+          <div
+            className="prose prose-sm max-w-none dark:prose-invert"
+            dangerouslySetInnerHTML={{ __html: draft.contentHtml || "-" }}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const {
     darkMode,
@@ -164,6 +425,7 @@ export function SettingsPage() {
   const [resetting, setResetting] = useState(false);
   const [resetCatalogOptions, setResetCatalogOptions] =
     useState<ResetCatalogOptions>(defaultResetCatalogOptions);
+  const [activeTab, setActiveTab] = useState("appearance");
   const [uploadingField, setUploadingField] = useState<keyof SystemSettings | null>(
     null,
   );
@@ -359,23 +621,27 @@ export function SettingsPage() {
       ) : null}
 
       <Form id="system-settings-form" onSubmit={submit}>
-        <Tabs defaultValue="appearance">
+        <Tabs onValueChange={setActiveTab} value={activeTab}>
           <TabsList>
-            <TabsTrigger value="appearance">
+            <TabsTrigger onClick={() => setActiveTab("appearance")} value="appearance">
               <Palette className="mr-1 h-4 w-4" />
               Aparencia
             </TabsTrigger>
-            <TabsTrigger value="brand">
+            <TabsTrigger onClick={() => setActiveTab("brand")} value="brand">
               <Building2 className="mr-1 h-4 w-4" />
               Marca
             </TabsTrigger>
-            <TabsTrigger value="login">
+            <TabsTrigger onClick={() => setActiveTab("login")} value="login">
               <Image className="mr-1 h-4 w-4" />
               Login
             </TabsTrigger>
-            <TabsTrigger value="reports">
+            <TabsTrigger onClick={() => setActiveTab("reports")} value="reports">
               <FileText className="mr-1 h-4 w-4" />
               Relatórios
+            </TabsTrigger>
+            <TabsTrigger className="hidden" onClick={() => setActiveTab("office")} value="office">
+              <FileText className="mr-1 h-4 w-4" />
+              Oficios
             </TabsTrigger>
           </TabsList>
 
@@ -630,6 +896,10 @@ export function SettingsPage() {
                 </div>
               </div>
             </section>
+          </TabsContent>
+
+          <TabsContent value="office">
+            <OfficeTemplatesTab />
           </TabsContent>
         </Tabs>
       </Form>
