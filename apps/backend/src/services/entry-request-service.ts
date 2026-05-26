@@ -4,8 +4,12 @@ import {
   RequestStatus,
   type PrismaClient,
 } from "@prisma/client";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import PDFDocument from "pdfkit";
 import { AppError } from "../lib/errors.js";
 import { defaultSettings, settingsId } from "./settings-service.js";
+import { getLocalUploadRoot } from "./upload-service.js";
 
 type EntryRequestInput = {
   movementDate: Date;
@@ -410,6 +414,270 @@ function renderPlainTemplate(template: string, variables: Record<string, string>
   );
 }
 
+function localUploadPathFromPublicUrl(url: string) {
+  const prefixedUrl = url.startsWith("uploads/") ? `/${url}` : url;
+
+  if (!prefixedUrl.startsWith("/uploads/")) {
+    return null;
+  }
+
+  let pathname: string;
+
+  try {
+    pathname = new URL(prefixedUrl, "http://local").pathname;
+  } catch {
+    return null;
+  }
+
+  if (!pathname.startsWith("/uploads/")) {
+    return null;
+  }
+
+  let relativePath: string;
+
+  try {
+    relativePath = decodeURIComponent(pathname.slice("/uploads/".length));
+  } catch {
+    return null;
+  }
+
+  const uploadRoot = getLocalUploadRoot();
+  const filePath = path.resolve(uploadRoot, relativePath);
+  const relativeToRoot = path.relative(uploadRoot, filePath);
+
+  if (
+    relativeToRoot === ".." ||
+    relativeToRoot.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeToRoot)
+  ) {
+    return null;
+  }
+
+  return filePath;
+}
+
+async function loadOfficeLogo(url: string | null | undefined) {
+  const normalizedUrl = url?.trim();
+
+  if (!normalizedUrl) {
+    return null;
+  }
+
+  if (normalizedUrl.startsWith("data:image/")) {
+    const commaIndex = normalizedUrl.indexOf(",");
+
+    if (commaIndex < 0) {
+      return null;
+    }
+
+    const metadata = normalizedUrl.slice(0, commaIndex);
+    const payload = normalizedUrl.slice(commaIndex + 1);
+
+    return Buffer.from(
+      metadata.includes(";base64") ? payload : decodeURIComponent(payload),
+      metadata.includes(";base64") ? "base64" : "utf8",
+    );
+  }
+
+  const localUploadPath = localUploadPathFromPublicUrl(normalizedUrl);
+
+  if (localUploadPath) {
+    try {
+      return await readFile(localUploadPath);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    const response = await fetch(normalizedUrl, { signal: controller.signal });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return Buffer.from(await response.arrayBuffer());
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function decodeHtmlEntities(value: string) {
+  const namedEntities: Record<string, string> = {
+    amp: "&",
+    ccedil: "ç",
+    eacute: "é",
+    gt: ">",
+    iacute: "í",
+    lt: "<",
+    nbsp: " ",
+    ordm: "º",
+    quot: '"',
+    aacute: "á",
+    agrave: "à",
+    acirc: "â",
+    atilde: "ã",
+    egrave: "è",
+    ecirc: "ê",
+    oacute: "ó",
+    ocirc: "ô",
+    otilde: "õ",
+    uacute: "ú",
+  };
+
+  return value.replace(
+    /&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g,
+    (match, entity: string) => {
+      if (entity.startsWith("#x")) {
+        const codePoint = Number.parseInt(entity.slice(2), 16);
+
+        return Number.isFinite(codePoint)
+          ? String.fromCodePoint(codePoint)
+          : match;
+      }
+
+      if (entity.startsWith("#")) {
+        const codePoint = Number.parseInt(entity.slice(1), 10);
+
+        return Number.isFinite(codePoint)
+          ? String.fromCodePoint(codePoint)
+          : match;
+      }
+
+      return namedEntities[entity.toLocaleLowerCase("pt-BR")] ?? match;
+    },
+  );
+}
+
+function htmlToPdfParagraphs(html: string) {
+  return decodeHtmlEntities(
+    html
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|div|h[1-6])>\s*<\s*(p|div|h[1-6])[^>]*>/gi, "\n\n")
+      .replace(/<li[^>]*>/gi, "\n")
+      .replace(/<\/(p|div|h[1-6]|li)>/gi, "\n\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\u00a0/g, " "),
+  )
+    .split(/\n{2,}/)
+    .map((paragraph) =>
+      paragraph
+        .split("\n")
+        .map((line) => line.trim())
+        .join("\n")
+        .trim(),
+    )
+    .filter(Boolean);
+}
+
+function ensurePdfSpace(document: PDFKit.PDFDocument, height: number) {
+  if (document.y + height > document.page.height - document.page.margins.bottom) {
+    document.addPage();
+  }
+}
+
+function drawOfficeFallbackLogo(document: PDFKit.PDFDocument, x: number, y: number) {
+  document
+    .roundedRect(x, y, 74, 48, 6)
+    .lineWidth(0.8)
+    .strokeColor("#94a3b8")
+    .stroke();
+  document
+    .font("Helvetica-Bold")
+    .fontSize(16)
+    .fillColor("#0f172a")
+    .text("OF", x, y + 16, { align: "center", width: 74 });
+}
+
+function drawOfficeHeader(
+  document: PDFKit.PDFDocument,
+  letter: Awaited<ReturnType<typeof getEntryRequestOfficeLetter>>,
+  logo: Buffer | null,
+) {
+  const left = document.page.margins.left;
+  const right = document.page.width - document.page.margins.right;
+  const titleX = left + 92;
+
+  if (logo) {
+    try {
+      document.image(logo, left, 42, { fit: [74, 48] });
+    } catch {
+      drawOfficeFallbackLogo(document, left, 42);
+    }
+  } else {
+    drawOfficeFallbackLogo(document, left, 42);
+  }
+
+  document
+    .font("Helvetica-Bold")
+    .fontSize(12)
+    .fillColor("#111827")
+    .text(letter.header.title, titleX, 44, { width: right - titleX });
+  document
+    .font("Helvetica")
+    .fontSize(10)
+    .fillColor("#374151")
+    .text(letter.header.subtitle, titleX, 62, { width: right - titleX });
+  document
+    .moveTo(left, 104)
+    .lineTo(right, 104)
+    .lineWidth(0.6)
+    .strokeColor("#d1d5db")
+    .stroke();
+  document.x = left;
+  document.y = 132;
+}
+
+function drawOfficeFooter(document: PDFKit.PDFDocument) {
+  const range = document.bufferedPageRange();
+
+  for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
+    document.switchToPage(pageIndex);
+
+    const left = document.page.margins.left;
+    const right = document.page.width - document.page.margins.right;
+    const footerY = document.page.height - 52;
+    const originalBottomMargin = document.page.margins.bottom;
+
+    document
+      .moveTo(left, footerY)
+      .lineTo(right, footerY)
+      .lineWidth(0.5)
+      .strokeColor("#e5e7eb")
+      .stroke();
+
+    document.page.margins.bottom = 0;
+    try {
+      document
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor("#6b7280")
+        .text(`Pagina ${pageIndex + 1} de ${range.count}`, left, footerY + 10, {
+          align: "right",
+          lineBreak: false,
+          width: right - left,
+        });
+    } finally {
+      document.page.margins.bottom = originalBottomMargin;
+    }
+  }
+}
+
+function officeLetterFileName(numberFormatted: string, requestId: string) {
+  const suffix = numberFormatted.replace(/[^\d]+/g, "-").replace(/^-|-$/g, "");
+
+  return `oficio-${suffix || requestId}.pdf`;
+}
+
 async function ensureOfficeNumber(
   prisma: Prisma.TransactionClient,
   request: OfficeRequest,
@@ -518,4 +786,68 @@ export async function getEntryRequestOfficeLetter(
       year: request.officeYear,
     };
   });
+}
+
+export async function buildEntryRequestOfficeLetterPdf(
+  prisma: PrismaClient,
+  requestId: string,
+  viewerName: string,
+) {
+  const letter = await getEntryRequestOfficeLetter(prisma, requestId, viewerName);
+  const logo = await loadOfficeLogo(letter.header.logoUrl);
+  const document = new PDFDocument({
+    bufferPages: true,
+    margins: {
+      bottom: 72,
+      left: 72,
+      right: 72,
+      top: 42,
+    },
+    size: "A4",
+  });
+  const chunks: Buffer[] = [];
+
+  const buffer = await new Promise<Buffer>((resolve, reject) => {
+    document.on("data", (chunk: Buffer) => chunks.push(chunk));
+    document.on("end", () => resolve(Buffer.concat(chunks)));
+    document.on("error", reject);
+
+    drawOfficeHeader(document, letter, logo);
+
+    for (const paragraph of htmlToPdfParagraphs(letter.contentHtml)) {
+      const isTitle = /^OF[IÍ]CIO\s+N[º°]/i.test(paragraph);
+      const contentX = document.page.margins.left;
+      const contentWidth =
+        document.page.width -
+        document.page.margins.left -
+        document.page.margins.right;
+
+      document
+        .font(isTitle ? "Times-Bold" : "Times-Roman")
+        .fontSize(isTitle ? 13 : 12);
+
+      const paragraphHeight = document.heightOfString(paragraph, {
+        align: isTitle ? "center" : "left",
+        width: contentWidth,
+      });
+
+      ensurePdfSpace(document, paragraphHeight + 18);
+      document
+        .fillColor("#111827")
+        .text(paragraph, contentX, document.y, {
+          align: isTitle ? "center" : "left",
+          lineGap: 4,
+          width: contentWidth,
+        });
+      document.moveDown(isTitle ? 1.2 : 0.8);
+    }
+
+    drawOfficeFooter(document);
+    document.end();
+  });
+
+  return {
+    buffer,
+    fileName: officeLetterFileName(letter.numberFormatted, requestId),
+  };
 }

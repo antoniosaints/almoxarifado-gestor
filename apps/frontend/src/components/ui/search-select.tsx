@@ -103,6 +103,7 @@ export function SearchSelect({
   });
   const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const selectedOption = options.find((option) => option.value === value);
@@ -181,17 +182,11 @@ export function SearchSelect({
           : rect.bottom + panelGap;
 
       setPanelPosition({
-        left:
-          dialogContent && dialogRect
-            ? left - dialogRect.left + dialogContent.scrollLeft
-            : left,
+        left,
         maxHeight,
         side,
-        strategy: dialogContent ? "absolute" : "fixed",
-        top:
-          dialogContent && dialogRect
-            ? top - dialogRect.top + dialogContent.scrollTop
-            : top,
+        strategy: "fixed",
+        top,
         width,
       });
     }
@@ -204,6 +199,18 @@ export function SearchSelect({
       window.removeEventListener("resize", updatePanelPosition);
       window.removeEventListener("scroll", updatePanelPosition, true);
     };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [open]);
 
   function selectValue(nextValue: string) {
@@ -234,10 +241,10 @@ export function SearchSelect({
       <div className="relative mb-2">
         <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
-          autoFocus
           className="pl-9"
           onChange={(event) => setQuery(event.target.value)}
           placeholder={searchPlaceholder}
+          ref={inputRef}
           value={query}
         />
       </div>
@@ -288,12 +295,7 @@ export function SearchSelect({
       </Button>
 
       {panel && typeof document !== "undefined"
-        ? createPortal(
-            panel,
-            triggerRef.current
-              ? getDialogContent(triggerRef.current) ?? document.body
-              : document.body,
-          )
+        ? createPortal(panel, document.body)
         : null}
     </div>
   );

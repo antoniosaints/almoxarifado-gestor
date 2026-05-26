@@ -150,7 +150,7 @@ describe("stock CSV import service", () => {
     ).resolves.toBeNull();
   });
 
-  it("blocks importing a CSV invoice that already has movements", async () => {
+  it("skips invoice rows that already have product movements and continues importing", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const warehouse = await prisma.warehouse.create({
       data: {
@@ -180,15 +180,175 @@ describe("stock CSV import service", () => {
     const csv = [
       csvHeader,
       "Papel A4;UN;2;10,00;;NF-30;12345678000190;Fornecedor Municipal;25/05/2026",
+      "Caneta azul;UN;3;1,50;Linha nova;NF-30;12345678000190;Fornecedor Municipal;25/05/2026",
+      "Linha invalida;UN;0;1,00;Quantidade invalida;NF-30;12345678000190;Fornecedor Municipal;25/05/2026",
     ].join("\n");
 
+    const result = await importWarehouseCsv(prisma, {
+      csv,
+      rows: [
+        { action: "IMPORT", productId: product.id, rowIndex: 0 },
+        { action: "IMPORT", createProduct: true, rowIndex: 1 },
+        { action: "IMPORT", createProduct: true, rowIndex: 2 },
+      ],
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    expect(result).toMatchObject({
+      importedRows: 1,
+      skippedRows: 2,
+    });
     await expect(
-      importWarehouseCsv(prisma, {
-        csv,
-        rows: [{ action: "IMPORT", productId: product.id, rowIndex: 0 }],
-        userId: user.id,
-        warehouseId: warehouse.id,
+      prisma.stockMovement.count({
+        where: {
+          invoiceId: invoice.id,
+        },
       }),
-    ).rejects.toThrow("A nota NF-30 já possui movimentações importadas.");
+    ).resolves.toBe(2);
+    await expect(
+      prisma.product.findFirst({
+        where: { name: "Caneta azul" },
+      }),
+    ).resolves.toMatchObject({
+      name: "Caneta azul",
+    });
+    await expect(
+      prisma.product.findFirst({
+        where: { name: "Linha invalida" },
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("reuses existing units by name when creating stock products from CSV", async () => {
+    const { productCategory, unit, user, warehouseCategory } =
+      await createBaseFixture(prisma);
+    await prisma.unitOfMeasure.update({
+      data: { name: "UNIDADE" },
+      where: { id: unit.id },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const csv = [
+      csvHeader,
+      "Alcool 70;UNIDADE;5;2,00;Compra inicial;NF-35;12345678000190;Fornecedor Municipal;25/05/2026",
+    ].join("\n");
+
+    const result = await importWarehouseCsv(prisma, {
+      categoryId: productCategory.id,
+      csv,
+      rows: [{ action: "IMPORT", createProduct: true, rowIndex: 0 }],
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    expect(result).toMatchObject({
+      importedRows: 1,
+      skippedRows: 0,
+    });
+    await expect(prisma.unitOfMeasure.count()).resolves.toBe(1);
+    await expect(
+      prisma.product.findFirst({
+        include: { unit: true },
+        where: { name: "Alcool 70" },
+      }),
+    ).resolves.toMatchObject({
+      unit: { id: unit.id },
+    });
+  });
+
+  it("skips already imported invoice rows and imports only new stock rows", async () => {
+    const { productCategory, user, warehouseCategory } =
+      await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const firstCsv = [
+      csvHeader,
+      "Açúcar cristal;UN;2;3,50;Compra inicial;NF-40;12345678000190;Fornecedor Municipal;25/05/2026",
+    ].join("\n");
+    const rerunCsv = [
+      csvHeader,
+      "Açúcar cristal;UN;2;3,50;Compra inicial;NF-40;12345678000190;Fornecedor Municipal;25/05/2026",
+      "Álcool 70º;UN;5;2,00;Linha adicionada;NF-40;12345678000190;Fornecedor Municipal;25/05/2026",
+    ].join("\n");
+
+    await importWarehouseCsv(prisma, {
+      categoryId: productCategory.id,
+      csv: firstCsv,
+      rows: [{ action: "IMPORT", createProduct: true, rowIndex: 0 }],
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    const preview = await previewWarehouseCsvImport(prisma, {
+      csv: rerunCsv,
+      warehouseId: warehouse.id,
+    });
+
+    expect(preview.rows[0]).toMatchObject({
+      alreadyImported: true,
+      canImport: true,
+      productName: "Açúcar cristal",
+      willImport: false,
+    });
+    expect(preview.rows[0].warnings).toContain(
+      "Linha já importada; será ignorada.",
+    );
+    expect(preview.rows[1]).toMatchObject({
+      alreadyImported: false,
+      canImport: true,
+      productName: "Álcool 70º",
+      willImport: true,
+    });
+
+    const result = await importWarehouseCsv(prisma, {
+      categoryId: productCategory.id,
+      csv: rerunCsv,
+      rows: [
+        { action: "IMPORT", rowIndex: 0 },
+        { action: "IMPORT", createProduct: true, rowIndex: 1 },
+      ],
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    expect(result).toMatchObject({
+      importedRows: 1,
+      skippedRows: 1,
+    });
+    await expect(
+      prisma.stockMovement.count({
+        where: {
+          invoice: {
+            number: "NF-40",
+          },
+        },
+      }),
+    ).resolves.toBe(2);
+    await expect(
+      prisma.product.findFirst({
+        where: { name: "Álcool 70º" },
+      }),
+    ).resolves.toMatchObject({
+      name: "Álcool 70º",
+    });
+    await expect(
+      prisma.stock.findFirst({
+        where: {
+          product: { name: "Açúcar cristal" },
+          warehouseId: warehouse.id,
+        },
+      }),
+    ).resolves.toMatchObject({
+      currentQuantity: 2,
+    });
   });
 });

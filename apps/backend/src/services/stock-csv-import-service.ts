@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { MovementType, Prisma, type PrismaClient } from "@prisma/client";
 import { AppError } from "../lib/errors.js";
 import { createEntry } from "./movement-service.js";
 import { nextProductCode } from "./product-code.js";
@@ -46,12 +46,34 @@ type ParsedCsvRow = {
 
 type ParsedCsvRowWithoutTotal = Omit<ParsedCsvRow, "totalValue">;
 
+type SelectedCsvRow = {
+  action: CsvRowAction;
+  index: number;
+  row: ParsedCsvRow;
+};
+
 type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
     category: true;
     unit: true;
   };
 }>;
+
+type CsvInvoiceMovement = {
+  productId: string;
+  quantity: number;
+  type: MovementType;
+  unitPrice: Prisma.Decimal | number | null;
+  warehouseId: string;
+};
+
+type CsvInvoiceContext = {
+  invoice: {
+    id: string;
+    movements: CsvInvoiceMovement[];
+  };
+  incrementTotal: boolean;
+};
 
 const headerMap = {
   observation: "observacao",
@@ -328,15 +350,37 @@ export async function previewWarehouseCsvImport(
 
   const rows = parseCsv(input.csv);
   const { products, units } = await loadPreviewContext(prisma);
+  const invoiceContexts = await loadInvoiceContexts(prisma, rows);
 
   return {
     rows: rows.map((row, index) => {
       const { errors, warnings } = validateRow(row);
       const suggestedProduct = findMatchingProduct(products, row);
       const suggestedUnit =
-        units.find((unit) => unit.abbreviation === row.unit) ?? null;
+        units.find(
+          (unit) =>
+            normalize(unit.abbreviation) === normalize(row.unit) ||
+            normalize(unit.name) === normalize(row.unit),
+        ) ?? null;
+      const invoiceContext = row.invoiceNumber
+        ? invoiceContexts.get(invoiceKeyFor(row))
+        : null;
+      const alreadyImported = Boolean(
+        suggestedProduct &&
+          invoiceContext?.invoice.movements.some(
+            (movement) =>
+              movement.type === MovementType.ENTRADA &&
+              movement.warehouseId === input.warehouseId &&
+              movement.productId === suggestedProduct.id,
+          ),
+      );
+
+      if (alreadyImported) {
+        warnings.push("Linha já importada; será ignorada.");
+      }
 
       return {
+        alreadyImported,
         canImport: errors.length === 0,
         cnpj: row.cnpj,
         companyName: row.companyName,
@@ -353,6 +397,7 @@ export async function previewWarehouseCsvImport(
         totalValue: row.totalValue,
         unit: row.unit,
         unitPrice: row.unitPrice,
+        willImport: errors.length === 0 && !alreadyImported,
         warnings,
       };
     }),
@@ -390,12 +435,16 @@ async function ensureUnit(
   transaction: Prisma.TransactionClient,
   abbreviation: string,
 ) {
-  const unit = await transaction.unitOfMeasure.findUnique({
-    where: { abbreviation },
-  });
+  const units = await transaction.unitOfMeasure.findMany();
+  const normalizedUnit = normalize(abbreviation);
+  const existing = units.find(
+    (unit) =>
+      normalize(unit.abbreviation) === normalizedUnit ||
+      normalize(unit.name) === normalizedUnit,
+  );
 
-  if (unit) {
-    return unit;
+  if (existing) {
+    return existing;
   }
 
   return transaction.unitOfMeasure.create({
@@ -477,37 +526,102 @@ function invoiceKeyFor(row: ParsedCsvRow) {
   return `${row.cnpj}:${row.invoiceNumber}`;
 }
 
-function assertInvoiceConsistency(rows: ParsedCsvRow[]) {
+async function loadInvoiceContexts(
+  prisma: PrismaWriter,
+  rows: ParsedCsvRow[],
+) {
+  const filters = Array.from(
+    new Map(
+      rows
+        .filter((row) => row.invoiceNumber && row.cnpj)
+        .map((row) => [
+          invoiceKeyFor(row),
+          {
+            cnpj: row.cnpj,
+            number: row.invoiceNumber,
+          },
+        ]),
+    ).values(),
+  );
+
+  if (!filters.length) {
+    return new Map<string, CsvInvoiceContext>();
+  }
+
+  const invoices = await prisma.invoice.findMany({
+    include: {
+      movements: {
+        select: {
+          productId: true,
+          quantity: true,
+          type: true,
+          unitPrice: true,
+          warehouseId: true,
+        },
+      },
+    },
+    where: {
+      OR: filters,
+    },
+  });
+
+  return new Map(
+    invoices.map((invoice) => [
+      `${invoice.cnpj}:${invoice.number}`,
+      {
+        incrementTotal: invoice.movements.length > 0,
+        invoice,
+      },
+    ]),
+  );
+}
+
+function sameInvoiceData(left: ParsedCsvRow, right: ParsedCsvRow) {
+  const sameCompany = left.companyName === right.companyName;
+  const sameDate =
+    left.issueDate?.toISOString().slice(0, 10) ===
+    right.issueDate?.toISOString().slice(0, 10);
+
+  return sameCompany && sameDate;
+}
+
+function filterImportableRows(rows: SelectedCsvRow[]) {
   const groupedRows = new Map<string, ParsedCsvRow>();
+  const importableRows: SelectedCsvRow[] = [];
 
-  for (const row of rows.filter((item) => item.invoiceNumber)) {
-    const key = invoiceKeyFor(row);
-    const existing = groupedRows.get(key);
+  for (const item of rows) {
+    const { errors } = validateRow(item.row);
 
-    if (!existing) {
-      groupedRows.set(key, row);
+    if (errors.length) {
       continue;
     }
 
-    const sameCompany = existing.companyName === row.companyName;
-    const sameDate =
-      existing.issueDate?.toISOString().slice(0, 10) ===
-      row.issueDate?.toISOString().slice(0, 10);
+    if (!item.row.invoiceNumber) {
+      importableRows.push(item);
+      continue;
+    }
 
-    if (!sameCompany || !sameDate) {
-      throw new AppError(
-        400,
-        `A nota ${row.invoiceNumber} possui dados divergentes entre linhas.`,
-      );
+    const key = invoiceKeyFor(item.row);
+    const existing = groupedRows.get(key);
+
+    if (!existing) {
+      groupedRows.set(key, item.row);
+      importableRows.push(item);
+      continue;
+    }
+
+    if (sameInvoiceData(existing, item.row)) {
+      importableRows.push(item);
     }
   }
+
+  return importableRows;
 }
 
 async function ensureInvoice(
   transaction: Prisma.TransactionClient,
   row: ParsedCsvRow,
-  totalValue: number,
-) {
+): Promise<CsvInvoiceContext | null> {
   if (!row.invoiceNumber) {
     return null;
   }
@@ -519,17 +633,16 @@ async function ensureInvoice(
     },
     include: {
       movements: {
-        select: { id: true },
+        select: {
+          productId: true,
+          quantity: true,
+          type: true,
+          unitPrice: true,
+          warehouseId: true,
+        },
       },
     },
   });
-
-  if (existingInvoice?.movements.length) {
-    throw new AppError(
-      409,
-      `A nota ${row.invoiceNumber} já possui movimentações importadas.`,
-    );
-  }
 
   const supplier = await resolveSupplierByDocument(transaction, {
     cnpj: row.cnpj,
@@ -544,15 +657,51 @@ async function ensureInvoice(
       cnpj: row.cnpj,
       name: row.companyName,
     }),
-    totalValue: roundCurrency(totalValue),
+    totalValue: 0,
   };
 
-  return existingInvoice
-    ? transaction.invoice.update({
-        where: { id: existingInvoice.id },
-        data,
-      })
-    : transaction.invoice.create({ data });
+  if (existingInvoice) {
+    const invoice = existingInvoice.movements.length
+      ? existingInvoice
+      : await transaction.invoice.update({
+          data,
+          include: {
+            movements: {
+              select: {
+                productId: true,
+                quantity: true,
+                type: true,
+                unitPrice: true,
+                warehouseId: true,
+              },
+            },
+          },
+          where: { id: existingInvoice.id },
+        });
+
+    return {
+      incrementTotal: true,
+      invoice,
+    };
+  }
+
+  return {
+    incrementTotal: true,
+    invoice: await transaction.invoice.create({
+      data,
+      include: {
+        movements: {
+          select: {
+            productId: true,
+            quantity: true,
+            type: true,
+            unitPrice: true,
+            warehouseId: true,
+          },
+        },
+      },
+    }),
+  };
 }
 
 async function writeTransaction<T>(
@@ -585,28 +734,16 @@ export async function importWarehouseCsv(
     }))
     .filter((item) => item.action.action !== "SKIP");
 
-  for (const { row } of selectedRows) {
-    const { errors } = validateRow(row);
-
-    if (errors.length) {
-      throw new AppError(
-        400,
-        `Linha ${row.rowNumber}: ${errors.join(" ")}`,
-      );
-    }
-  }
-
-  assertInvoiceConsistency(selectedRows.map((item) => item.row));
+  const importableRows = filterImportableRows(selectedRows);
 
   return writeTransaction(prisma, async (transaction) => {
     await transaction.warehouse.findUniqueOrThrow({
       where: { id: input.warehouseId },
     });
 
-    const invoiceTotals = new Map<string, number>();
     const invoiceRows = new Map<string, ParsedCsvRow>();
 
-    for (const { row } of selectedRows) {
+    for (const { row } of importableRows) {
       if (!row.invoiceNumber) {
         continue;
       }
@@ -614,20 +751,12 @@ export async function importWarehouseCsv(
       const key = invoiceKeyFor(row);
 
       invoiceRows.set(key, row);
-      invoiceTotals.set(
-        key,
-        roundCurrency((invoiceTotals.get(key) ?? 0) + row.totalValue),
-      );
     }
 
-    const invoices = new Map<string, { id: string }>();
+    const invoices = new Map<string, CsvInvoiceContext>();
 
     for (const [key, row] of invoiceRows.entries()) {
-      const invoice = await ensureInvoice(
-        transaction,
-        row,
-        invoiceTotals.get(key) ?? 0,
-      );
+      const invoice = await ensureInvoice(transaction, row);
 
       if (invoice) {
         invoices.set(key, invoice);
@@ -635,20 +764,32 @@ export async function importWarehouseCsv(
     }
 
     let importedRows = 0;
+    const invoiceTotalIncrements = new Map<string, number>();
 
-    for (const { action, row } of selectedRows) {
+    for (const { action, row } of importableRows) {
       const product = await resolveProduct(
         transaction,
         row,
         action,
         input.categoryId,
       );
-      const invoice = row.invoiceNumber
+      const invoiceContext = row.invoiceNumber
         ? invoices.get(invoiceKeyFor(row)) ?? null
         : null;
 
+      if (
+        invoiceContext?.invoice.movements.some(
+          (movement) =>
+            movement.type === MovementType.ENTRADA &&
+            movement.warehouseId === input.warehouseId &&
+            movement.productId === product.id,
+        )
+      ) {
+        continue;
+      }
+
       await createEntry(transaction, {
-        invoiceId: invoice?.id ?? null,
+        invoiceId: invoiceContext?.invoice.id ?? null,
         minimumQuantity: input.minimumQuantity ?? 0,
         movementDate: row.issueDate ?? new Date(),
         observation: row.observation,
@@ -658,7 +799,39 @@ export async function importWarehouseCsv(
         userId: input.userId,
         warehouseId: input.warehouseId,
       });
+
+      if (invoiceContext) {
+        invoiceContext.invoice.movements.push({
+          productId: product.id,
+          quantity: row.quantity,
+          type: MovementType.ENTRADA,
+          unitPrice: row.unitPrice,
+          warehouseId: input.warehouseId,
+        });
+
+        if (invoiceContext.incrementTotal) {
+          invoiceTotalIncrements.set(
+            invoiceContext.invoice.id,
+            roundCurrency(
+              (invoiceTotalIncrements.get(invoiceContext.invoice.id) ?? 0) +
+                row.totalValue,
+            ),
+          );
+        }
+      }
+
       importedRows += 1;
+    }
+
+    for (const [invoiceId, totalValue] of invoiceTotalIncrements.entries()) {
+      await transaction.invoice.update({
+        data: {
+          totalValue: {
+            increment: totalValue,
+          },
+        },
+        where: { id: invoiceId },
+      });
     }
 
     return {

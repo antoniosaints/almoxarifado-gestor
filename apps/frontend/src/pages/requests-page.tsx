@@ -2,6 +2,7 @@ import {
   ArrowRightLeft,
   Building2,
   Check,
+  FileDown,
   FileText,
   PackagePlus,
   Warehouse,
@@ -27,7 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { api, useApiResource } from "@/lib/api";
+import { api, apiFile, useApiResource } from "@/lib/api";
 import { resolveAssetUrl } from "@/lib/assets";
 import { useSession } from "@/lib/session";
 import type {
@@ -68,6 +69,7 @@ function StatusBadge({ status }: { status: string }) {
 function OfficeLetterDialog({ request }: { request: EntryRequest }) {
   const [open, setOpen] = useState(false);
   const [letter, setLetter] = useState<OfficeLetter | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const logoUrl = resolveAssetUrl(letter?.header.logoUrl);
@@ -94,6 +96,37 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function exportPdf() {
+    setExportingPdf(true);
+    setError(null);
+
+    try {
+      const blob = await apiFile(
+        `/entry-requests/${request.id}/office-letter/pdf`,
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const suffix =
+        letter?.numberFormatted.replace(/[^\d]+/g, "-").replace(/^-|-$/g, "") ??
+        request.id;
+
+      link.href = url;
+      link.download = `oficio-${suffix}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao exportar o PDF.",
+      );
+    } finally {
+      setExportingPdf(false);
     }
   }
 
@@ -142,6 +175,14 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
                 dangerouslySetInnerHTML={{ __html: letter.contentHtml }}
               />
             </article>
+          ) : null}
+          {letter ? (
+            <div className="flex justify-end border-t pt-4">
+              <Button onClick={() => void exportPdf()} disabled={exportingPdf}>
+                <FileDown className="h-4 w-4" />
+                {exportingPdf ? "Exportando..." : "Exportar PDF"}
+              </Button>
+            </div>
           ) : null}
         </DialogContent>
       </Dialog>
