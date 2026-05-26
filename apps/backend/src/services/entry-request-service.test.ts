@@ -62,6 +62,73 @@ describe("entry request service", () => {
     expect(await prisma.stockMovement.count()).toBe(0);
   });
 
+  it("assigns office letter numbers per warehouse and year", async () => {
+    const { product, warehouseCategory } = await createBaseFixture(prisma);
+    const healthWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    const educationWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Educacao",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+
+    await prisma.stock.createMany({
+      data: [
+        {
+          currentQuantity: 0,
+          productId: product.id,
+          warehouseId: healthWarehouse.id,
+        },
+        {
+          currentQuantity: 0,
+          productId: product.id,
+          warehouseId: educationWarehouse.id,
+        },
+      ],
+    });
+
+    const healthFirst = await createEntryRequest(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 5,
+      requestedById: operator.id,
+      warehouseId: healthWarehouse.id,
+    });
+    const educationFirst = await createEntryRequest(prisma, {
+      movementDate: new Date("2026-05-23T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 3,
+      requestedById: operator.id,
+      warehouseId: educationWarehouse.id,
+    });
+    const healthSecond = await createEntryRequest(prisma, {
+      movementDate: new Date("2026-05-24T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 2,
+      requestedById: operator.id,
+      warehouseId: healthWarehouse.id,
+    });
+
+    expect((healthFirst as { officeNumber?: number }).officeNumber).toBe(1);
+    expect((healthFirst as { officeYear?: number }).officeYear).toBe(2026);
+    expect((educationFirst as { officeNumber?: number }).officeNumber).toBe(1);
+    expect((educationFirst as { officeYear?: number }).officeYear).toBe(2026);
+    expect((healthSecond as { officeNumber?: number }).officeNumber).toBe(2);
+    expect((healthSecond as { officeYear?: number }).officeYear).toBe(2026);
+  });
+
   it("rejects an entry request when the product has no stock record in the warehouse", async () => {
     const { product, warehouseCategory } = await createBaseFixture(prisma);
     const warehouse = await prisma.warehouse.create({

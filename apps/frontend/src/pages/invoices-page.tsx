@@ -15,6 +15,7 @@ import {
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MaskedInput } from "@/components/ui/masked-input";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Select } from "@/components/ui/select";
 import {
@@ -29,6 +30,7 @@ import { api, apiFile, useApiResource } from "@/lib/api";
 import { getStoredSession } from "@/lib/session";
 import type { Invoice, Product, ProductCategory, Supplier, Warehouse } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { onlyDigits } from "@/lib/masks";
 import { MovementsTable } from "./movements-page";
 
 const automaticProductMappingValue = "__automatic__";
@@ -93,7 +95,7 @@ function invoiceReportQuery(filters: {
 
   Object.entries(filters).forEach(([key, value]) => {
     if (value) {
-      params.set(key, value);
+      params.set(key, key === "cnpj" ? onlyDigits(value) : value);
     }
   });
 
@@ -221,8 +223,9 @@ function SupplierManagementDialog({
               </FormField>
               <FormField>
                 <Label htmlFor="supplier-cnpj">CNPJ</Label>
-                <Input
+                <MaskedInput
                   id="supplier-cnpj"
+                  mask="cnpj"
                   onChange={(event) =>
                     setDraft({ ...draft, cnpj: event.target.value })
                   }
@@ -232,8 +235,9 @@ function SupplierManagementDialog({
               </FormField>
               <FormField>
                 <Label htmlFor="supplier-phone">Telefone</Label>
-                <Input
+                <MaskedInput
                   id="supplier-phone"
+                  mask="phone"
                   onChange={(event) =>
                     setDraft({ ...draft, phone: event.target.value })
                   }
@@ -749,9 +753,10 @@ function InvoiceExportDialog({
               </FormField>
               <FormField>
                 <Label htmlFor="invoice-export-cnpj">CNPJ</Label>
-                <Input
+                <MaskedInput
                   id="invoice-export-cnpj"
-                  placeholder="CNPJ"
+                  mask="cnpj"
+                  validate={false}
                   onChange={(event) => setCnpj(event.target.value)}
                   value={cnpj}
                 />

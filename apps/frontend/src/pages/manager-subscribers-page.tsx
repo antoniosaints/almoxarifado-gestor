@@ -14,6 +14,7 @@ import {
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MaskedInput } from "@/components/ui/masked-input";
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
 import type { ManagerSubscriber } from "@/lib/types";
@@ -243,8 +244,9 @@ export function ManagerSubscribersPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField>
                   <Label htmlFor="subscriber-document">Documento</Label>
-                  <Input
+                  <MaskedInput
                     id="subscriber-document"
+                    mask="cpfCnpj"
                     onChange={(event) =>
                       setDraft({ ...draft, document: event.target.value })
                     }
@@ -253,8 +255,9 @@ export function ManagerSubscribersPage() {
                 </FormField>
                 <FormField>
                   <Label htmlFor="subscriber-phone">Telefone</Label>
-                  <Input
+                  <MaskedInput
                     id="subscriber-phone"
+                    mask="phone"
                     onChange={(event) => setDraft({ ...draft, phone: event.target.value })}
                     value={draft.phone}
                   />

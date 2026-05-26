@@ -3,6 +3,7 @@ import {
   AlignLeft,
   Bold,
   Building2,
+  Database,
   FileText,
   Image,
   Italic,
@@ -15,7 +16,7 @@ import {
   Sun,
   Upload,
 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -55,12 +56,13 @@ type ResetCatalogOptions = {
 };
 
 const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
-const maxImageSize = 1024 * 1024 * 5;
+const maxImageSize = 1024 * 1024;
 const settingsUploadSlots: Partial<Record<keyof SystemSettings, string>> = {
   faviconUrl: "favicon",
   loginBackgroundUrl: "login-background",
   loginImageUrl: "login-image",
   logoUrl: "brand-logo",
+  officeLogoUrl: "office-logo",
   reportLogoUrl: "report-logo",
 };
 
@@ -150,6 +152,18 @@ function ImageUrlField({
 }
 
 const officeVariables = [
+  "{{oficio_numero_ano}}",
+  "{{numero_oficio}}",
+  "{{ano_oficio}}",
+  "{{secretaria_nome}}",
+  "{{almoxarifado_nome}}",
+  "{{solicitante_nome}}",
+  "{{data_solicitacao}}",
+  "{{itens_solicitados_html}}",
+  "{{itens_solicitados_texto}}",
+  "{{produto_nome}}",
+  "{{quantidade_solicitada}}",
+  "{{unidade_solicitada}}",
   "{{nome_empresa}}",
   "{{cnpj_empresa}}",
   "{{nome_fantasia_empresa}}",
@@ -160,18 +174,50 @@ const officeVariables = [
   "{{usuario_logado}}",
 ];
 
-function OfficeTemplatesTab() {
+const defaultOfficeTemplateDraft = {
+  active: true,
+  contentHtml: [
+    "<p><strong>OF&Iacute;CIO N&ordm; {{oficio_numero_ano}}</strong></p>",
+    "<p><strong>Assunto:</strong> Solicita&ccedil;&atilde;o de material/equipamento</p>",
+    "<p>Prezados,</p>",
+    "<p>Venho, por meio deste, solicitar a disponibiliza&ccedil;&atilde;o do(s) seguinte(s) item(ns):</p>",
+    "<p>{{itens_solicitados_html}}</p>",
+    "<p>A presente solicita&ccedil;&atilde;o se faz necess&aacute;ria para atender &agrave;s demandas e necessidades deste setor, visando garantir o bom funcionamento das atividades desenvolvidas.</p>",
+    "<p>Certos de contarmos com a colabora&ccedil;&atilde;o de Vossa Senhoria, aguardamos o atendimento desta solicita&ccedil;&atilde;o e renovamos nossos votos de estima e considera&ccedil;&atilde;o.</p>",
+    "<p>Atenciosamente,</p>",
+  ].join(""),
+  description: "Modelo padrao para solicitacao de material por almoxarifado.",
+  name: "Solicitacao de material",
+  subject: "Solicitacao de material/equipamento",
+};
+
+function OfficeTemplatesTab({
+  officeLogoUrl,
+  onUpload,
+  uploadingLogo,
+  updateSettingsDraft,
+}: {
+  officeLogoUrl?: string | null;
+  onUpload: (field: keyof SystemSettings, file?: File) => void;
+  uploadingLogo?: boolean;
+  updateSettingsDraft: (field: keyof SystemSettings, value: string) => void;
+}) {
   const templates = useApiResource<OfficeLetterTemplate[]>("/office-templates", []);
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [draft, setDraft] = useState({
-    active: true,
-    contentHtml: "",
-    description: "",
-    name: "",
-    subject: "",
-  });
+  const [draft, setDraft] = useState(defaultOfficeTemplateDraft);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<SettingsMessage | null>(null);
+  const resolvedOfficeLogoUrl = resolveAssetUrl(officeLogoUrl);
+
+  useEffect(() => {
+    if (
+      editorRef.current &&
+      editorRef.current.innerHTML !== draft.contentHtml
+    ) {
+      editorRef.current.innerHTML = draft.contentHtml;
+    }
+  }, [draft.contentHtml]);
 
   function selectTemplate(template: OfficeLetterTemplate) {
     setSelectedTemplateId(template.id);
@@ -187,28 +233,54 @@ function OfficeTemplatesTab() {
 
   function newTemplate() {
     setSelectedTemplateId("");
-    setDraft({
-      active: true,
-      contentHtml: "",
-      description: "",
-      name: "",
-      subject: "",
-    });
+    setDraft(defaultOfficeTemplateDraft);
     setMessage(null);
   }
 
-  function wrapContent(prefix: string, suffix = prefix) {
+  function syncEditorContent() {
     setDraft((current) => ({
       ...current,
-      contentHtml: `${current.contentHtml}${prefix}${suffix}`,
+      contentHtml: editorRef.current?.innerHTML ?? "",
     }));
   }
 
-  function insertVariable(variable: string) {
+  function setContentHtml(contentHtml: string) {
     setDraft((current) => ({
       ...current,
-      contentHtml: `${current.contentHtml}${variable}`,
+      contentHtml,
     }));
+
+    if (editorRef.current && editorRef.current.innerHTML !== contentHtml) {
+      editorRef.current.innerHTML = contentHtml;
+    }
+  }
+
+  function formatContent(command: "bold" | "insertOrderedList" | "insertUnorderedList" | "italic" | "justifyLeft") {
+    editorRef.current?.focus();
+
+    if (typeof document.execCommand === "function") {
+      document.execCommand(command);
+      syncEditorContent();
+    }
+  }
+
+  function insertVariable(variable: string) {
+    const editor = editorRef.current;
+
+    if (!editor) {
+      setContentHtml(`${draft.contentHtml}${variable}`);
+      return;
+    }
+
+    editor.focus();
+
+    if (typeof document.execCommand === "function") {
+      document.execCommand("insertHTML", false, variable);
+    } else {
+      editor.innerHTML = `${editor.innerHTML}${variable}`;
+    }
+
+    syncEditorContent();
   }
 
   async function saveTemplate() {
@@ -288,6 +360,35 @@ function OfficeTemplatesTab() {
             <ResourceError message={message.text} />
           )
         ) : null}
+        <div className="grid gap-4 rounded-md border bg-background p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <ImageUrlField
+            field="officeLogoUrl"
+            label="Logo do cabecalho do oficio"
+            onUpload={onUpload}
+            uploading={uploadingLogo}
+            updateDraft={updateSettingsDraft}
+            value={officeLogoUrl}
+          />
+          <div className="flex items-center gap-3 rounded-md border bg-card p-3">
+            <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
+              {resolvedOfficeLogoUrl ? (
+                <img
+                  alt=""
+                  className="h-full w-full object-contain"
+                  src={resolvedOfficeLogoUrl}
+                />
+              ) : (
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">Secretaria</p>
+              <p className="truncate text-xs text-muted-foreground">
+                Almoxarifado solicitante
+              </p>
+            </div>
+          </div>
+        </div>
         <div className="grid gap-4 md:grid-cols-2">
           <FormField>
             <Label htmlFor="office-template-name">Nome do modelo</Label>
@@ -321,40 +422,38 @@ function OfficeTemplatesTab() {
           />
         </FormField>
         <div className="flex flex-wrap gap-2 rounded-md border bg-background p-2">
-          <Button onClick={() => wrapContent("<strong>", "</strong>")} size="icon" type="button" variant="outline">
+          <Button aria-label="Negrito" onClick={() => formatContent("bold")} size="icon" title="Negrito" type="button" variant="outline">
             <Bold className="h-4 w-4" />
           </Button>
-          <Button onClick={() => wrapContent("<em>", "</em>")} size="icon" type="button" variant="outline">
+          <Button aria-label="Italico" onClick={() => formatContent("italic")} size="icon" title="Italico" type="button" variant="outline">
             <Italic className="h-4 w-4" />
           </Button>
-          <Button onClick={() => wrapContent("<ul><li>", "</li></ul>")} size="icon" type="button" variant="outline">
+          <Button aria-label="Lista" onClick={() => formatContent("insertUnorderedList")} size="icon" title="Lista" type="button" variant="outline">
             <List className="h-4 w-4" />
           </Button>
-          <Button onClick={() => wrapContent("<ol><li>", "</li></ol>")} size="icon" type="button" variant="outline">
+          <Button aria-label="Lista numerada" onClick={() => formatContent("insertOrderedList")} size="icon" title="Lista numerada" type="button" variant="outline">
             <ListOrdered className="h-4 w-4" />
           </Button>
-          <Button onClick={() => wrapContent("<p style=\"text-align:left\">", "</p>")} size="icon" type="button" variant="outline">
+          <Button aria-label="Alinhar a esquerda" onClick={() => formatContent("justifyLeft")} size="icon" title="Alinhar a esquerda" type="button" variant="outline">
             <AlignLeft className="h-4 w-4" />
+          </Button>
+          <Button onClick={() => setContentHtml(defaultOfficeTemplateDraft.contentHtml)} type="button" variant="outline">
+            Usar modelo padrao
           </Button>
         </div>
         <FormField>
           <Label htmlFor="office-template-content">Conteudo do oficio</Label>
           <div
             aria-label="Conteudo do oficio"
+            aria-multiline="true"
             className="min-h-48 rounded-md border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             contentEditable
             id="office-template-content"
-            onInput={(event) =>
-              setDraft({
-                ...draft,
-                contentHtml: event.currentTarget.innerHTML,
-              })
-            }
+            onInput={syncEditorContent}
+            ref={editorRef}
             role="textbox"
             suppressContentEditableWarning
-          >
-            {draft.contentHtml}
-          </div>
+          />
         </FormField>
         <div className="space-y-2 rounded-md border bg-background p-3">
           <p className="text-xs font-medium uppercase text-muted-foreground">
@@ -639,9 +738,13 @@ export function SettingsPage() {
               <FileText className="mr-1 h-4 w-4" />
               Relatórios
             </TabsTrigger>
-            <TabsTrigger className="hidden" onClick={() => setActiveTab("office")} value="office">
+            <TabsTrigger onClick={() => setActiveTab("office")} value="office">
               <FileText className="mr-1 h-4 w-4" />
               Oficios
+            </TabsTrigger>
+            <TabsTrigger onClick={() => setActiveTab("data")} value="data">
+              <Database className="mr-1 h-4 w-4" />
+              Dados
             </TabsTrigger>
           </TabsList>
 
@@ -899,31 +1002,37 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="office">
-            <OfficeTemplatesTab />
+            <OfficeTemplatesTab
+              officeLogoUrl={draft.officeLogoUrl}
+              onUpload={(field, file) => void uploadImage(field, file)}
+              uploadingLogo={uploadingField === "officeLogoUrl"}
+              updateSettingsDraft={updateDraft}
+            />
+          </TabsContent>
+          <TabsContent value="data">
+            <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-950">
+              <div className="flex items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-red-100 text-red-700">
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="font-medium">Resetar dados do sistema</p>
+                  <p className="max-w-3xl text-sm text-red-900">
+                    Apaga almoxarifados, produtos, estoques, movimentações, notas,
+                    solicitações e vínculos de almoxarifado. Usuários e configurações
+                    permanecem. Categorias e unidades podem ser mantidas ou restauradas
+                    para o padrão do sistema na próxima etapa.
+                  </p>
+                </div>
+              </div>
+              <Button onClick={openResetDialog} type="button" variant="destructive">
+                <RotateCcw className="h-4 w-4" />
+                Resetar dados
+              </Button>
+            </section>
           </TabsContent>
         </Tabs>
       </Form>
-
-      <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-950">
-        <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-red-100 text-red-700">
-            <AlertTriangle className="h-4 w-4" />
-          </div>
-          <div>
-            <p className="font-medium">Resetar dados do sistema</p>
-            <p className="max-w-3xl text-sm text-red-900">
-              Apaga almoxarifados, produtos, estoques, movimentações, notas,
-              solicitações e vínculos de almoxarifado. Usuários e configurações
-              permanecem. Categorias e unidades podem ser mantidas ou restauradas
-              para o padrão do sistema na próxima etapa.
-            </p>
-          </div>
-        </div>
-        <Button onClick={openResetDialog} type="button" variant="destructive">
-          <RotateCcw className="h-4 w-4" />
-          Resetar dados
-        </Button>
-      </section>
 
       <Dialog
         onOpenChange={(open) => {

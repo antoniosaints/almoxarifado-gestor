@@ -1018,6 +1018,85 @@ describe("api", () => {
     });
   });
 
+  it("renders an office letter for a non-general entry request", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    const auth = authorizationFor(admin);
+
+    const uploadResponse = await request(app)
+      .post("/uploads/settings/office-logo")
+      .set("Authorization", auth)
+      .set("Content-Type", "image/png")
+      .send(tinyPngBuffer());
+
+    expect(uploadResponse.status).toBe(201);
+
+    const template = await request(app)
+      .post("/office-templates")
+      .set("Authorization", auth)
+      .send({
+        contentHtml:
+          "<p><strong>OFICIO Nº {{oficio_numero_ano}}</strong></p>{{itens_solicitados_html}}",
+        name: "Solicitacao de material",
+        subject: "Solicitacao de material/equipamento",
+      });
+
+    expect(template.status).toBe(201);
+
+    const createdRequest = await request(app)
+      .post("/entry-requests")
+      .set("Authorization", auth)
+      .send({
+        movementDate: "2026-05-23T12:00:00.000Z",
+        productId: product.id,
+        quantity: 4,
+        warehouseId: warehouse.id,
+      });
+
+    expect(createdRequest.status).toBe(201);
+
+    const office = await request(app)
+      .get(`/entry-requests/${createdRequest.body.id}/office-letter`)
+      .set("Authorization", auth);
+
+    expect(office.status).toBe(200);
+    expect(office.body).toMatchObject({
+      header: {
+        logoUrl: expect.stringMatching(/^\/uploads\/settings\/office-logo\.png\?v=\d+$/),
+        subtitle: "Almoxarifado da Saude",
+        title: "Teste",
+      },
+      items: [
+        {
+          productName: "Papel A4",
+          quantity: 4,
+          unit: "UN",
+        },
+      ],
+      numberFormatted: "001/2026",
+      subject: "Solicitacao de material/equipamento",
+      year: 2026,
+    });
+    expect(office.body.contentHtml).toContain("OFICIO Nº 001/2026");
+    expect(office.body.contentHtml).toContain("Papel A4 - 4 UN.");
+  });
+
   it("uploads one settings asset per slot and stores only the public URL", async () => {
     const { user } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({

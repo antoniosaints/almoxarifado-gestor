@@ -13,8 +13,10 @@ import {
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MaskedInput } from "@/components/ui/masked-input";
 import { SearchSelect } from "@/components/ui/search-select";
 import { apiFile, useApiResource } from "@/lib/api";
+import { onlyDigits } from "@/lib/masks";
 import type { Supplier, Warehouse } from "@/lib/types";
 
 type ReportKey = "invoices" | "movements" | "stocks";
@@ -67,7 +69,7 @@ function InvoiceReportDialog({
     void onExport(
       `/reports/invoices${reportQuery(from, to, {
         companyName,
-        cnpj,
+        cnpj: onlyDigits(cnpj),
         number,
         supplierId,
       })}`,
@@ -122,9 +124,11 @@ function InvoiceReportDialog({
             </FormField>
             <FormField>
               <Label htmlFor="report-invoice-cnpj">CNPJ</Label>
-              <Input
+              <MaskedInput
                 id="report-invoice-cnpj"
+                mask="cnpj"
                 onChange={(event) => setCnpj(event.target.value)}
+                validate={false}
                 value={cnpj}
               />
             </FormField>

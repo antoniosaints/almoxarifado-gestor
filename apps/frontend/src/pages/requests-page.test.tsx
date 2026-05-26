@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/lib/session";
@@ -22,6 +22,7 @@ const warehouse = {
     name: "Saude",
   },
   id: "health",
+  isGeneral: false,
   name: "Almoxarifado da Saude",
 };
 
@@ -31,6 +32,7 @@ const centralWarehouse = {
     name: "Geral",
   },
   id: "central",
+  isGeneral: true,
   name: "Almoxarifado Central",
 };
 
@@ -179,6 +181,85 @@ describe("RequestsPage", () => {
         name: "Abrir destino Almoxarifado da Saude",
       }),
     ).toHaveAttribute("href", "/warehouses/health");
+  });
+
+  it("opens the office letter for non-general entry requests", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input));
+        const payload =
+          url.pathname === "/entry-requests"
+            ? [entryRequest]
+            : url.pathname === "/entry-requests/entry-request/office-letter"
+              ? {
+                  contentHtml:
+                    "<p>Venho solicitar:</p><p>Papel A4 - 4 PCT.</p>",
+                  header: {
+                    logoUrl: "/uploads/settings/office-logo.png?v=1",
+                    subtitle: "Almoxarifado da Saude",
+                    title: "Saude",
+                  },
+                  items: [
+                    {
+                      productName: "Papel A4",
+                      quantity: 4,
+                      unit: "PCT",
+                    },
+                  ],
+                  number: 1,
+                  numberFormatted: "001/2026",
+                  request: {
+                    id: "entry-request",
+                    status: "PENDING",
+                    warehouseId: "health",
+                  },
+                  subject: "Solicitacao de material/equipamento",
+                  year: 2026,
+                }
+              : url.pathname === "/transfer-requests"
+                ? []
+                : url.pathname === "/warehouses"
+                  ? warehousesPayload
+                  : url.pathname === "/invoices"
+                    ? []
+                    : [];
+
+        return new Response(JSON.stringify(payload), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <RequestsPage />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Ver oficio" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Oficio da solicitacao",
+    });
+
+    expect(within(dialog).getByText("Saude")).toBeInTheDocument();
+    expect(within(dialog).getByText("Almoxarifado da Saude")).toBeInTheDocument();
+    expect(within(dialog).getByText("OFICIO Nº 001/2026")).toBeInTheDocument();
+    expect(within(dialog).getByText("Papel A4 - 4 PCT.")).toBeInTheDocument();
   });
 
   it("opens a direct request dialog with warehouse and product fields", async () => {

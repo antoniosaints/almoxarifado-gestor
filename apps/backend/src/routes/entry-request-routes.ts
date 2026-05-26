@@ -1,11 +1,13 @@
 import { UserRole } from "@prisma/client";
 import { Router } from "express";
+import { AppError } from "../lib/errors.js";
 import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
 import { assertWarehouseAccess, warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import {
   approveEntryRequest,
   createEntryRequest,
+  getEntryRequestOfficeLetter,
   rejectEntryRequest,
 } from "../services/entry-request-service.js";
 import {
@@ -108,6 +110,26 @@ entryRequestRoutes.post(
         requestedById: user.id,
       }),
     );
+  }),
+);
+
+entryRequestRoutes.get(
+  "/:id/office-letter",
+  asyncHandler(async (request, response) => {
+    const { id } = idParam.parse(request.params);
+    const user = currentUser(response);
+    const entryRequest = await prisma.entryRequest.findUnique({
+      select: { warehouseId: true },
+      where: { id },
+    });
+
+    if (!entryRequest) {
+      throw new AppError(404, "Solicitação não encontrada.");
+    }
+
+    await assertWarehouseAccess(prisma, user, entryRequest.warehouseId);
+
+    response.json(await getEntryRequestOfficeLetter(prisma, id, user.name));
   }),
 );
 
