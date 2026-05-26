@@ -71,4 +71,42 @@ describe("AppShell", () => {
     vi.unstubAllEnvs();
     vi.resetModules();
   });
+
+  it("shows the fleet navigation when VITE_TYPE_SYSTEM is fleet", async () => {
+    vi.stubEnv("VITE_TYPE_SYSTEM", "fleet");
+    vi.resetModules();
+
+    const [{ AppShell: FleetAppShell }, { SessionProvider: FleetSessionProvider }] =
+      await Promise.all([import("./app-shell"), import("@/lib/session")]);
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <FleetSessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Admin",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <FleetAppShell>
+            <p>Conteudo</p>
+          </FleetAppShell>
+        </FleetSessionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Veiculos")).toBeInTheDocument();
+    expect(screen.getByText("Motoristas")).toBeInTheDocument();
+    expect(screen.getByText("Operacoes")).toBeInTheDocument();
+    expect(screen.getByText("Alertas")).toBeInTheDocument();
+    expect(screen.queryByText("Almoxarifados")).not.toBeInTheDocument();
+    expect(screen.queryByText("Assinantes")).not.toBeInTheDocument();
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
 });

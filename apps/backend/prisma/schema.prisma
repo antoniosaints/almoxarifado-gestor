@@ -52,6 +52,41 @@ enum ManagerBillingStatus {
   CANCELLED
 }
 
+enum FleetVehicleStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  TRANSFERRED
+  DISPOSED
+}
+
+enum FleetDriverStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum FleetMaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  PREDICTIVE
+  EMERGENCY
+}
+
+enum FleetMaintenanceStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_PART
+  COMPLETED
+  CANCELLED
+}
+
+enum FleetPrimaryControlUnit {
+  KM
+  HOURS
+  BOTH
+}
+
 model User {
   id                       String            @id @default(cuid())
   name                     String
@@ -69,6 +104,10 @@ model User {
   createdTransfers         TransferRequest[] @relation("TransferCreator")
   receivedTransfers        TransferRequest[] @relation("TransferReceiver")
   auditLogs                AuditLog[]
+  fleetReadings            FleetVehicleReading[] @relation("FleetReadingUser")
+  fleetAllocations         FleetVehicleAllocation[] @relation("FleetAllocationUser")
+  fleetTransfers           FleetVehicleTransfer[] @relation("FleetTransferUser")
+  fleetMaintenances        FleetMaintenance[] @relation("FleetMaintenanceUser")
 }
 
 model WarehouseCategory {
@@ -352,4 +391,288 @@ model ManagerBilling {
   @@index([systemKey])
   @@index([status])
   @@index([dueDate])
+}
+
+model FleetStructure {
+  id                     String                   @id @default(cuid())
+  name                   String                   @unique
+  type                   String?
+  active                 Boolean                  @default(true)
+  notes                  String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  currentVehicles        FleetVehicle[]           @relation("FleetCurrentStructure")
+  readings               FleetVehicleReading[]
+  originAllocations      FleetVehicleAllocation[] @relation("FleetAllocationOrigin")
+  destinationAllocations FleetVehicleAllocation[] @relation("FleetAllocationDestination")
+  originTransfers        FleetVehicleTransfer[]   @relation("FleetTransferOrigin")
+  destinationTransfers   FleetVehicleTransfer[]   @relation("FleetTransferDestination")
+}
+
+model FleetDriver {
+  id             String                 @id @default(cuid())
+  name           String
+  cpf            String?                @unique
+  phone          String?
+  email          String?
+  licenseNumber  String?
+  licenseCategory String?
+  licenseIssuedAt DateTime?
+  licenseExpiresAt DateTime?
+  licenseStatus String?
+  status         FleetDriverStatus      @default(ACTIVE)
+  notes          String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  currentVehicles FleetVehicle[]        @relation("FleetCurrentDriver")
+  readings       FleetVehicleReading[]
+  fuelings       FleetFueling[]
+  transfers      FleetVehicleTransfer[]
+}
+
+model FleetVehicle {
+  id                  String                    @id @default(cuid())
+  plate               String                    @unique
+  renavam             String?
+  chassis             String?
+  vehicleType         String
+  brand               String
+  model               String
+  manufactureYear     Int?
+  modelYear           Int?
+  color               String?
+  fuelType            String
+  tankCapacity        Decimal                   @default(0)
+  status              FleetVehicleStatus        @default(ACTIVE)
+  currentOdometer     Int                       @default(0)
+  currentHourmeter    Decimal?
+  currentStructureId  String?
+  currentDriverId     String?
+  acquisitionDate     DateTime?
+  acquisitionValue    Decimal                   @default(0)
+  notes               String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  currentStructure    FleetStructure?           @relation("FleetCurrentStructure", fields: [currentStructureId], references: [id], onDelete: SetNull)
+  currentDriver       FleetDriver?              @relation("FleetCurrentDriver", fields: [currentDriverId], references: [id], onDelete: SetNull)
+  readings            FleetVehicleReading[]
+  fuelings            FleetFueling[]
+  allocations         FleetVehicleAllocation[]
+  transfers           FleetVehicleTransfer[]
+  maintenances        FleetMaintenance[]
+  scheduledServices   FleetScheduledService[]
+  oilControls         FleetOilControl[]
+  beltControls        FleetBeltControl[]
+  tires               FleetTire[]
+
+  @@index([currentStructureId])
+  @@index([currentDriverId])
+  @@index([status])
+}
+
+model FleetVehicleReading {
+  id             String          @id @default(cuid())
+  vehicleId      String
+  driverId       String?
+  structureId    String?
+  registeredById String?
+  readingDate    DateTime
+  odometer       Int?
+  hourmeter      Decimal?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  vehicle        FleetVehicle    @relation(fields: [vehicleId], references: [id])
+  driver         FleetDriver?    @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  structure      FleetStructure? @relation(fields: [structureId], references: [id], onDelete: SetNull)
+  registeredBy   User?           @relation("FleetReadingUser", fields: [registeredById], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, readingDate])
+}
+
+model FleetFueling {
+  id             String       @id @default(cuid())
+  vehicleId      String
+  driverId       String?
+  fuelingDate    DateTime
+  fuelType       String
+  quantity       Decimal
+  unitPrice      Decimal
+  totalPrice     Decimal
+  supplier       String?
+  odometer       Int?
+  hourmeter      Decimal?
+  fiscalDocument String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  vehicle        FleetVehicle @relation(fields: [vehicleId], references: [id])
+  driver         FleetDriver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, fuelingDate])
+  @@index([driverId])
+}
+
+model FleetVehicleAllocation {
+  id                     String          @id @default(cuid())
+  vehicleId              String
+  originStructureId      String?
+  destinationStructureId String
+  driverId               String?
+  responsibleUserId      String?
+  startDate              DateTime
+  endDate                DateTime?
+  reason                 String?
+  notes                  String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  vehicle                FleetVehicle    @relation(fields: [vehicleId], references: [id])
+  originStructure        FleetStructure? @relation("FleetAllocationOrigin", fields: [originStructureId], references: [id], onDelete: SetNull)
+  destinationStructure   FleetStructure  @relation("FleetAllocationDestination", fields: [destinationStructureId], references: [id])
+  responsibleUser        User?           @relation("FleetAllocationUser", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, endDate])
+  @@index([destinationStructureId])
+}
+
+model FleetVehicleTransfer {
+  id                     String          @id @default(cuid())
+  vehicleId              String
+  originStructureId      String?
+  destinationStructureId String
+  transferDate           DateTime
+  responsibleUserId      String?
+  driverId               String?
+  odometer               Int?
+  hourmeter              Decimal?
+  vehicleCondition       String?
+  notes                  String?
+  createdAt              DateTime        @default(now())
+  vehicle                FleetVehicle    @relation(fields: [vehicleId], references: [id])
+  originStructure        FleetStructure? @relation("FleetTransferOrigin", fields: [originStructureId], references: [id], onDelete: SetNull)
+  destinationStructure   FleetStructure  @relation("FleetTransferDestination", fields: [destinationStructureId], references: [id])
+  responsibleUser        User?           @relation("FleetTransferUser", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+  driver                 FleetDriver?    @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, transferDate])
+}
+
+model FleetMaintenance {
+  id                 String                 @id @default(cuid())
+  vehicleId          String
+  type               FleetMaintenanceType
+  status             FleetMaintenanceStatus @default(OPEN)
+  openedAt           DateTime
+  completedAt        DateTime?
+  problemDescription String
+  performedServices  String?
+  partsUsed          String?
+  supplier           String?
+  laborCost          Decimal                @default(0)
+  partsCost          Decimal                @default(0)
+  totalCost          Decimal                @default(0)
+  odometer           Int?
+  hourmeter          Decimal?
+  responsibleUserId  String?
+  notes              String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  vehicle            FleetVehicle           @relation(fields: [vehicleId], references: [id])
+  responsibleUser    User?                  @relation("FleetMaintenanceUser", fields: [responsibleUserId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, openedAt])
+  @@index([status])
+}
+
+model FleetScheduledService {
+  id              String       @id @default(cuid())
+  vehicleId       String?
+  vehicleType     String?
+  serviceType     String
+  intervalKm      Int?
+  intervalHours   Decimal?
+  intervalDays    Int?
+  limitDate       DateTime?
+  triggerFirst    Boolean      @default(true)
+  active          Boolean      @default(true)
+  lastDoneAt      DateTime?
+  lastOdometer    Int?
+  lastHourmeter   Decimal?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  vehicle         FleetVehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+  @@index([vehicleType])
+}
+
+model FleetOilControl {
+  id             String       @id @default(cuid())
+  vehicleId      String
+  oilType        String
+  lastChangeDate DateTime
+  lastOdometer   Int?
+  lastHourmeter  Decimal?
+  intervalKm     Int?
+  intervalHours  Decimal?
+  intervalDays   Int?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  vehicle        FleetVehicle @relation(fields: [vehicleId], references: [id])
+
+  @@index([vehicleId])
+}
+
+model FleetBeltControl {
+  id              String       @id @default(cuid())
+  vehicleId       String
+  beltType        String
+  installedAt     DateTime
+  installOdometer Int?
+  installHourmeter Decimal?
+  lifetimeKm      Int?
+  lifetimeHours   Decimal?
+  lifetimeDays    Int?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  vehicle         FleetVehicle @relation(fields: [vehicleId], references: [id])
+
+  @@index([vehicleId])
+}
+
+model FleetTire {
+  id              String       @id @default(cuid())
+  vehicleId       String
+  position        String
+  serialNumber    String?
+  brand           String?
+  model           String?
+  installedAt     DateTime?
+  installedKm     Int?
+  estimatedLifeKm Int?
+  status          String       @default("ACTIVE")
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  vehicle         FleetVehicle @relation(fields: [vehicleId], references: [id])
+
+  @@index([vehicleId])
+  @@index([serialNumber])
+}
+
+model FleetSettings {
+  id                          String                  @id @default("fleet")
+  driverLicenseAlertDays      Int                     @default(30)
+  maintenanceAlertDays        Int                     @default(30)
+  oilAlertPercent             Int                     @default(80)
+  beltAlertPercent            Int                     @default(80)
+  primaryControlUnit          FleetPrimaryControlUnit @default(BOTH)
+  vehicleTypes                String                  @default("Passeio\nCaminhao\nOnibus\nMaquina")
+  fuelTypes                   String                  @default("Gasolina\nEtanol\nDiesel\nDiesel S10\nFlex")
+  maintenanceTypes            String                  @default("Preventiva\nCorretiva\nPreditiva\nEmergencial")
+  preventiveServiceTypes      String                  @default("Troca de oleo\nFiltro de oleo\nFiltro de ar\nCorreia\nRevisao geral\nAlinhamento\nBalanceamento\nPneus\nLubrificacao\nFreios")
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
 }

@@ -2,6 +2,13 @@ import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "@/components/layout/app-shell";
 import { CategoriesPage } from "@/pages/categories-page";
 import { DashboardPage } from "@/pages/dashboard-page";
+import { FleetAlertsPage } from "@/pages/fleet-alerts-page";
+import { FleetDashboardPage } from "@/pages/fleet-dashboard-page";
+import { FleetDriversPage } from "@/pages/fleet-drivers-page";
+import { FleetOperationsPage } from "@/pages/fleet-operations-page";
+import { FleetReportsPage } from "@/pages/fleet-reports-page";
+import { FleetSettingsPage } from "@/pages/fleet-settings-page";
+import { FleetVehiclesPage } from "@/pages/fleet-vehicles-page";
 import { InsightsPage } from "@/pages/insights-page";
 import { InvoicesPage } from "@/pages/invoices-page";
 import { LoginPage } from "@/pages/login-page";
@@ -19,7 +26,7 @@ import { SettingsPage } from "@/pages/settings-page";
 import { WarehouseDetailPage } from "@/pages/warehouse-detail-page";
 import { WarehousesPage } from "@/pages/warehouses-page";
 import { useSession } from "@/lib/session";
-import { isManagerSystem } from "@/lib/system-mode";
+import { isFleetSystem, isManagerSystem } from "@/lib/system-mode";
 
 function ProtectedLayout() {
   const { session } = useSession();
@@ -80,6 +87,23 @@ export function App() {
                   </AdminRoute>
                 }
                 path="/licenses"
+              />
+            </>
+          ) : isFleetSystem ? (
+            <>
+              <Route element={<FleetDashboardPage />} path="/dashboard" />
+              <Route element={<FleetVehiclesPage />} path="/vehicles" />
+              <Route element={<FleetDriversPage />} path="/drivers" />
+              <Route element={<FleetOperationsPage />} path="/operations" />
+              <Route element={<FleetAlertsPage />} path="/alerts" />
+              <Route element={<FleetReportsPage />} path="/reports" />
+              <Route
+                element={
+                  <AdminRoute>
+                    <FleetSettingsPage />
+                  </AdminRoute>
+                }
+                path="/settings"
               />
             </>
           ) : (

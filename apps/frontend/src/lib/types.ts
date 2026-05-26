@@ -362,3 +362,306 @@ export type ManagerDashboard = {
   };
   upcomingExpirations: ManagerLicense[];
 };
+
+export type FleetVehicleStatus =
+  | "ACTIVE"
+  | "INACTIVE"
+  | "MAINTENANCE"
+  | "TRANSFERRED"
+  | "DISPOSED";
+
+export type FleetDriverStatus = "ACTIVE" | "INACTIVE" | "SUSPENDED";
+
+export type FleetMaintenanceType =
+  | "PREVENTIVE"
+  | "CORRECTIVE"
+  | "PREDICTIVE"
+  | "EMERGENCY";
+
+export type FleetMaintenanceStatus =
+  | "OPEN"
+  | "IN_PROGRESS"
+  | "WAITING_PART"
+  | "COMPLETED"
+  | "CANCELLED";
+
+export type FleetHealthStatus = "OK" | "ATTENTION" | "OVERDUE";
+
+export type FleetStructure = {
+  active: boolean;
+  id: string;
+  name: string;
+  notes?: string | null;
+  type?: string | null;
+};
+
+export type FleetDriver = {
+  cnhHealth?: "VALID" | "EXPIRING" | "EXPIRED" | "UNKNOWN";
+  cpf?: string | null;
+  currentVehicles?: FleetVehicle[];
+  email?: string | null;
+  id: string;
+  licenseCategory?: string | null;
+  licenseExpiresAt?: string | null;
+  licenseIssuedAt?: string | null;
+  licenseNumber?: string | null;
+  licenseStatus?: string | null;
+  name: string;
+  notes?: string | null;
+  phone?: string | null;
+  status: FleetDriverStatus;
+};
+
+export type FleetVehicle = {
+  acquisitionDate?: string | null;
+  acquisitionValue: number | string;
+  brand: string;
+  chassis?: string | null;
+  color?: string | null;
+  currentDriver?: FleetDriver | null;
+  currentDriverId?: string | null;
+  currentHourmeter?: number | string | null;
+  currentOdometer: number;
+  currentStructure?: FleetStructure | null;
+  currentStructureId?: string | null;
+  fuelType: string;
+  id: string;
+  manufactureYear?: number | null;
+  model: string;
+  modelYear?: number | null;
+  notes?: string | null;
+  plate: string;
+  renavam?: string | null;
+  status: FleetVehicleStatus;
+  tankCapacity: number | string;
+  vehicleType: string;
+};
+
+export type FleetReading = {
+  driver?: FleetDriver | null;
+  driverId?: string | null;
+  hourmeter?: number | string | null;
+  id: string;
+  notes?: string | null;
+  odometer?: number | null;
+  readingDate: string;
+  structure?: FleetStructure | null;
+  structureId?: string | null;
+  vehicle: FleetVehicle;
+  vehicleId: string;
+};
+
+export type FleetFueling = {
+  driver?: FleetDriver | null;
+  driverId?: string | null;
+  fiscalDocument?: string | null;
+  fuelType: string;
+  fuelingDate: string;
+  hourmeter?: number | string | null;
+  id: string;
+  notes?: string | null;
+  odometer?: number | null;
+  quantity: number | string;
+  supplier?: string | null;
+  totalPrice: number | string;
+  unitPrice: number | string;
+  vehicle: FleetVehicle;
+  vehicleId: string;
+};
+
+export type FleetAllocation = {
+  destinationStructure: FleetStructure;
+  destinationStructureId: string;
+  driverId?: string | null;
+  endDate?: string | null;
+  id: string;
+  notes?: string | null;
+  originStructure?: FleetStructure | null;
+  originStructureId?: string | null;
+  reason?: string | null;
+  startDate: string;
+  vehicle: FleetVehicle;
+  vehicleId: string;
+};
+
+export type FleetTransfer = {
+  destinationStructure: FleetStructure;
+  destinationStructureId: string;
+  driver?: FleetDriver | null;
+  driverId?: string | null;
+  hourmeter?: number | string | null;
+  id: string;
+  notes?: string | null;
+  odometer?: number | null;
+  originStructure?: FleetStructure | null;
+  originStructureId?: string | null;
+  transferDate: string;
+  vehicle: FleetVehicle;
+  vehicleCondition?: string | null;
+  vehicleId: string;
+};
+
+export type FleetMaintenance = {
+  completedAt?: string | null;
+  hourmeter?: number | string | null;
+  id: string;
+  laborCost: number | string;
+  notes?: string | null;
+  odometer?: number | null;
+  openedAt: string;
+  partsCost: number | string;
+  partsUsed?: string | null;
+  performedServices?: string | null;
+  problemDescription: string;
+  status: FleetMaintenanceStatus;
+  supplier?: string | null;
+  totalCost: number | string;
+  type: FleetMaintenanceType;
+  vehicle: FleetVehicle;
+  vehicleId: string;
+};
+
+export type FleetLifecycleHealth = {
+  daysUsed?: number | null;
+  hoursUsed?: number | null;
+  kmUsed?: number | null;
+  percent: number;
+  status: FleetHealthStatus;
+};
+
+export type FleetScheduledService = {
+  active: boolean;
+  health?: FleetLifecycleHealth | null;
+  id: string;
+  intervalDays?: number | null;
+  intervalHours?: number | string | null;
+  intervalKm?: number | null;
+  lastDoneAt?: string | null;
+  lastHourmeter?: number | string | null;
+  lastOdometer?: number | null;
+  serviceType: string;
+  vehicle?: FleetVehicle | null;
+  vehicleId?: string | null;
+  vehicleType?: string | null;
+};
+
+export type FleetOilControl = {
+  health: FleetLifecycleHealth;
+  id: string;
+  intervalDays?: number | null;
+  intervalHours?: number | string | null;
+  intervalKm?: number | null;
+  lastChangeDate: string;
+  lastHourmeter?: number | string | null;
+  lastOdometer?: number | null;
+  oilType: string;
+  vehicle: FleetVehicle;
+  vehicleId: string;
+};
+
+export type FleetBeltControl = {
+  beltType: string;
+  health: FleetLifecycleHealth;
+  id: string;
+  installedAt: string;
+  lifetimeDays?: number | null;
+  lifetimeHours?: number | string | null;
+  lifetimeKm?: number | null;
+  vehicle: FleetVehicle;
+  vehicleId: string;
+};
+
+export type FleetTire = {
+  brand?: string | null;
+  estimatedLifeKm?: number | null;
+  id: string;
+  installedAt?: string | null;
+  installedKm?: number | null;
+  model?: string | null;
+  position: string;
+  serialNumber?: string | null;
+  status: string;
+  vehicle: FleetVehicle;
+  vehicleId: string;
+};
+
+export type FleetSettings = {
+  beltAlertPercent: number;
+  driverLicenseAlertDays: number;
+  fuelTypes: string;
+  id: string;
+  lists: {
+    fuelTypes: string[];
+    maintenanceTypes: string[];
+    preventiveServiceTypes: string[];
+    vehicleTypes: string[];
+  };
+  maintenanceAlertDays: number;
+  maintenanceTypes: string;
+  oilAlertPercent: number;
+  preventiveServiceTypes: string;
+  primaryControlUnit: "KM" | "HOURS" | "BOTH";
+  vehicleTypes: string;
+};
+
+export type FleetDashboard = {
+  alerts: {
+    belt: FleetBeltControl[];
+    cnhExpired: FleetDriver[];
+    cnhExpiring: FleetDriver[];
+    maintenanceOpen: FleetMaintenance[];
+    oil: FleetOilControl[];
+    services: FleetScheduledService[];
+    vehiclesInMaintenance: FleetVehicle[];
+    vehiclesNoDriver: FleetVehicle[];
+  };
+  costs: {
+    byVehicle: Array<{
+      fuelCost: number;
+      maintenanceCost: number;
+      totalCost: number;
+      vehicle: FleetVehicle;
+    }>;
+    monthlyFuelCost: number;
+    monthlyMaintenanceCost: number;
+    totalFuelCost: number;
+  };
+  metrics: {
+    averageCostPerHour: number;
+    averageCostPerKm: number;
+    averageKmPerLiter: number;
+    averageLitersPerHour: number;
+  };
+  totals: {
+    activeVehicles: number;
+    cnhExpired: number;
+    cnhExpiring: number;
+    drivers: number;
+    inactiveVehicles: number;
+    maintenanceVehicles: number;
+    pendingPreventiveServices: number;
+    totalVehicles: number;
+  };
+};
+
+export type FleetReports = {
+  cnhAlerts: {
+    expired: FleetDriver[];
+    expiring: FleetDriver[];
+  };
+  costsByStructure: Array<{
+    structure: FleetStructure;
+    total: number;
+    vehicles: number;
+  }>;
+  costsByVehicle: FleetDashboard["costs"]["byVehicle"];
+  drivers: FleetDriver[];
+  fuelings: FleetFueling[];
+  maintenances: FleetMaintenance[];
+  transfers: FleetTransfer[];
+  vehicles: FleetVehicle[];
+  vehiclesByStructure: Array<{
+    structure: FleetStructure;
+    vehicles: FleetVehicle[];
+  }>;
+};

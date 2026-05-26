@@ -70,14 +70,27 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function useApiResource<T>(path: string, initialValue: T) {
+export function useApiResource<T>(
+  path: string,
+  initialValue: T,
+  options?: { enabled?: boolean },
+) {
+  const enabled = options?.enabled ?? true;
   const [data, setData] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const mounted = useRef(true);
   const { startLoading } = useRouteLoading();
 
   const reload = useCallback(async () => {
+    if (!enabled) {
+      if (mounted.current) {
+        setError(null);
+        setLoading(false);
+      }
+      return;
+    }
+
     const finishLoading = startLoading();
 
     if (mounted.current) {
@@ -103,7 +116,7 @@ export function useApiResource<T>(path: string, initialValue: T) {
       }
       finishLoading();
     }
-  }, [path, startLoading]);
+  }, [enabled, path, startLoading]);
 
   useEffect(() => {
     mounted.current = true;

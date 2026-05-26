@@ -36,7 +36,7 @@ import { useApiResource } from "@/lib/api";
 import { resolveAssetUrl } from "@/lib/assets";
 import { useRouteLoading } from "@/lib/route-loading";
 import { useSession } from "@/lib/session";
-import { isManagerSystem, systemModeLabel } from "@/lib/system-mode";
+import { isFleetSystem, isManagerSystem, systemModeLabel } from "@/lib/system-mode";
 import { useSystemSettings } from "@/lib/system-settings";
 import type { UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -73,7 +73,22 @@ const managerItems = [
   to: string;
 }>;
 
-const items = isManagerSystem ? managerItems : operationItems;
+const fleetItems = [
+  { icon: Layers3, label: "Dashboard", to: "/dashboard" },
+  { icon: Boxes, label: "Veiculos", to: "/vehicles" },
+  { icon: UsersRound, label: "Motoristas", to: "/drivers" },
+  { icon: ClipboardCheck, label: "Operacoes", to: "/operations" },
+  { icon: Bell, label: "Alertas", to: "/alerts" },
+  { icon: FileDown, label: "Relatorios", to: "/reports" },
+  { icon: Settings, label: "Configuracoes", role: "ADMIN", to: "/settings" },
+] satisfies Array<{
+  icon: typeof Boxes;
+  label: string;
+  role?: UserRole;
+  to: string;
+}>;
+
+const items = isManagerSystem ? managerItems : isFleetSystem ? fleetItems : operationItems;
 
 function navigationItems(role: UserRole) {
   return items.filter((item) => !item.role || item.role === role);
@@ -160,13 +175,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const role = session?.user.role ?? "OPERATOR";
   const routeKey = `${location.pathname}${location.search}`;
+  const notificationsEnabled = !isManagerSystem && !isFleetSystem;
   const notificationSeenKey = `almoxarifado-notifications-seen-${session?.user.id ?? "anon"}`;
   const [seenNotificationTotal, setSeenNotificationTotal] = useState(() =>
     Number(localStorage.getItem(notificationSeenKey) ?? 0),
   );
   const title =
     navigationItems(role).find((item) => location.pathname.startsWith(item.to))
-      ?.label ?? (isManagerSystem ? "Gestão" : "Almoxarifado");
+      ?.label ??
+    (isManagerSystem ? "Gestao" : isFleetSystem ? "Frota" : "Almoxarifado");
   const summary = useApiResource<{
     pendingEntryRequests: number;
     pendingReceipts: number;
@@ -175,9 +192,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     pendingEntryRequests: 0,
     pendingReceipts: 0,
     total: 0,
+  }, {
+    enabled: notificationsEnabled,
   });
   const notificationCount =
-    summary.data.total > 0 && summary.data.total !== seenNotificationTotal
+    notificationsEnabled &&
+    summary.data.total > 0 &&
+    summary.data.total !== seenNotificationTotal
       ? summary.data.total
       : 0;
 
@@ -191,12 +212,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   function markNotificationsSeen() {
+    if (!notificationsEnabled) {
+      return;
+    }
+
     localStorage.setItem(notificationSeenKey, String(summary.data.total));
     setSeenNotificationTotal(summary.data.total);
   }
 
   const subtitle = import.meta.env.VITE_NAME_SYSTEM ?? "GEMA - Gestão Municipal de Almoxarifado.";
-  const brandTitle = isManagerSystem ? "Gestor de licenças" : settings.loginTitle;
+  const brandTitle = isManagerSystem
+    ? "Gestor de licenças"
+    : isFleetSystem
+      ? "Controle de frota"
+      : settings.loginTitle;
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
@@ -209,7 +238,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div>
               <p className="text-sm font-semibold">{brandTitle}</p>
               <p className="text-xs text-muted-foreground">
-                {isManagerSystem ? systemModeLabel : subtitle}
+                {isManagerSystem || isFleetSystem ? systemModeLabel : subtitle}
               </p>
             </div>
           </div>
@@ -232,7 +261,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <SheetContent>
                 <div className="mb-5 pr-8">
                   <p className="font-semibold">
-                    {isManagerSystem ? brandTitle : settings.systemName}
+                    {isManagerSystem || isFleetSystem ? brandTitle : settings.systemName}
                   </p>
                   <p className="text-sm text-muted-foreground">{systemModeLabel}</p>
                 </div>
@@ -241,7 +270,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Sheet>
             <div>
               <p className="text-xs font-medium uppercase text-muted-foreground">
-                {isManagerSystem ? "Gestão" : "Controle"}
+                {isManagerSystem ? "Gestao" : isFleetSystem ? "Frota" : "Controle"}
               </p>
               <h1 className="text-lg font-semibold">{title}</h1>
             </div>
@@ -253,7 +282,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Switch checked={darkMode} onCheckedChange={setDarkMode} />
               <span className="sr-only">Alternar tema</span>
             </label>
-            {!isManagerSystem ? (
+            {notificationsEnabled ? (
               <DropdownMenu onOpenChange={(open) => open && markNotificationsSeen()}>
                 <DropdownMenuTrigger asChild>
                   <Button aria-label="Notificações internas" size="icon" variant="outline">

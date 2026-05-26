@@ -1,5 +1,10 @@
-export const isManagerSystem = import.meta.env.VITE_TYPE_SYSTEM === "manager";
+const systemType = (import.meta.env.VITE_TYPE_SYSTEM ?? "").toLowerCase();
+
+export const isManagerSystem = systemType === "manager";
+export const isFleetSystem = systemType === "fleet" || systemType === "frota";
 
 export const systemModeLabel = isManagerSystem
   ? "Gestao de assinaturas"
-  : "Operacao de estoque";
+  : isFleetSystem
+    ? "Controle de frota"
+    : "Operacao de estoque";

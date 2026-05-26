@@ -16,6 +16,19 @@ export async function resetDatabase(prisma: PrismaClient) {
   await prisma.managerBilling.deleteMany();
   await prisma.managerLicense.deleteMany();
   await prisma.managerSubscriber.deleteMany();
+  await prisma.fleetTire.deleteMany();
+  await prisma.fleetBeltControl.deleteMany();
+  await prisma.fleetOilControl.deleteMany();
+  await prisma.fleetScheduledService.deleteMany();
+  await prisma.fleetMaintenance.deleteMany();
+  await prisma.fleetVehicleTransfer.deleteMany();
+  await prisma.fleetVehicleAllocation.deleteMany();
+  await prisma.fleetFueling.deleteMany();
+  await prisma.fleetVehicleReading.deleteMany();
+  await prisma.fleetVehicle.deleteMany();
+  await prisma.fleetDriver.deleteMany();
+  await prisma.fleetStructure.deleteMany();
+  await prisma.fleetSettings.deleteMany();
   await prisma.systemSettings.deleteMany();
   await prisma.user.deleteMany();
 }
