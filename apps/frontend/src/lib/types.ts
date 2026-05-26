@@ -284,3 +284,81 @@ export type ProductCsvPreviewRow = {
 export type ProductCsvPreview = {
   rows: ProductCsvPreviewRow[];
 };
+
+export type ManagerLicenseStatus = "PENDING" | "ACTIVE" | "CANCELLED" | "EXPIRED";
+
+export type ManagerLicenseType = "MONTHLY" | "ANNUAL" | "LIFETIME" | "TRIAL";
+
+export type ManagerBillingStatus = "OPEN" | "PAID" | "OVERDUE" | "CANCELLED";
+
+export type ManagerSubscriber = {
+  active: boolean;
+  billings?: ManagerBilling[];
+  city?: string | null;
+  createdAt: string;
+  document?: string | null;
+  email: string;
+  id: string;
+  licenses?: ManagerLicense[];
+  name: string;
+  notes?: string | null;
+  phone?: string | null;
+  state?: string | null;
+  updatedAt: string;
+};
+
+export type ManagerLicense = {
+  cancellationReason?: string | null;
+  cancelledAt?: string | null;
+  createdAt: string;
+  expiresAt?: string | null;
+  id: string;
+  licenseKey: string;
+  monthlyValue: number | string;
+  seats: number;
+  startsAt: string;
+  status: ManagerLicenseStatus;
+  subscriber?: ManagerSubscriber;
+  subscriberId: string;
+  systemKey: string;
+  type: ManagerLicenseType;
+  updatedAt: string;
+  validatedAt?: string | null;
+};
+
+export type ManagerBilling = {
+  amount: number | string;
+  createdAt: string;
+  description?: string | null;
+  dueDate: string;
+  id: string;
+  license?: ManagerLicense | null;
+  licenseId?: string | null;
+  paidAt?: string | null;
+  reference: string;
+  status: ManagerBillingStatus;
+  subscriber?: ManagerSubscriber;
+  subscriberId: string;
+  systemKey: string;
+  updatedAt: string;
+};
+
+export type ManagerDashboard = {
+  overdueBillings: ManagerBilling[];
+  revenueByLicenseType: Array<{ name: string; value: number }>;
+  revenueBySystem: Array<{ name: string; value: number }>;
+  totals: {
+    activeLicenses: number;
+    activeSubscribers: number;
+    cancelledLicenses: number;
+    currentMonthRevenue: number;
+    expiredLicenses: number;
+    monthlyRecurring: number;
+    openBillings: number;
+    overdueBillings: number;
+    pendingLicenses: number;
+    totalRevenue: number;
+    totalSubscribers: number;
+  };
+  upcomingExpirations: ManagerLicense[];
+};

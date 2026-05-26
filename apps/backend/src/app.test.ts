@@ -925,6 +925,120 @@ describe("api", () => {
     });
   });
 
+  it("manages subscribers, licenses, billing and manager dashboard", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const auth = authorizationFor(admin);
+
+    const subscriberResponse = await request(app)
+      .post("/manager/subscribers")
+      .set("Authorization", auth)
+      .send({
+        active: true,
+        city: "Sao Paulo",
+        document: "12345678000190",
+        email: "cliente@example.com",
+        name: "Cliente Municipal",
+        phone: "11999990000",
+        state: "SP",
+      });
+
+    expect(subscriberResponse.status).toBe(201);
+    expect(subscriberResponse.body).toMatchObject({
+      active: true,
+      email: "cliente@example.com",
+      name: "Cliente Municipal",
+    });
+
+    const licenseResponse = await request(app)
+      .post("/manager/licenses")
+      .set("Authorization", auth)
+      .send({
+        expiresAt: "2099-06-15",
+        monthlyValue: 250,
+        seats: 5,
+        startsAt: "2026-05-01",
+        subscriberId: subscriberResponse.body.id,
+        systemKey: "Almoxarifado",
+        type: "MONTHLY",
+      });
+
+    expect(licenseResponse.status).toBe(201);
+    expect(licenseResponse.body).toMatchObject({
+      status: "PENDING",
+      subscriberId: subscriberResponse.body.id,
+      systemKey: "Almoxarifado",
+    });
+    expect(licenseResponse.body.licenseKey).toEqual(expect.any(String));
+
+    const validatedLicense = await request(app)
+      .post(`/manager/licenses/${licenseResponse.body.id}/validate`)
+      .set("Authorization", auth)
+      .send({});
+
+    expect(validatedLicense.status).toBe(200);
+    expect(validatedLicense.body.status).toBe("ACTIVE");
+
+    const billingResponse = await request(app)
+      .post("/manager/billings")
+      .set("Authorization", auth)
+      .send({
+        amount: 250,
+        dueDate: "2020-01-10",
+        licenseId: licenseResponse.body.id,
+        reference: "2026-05",
+        status: "OPEN",
+        subscriberId: subscriberResponse.body.id,
+        systemKey: "Almoxarifado",
+      });
+
+    expect(billingResponse.status).toBe(201);
+    expect(billingResponse.body).toMatchObject({
+      reference: "2026-05",
+      status: "OPEN",
+      systemKey: "Almoxarifado",
+    });
+
+    const overdueDashboard = await request(app)
+      .get("/manager/dashboard")
+      .set("Authorization", auth);
+
+    expect(overdueDashboard.status).toBe(200);
+    expect(overdueDashboard.body.totals.overdueBillings).toBe(1);
+
+    const paidBilling = await request(app)
+      .post(`/manager/billings/${billingResponse.body.id}/pay`)
+      .set("Authorization", auth)
+      .send({});
+
+    expect(paidBilling.status).toBe(200);
+    expect(paidBilling.body.status).toBe("PAID");
+
+    const dashboard = await request(app)
+      .get("/manager/dashboard")
+      .set("Authorization", auth);
+
+    expect(dashboard.status).toBe(200);
+    expect(dashboard.body.totals.totalRevenue).toBe(250);
+    expect(dashboard.body.revenueBySystem).toEqual([
+      { name: "Almoxarifado", value: 250 },
+    ]);
+
+    const cancelledLicense = await request(app)
+      .post(`/manager/licenses/${licenseResponse.body.id}/cancel`)
+      .set("Authorization", auth)
+      .send({ reason: "Contrato encerrado" });
+
+    expect(cancelledLicense.status).toBe(200);
+    expect(cancelledLicense.body).toMatchObject({
+      cancellationReason: "Contrato encerrado",
+      status: "CANCELLED",
+    });
+  });
+
   it("rejects base64 image data in system settings payloads", async () => {
     const { user } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({

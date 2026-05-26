@@ -1,4 +1,9 @@
-import { MovementType, UserRole } from "@prisma/client";
+import {
+  ManagerBillingStatus,
+  ManagerLicenseType,
+  MovementType,
+  UserRole,
+} from "@prisma/client";
 import { z } from "zod";
 
 const optionalText = z
@@ -243,4 +248,42 @@ export const movementQuery = z.object({
   to: z.coerce.date().optional(),
   type: z.nativeEnum(MovementType).optional(),
   warehouseId: z.string().optional(),
+});
+
+export const managerSubscriberInput = z.object({
+  active: z.boolean().default(true),
+  city: optionalText,
+  document: optionalText,
+  email: z.string().trim().email("Informe um email vÃ¡lido.").transform((value) => value.toLowerCase()),
+  name: z.string().trim().min(2, "Informe o nome do assinante."),
+  notes: optionalText,
+  phone: optionalText,
+  state: optionalText,
+});
+
+export const managerLicenseInput = z.object({
+  expiresAt: z.coerce.date().optional().nullable(),
+  licenseKey: optionalText,
+  monthlyValue: z.coerce.number().min(0, "O valor nÃ£o pode ser negativo.").default(0),
+  seats: z.coerce.number().int().positive("Informe ao menos uma licenÃ§a.").default(1),
+  startsAt: z.coerce.date().default(() => new Date()),
+  subscriberId: z.string().min(1, "Escolha o assinante."),
+  systemKey: z.string().trim().min(2, "Informe o sistema."),
+  type: z.nativeEnum(ManagerLicenseType).default(ManagerLicenseType.MONTHLY),
+});
+
+export const managerBillingInput = z.object({
+  amount: z.coerce.number().min(0, "O valor nÃ£o pode ser negativo."),
+  description: optionalText,
+  dueDate: z.coerce.date(),
+  licenseId: z.string().min(1).optional().nullable(),
+  paidAt: z.coerce.date().optional().nullable(),
+  reference: z.string().trim().min(2, "Informe a referÃªncia."),
+  status: z.nativeEnum(ManagerBillingStatus).default(ManagerBillingStatus.OPEN),
+  subscriberId: z.string().min(1, "Escolha o assinante."),
+  systemKey: z.string().trim().min(2, "Informe o sistema."),
+});
+
+export const managerLicenseCancelInput = z.object({
+  reason: optionalText,
 });

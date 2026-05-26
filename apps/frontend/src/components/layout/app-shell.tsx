@@ -2,10 +2,13 @@ import {
   BarChart3,
   Bell,
   Boxes,
+  Building2,
   ClipboardCheck,
   ClipboardList,
+  CreditCard,
   FileDown,
   FileText,
+  KeyRound,
   Layers3,
   Menu,
   Moon,
@@ -33,11 +36,12 @@ import { useApiResource } from "@/lib/api";
 import { resolveAssetUrl } from "@/lib/assets";
 import { useRouteLoading } from "@/lib/route-loading";
 import { useSession } from "@/lib/session";
+import { isManagerSystem, systemModeLabel } from "@/lib/system-mode";
 import { useSystemSettings } from "@/lib/system-settings";
 import type { UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const items = [
+const operationItems = [
   { icon: Layers3, label: "Dashboard", to: "/dashboard" },
   { icon: BarChart3, label: "Insights", role: "ADMIN", to: "/insights" },
   { icon: Boxes, label: "Almoxarifados", to: "/warehouses" },
@@ -56,6 +60,20 @@ const items = [
   role?: UserRole;
   to: string;
 }>;
+
+const managerItems = [
+  { icon: Layers3, label: "Dashboard", to: "/dashboard" },
+  { icon: Building2, label: "Assinantes", role: "ADMIN", to: "/subscribers" },
+  { icon: CreditCard, label: "Faturamento", role: "ADMIN", to: "/billing" },
+  { icon: KeyRound, label: "Licenças", role: "ADMIN", to: "/licenses" },
+] satisfies Array<{
+  icon: typeof Boxes;
+  label: string;
+  role?: UserRole;
+  to: string;
+}>;
+
+const items = isManagerSystem ? managerItems : operationItems;
 
 function navigationItems(role: UserRole) {
   return items.filter((item) => !item.role || item.role === role);
@@ -148,7 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   const title =
     navigationItems(role).find((item) => location.pathname.startsWith(item.to))
-      ?.label ?? "Almoxarifado";
+      ?.label ?? (isManagerSystem ? "Gestão" : "Almoxarifado");
   const summary = useApiResource<{
     pendingEntryRequests: number;
     pendingReceipts: number;
@@ -178,6 +196,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const subtitle = import.meta.env.VITE_NAME_SYSTEM ?? "GEMA - Gestão Municipal de Almoxarifado.";
+  const brandTitle = isManagerSystem ? "Gestor de licenças" : settings.loginTitle;
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
@@ -188,8 +207,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <BrandLogo logoUrl={settings.logoUrl} />
             </div>
             <div>
-              <p className="text-sm font-semibold">{settings.loginTitle}</p>
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
+              <p className="text-sm font-semibold">{brandTitle}</p>
+              <p className="text-xs text-muted-foreground">
+                {isManagerSystem ? systemModeLabel : subtitle}
+              </p>
             </div>
           </div>
         </div>
@@ -210,14 +231,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               </SheetTrigger>
               <SheetContent>
                 <div className="mb-5 pr-8">
-                  <p className="font-semibold">{settings.systemName}</p>
-                  <p className="text-sm text-muted-foreground">Operação de estoque</p>
+                  <p className="font-semibold">
+                    {isManagerSystem ? brandTitle : settings.systemName}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{systemModeLabel}</p>
                 </div>
                 <Navigation role={role} />
               </SheetContent>
             </Sheet>
             <div>
-              <p className="text-xs font-medium uppercase text-muted-foreground">Controle</p>
+              <p className="text-xs font-medium uppercase text-muted-foreground">
+                {isManagerSystem ? "Gestão" : "Controle"}
+              </p>
               <h1 className="text-lg font-semibold">{title}</h1>
             </div>
           </div>
@@ -228,26 +253,28 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Switch checked={darkMode} onCheckedChange={setDarkMode} />
               <span className="sr-only">Alternar tema</span>
             </label>
-            <DropdownMenu onOpenChange={(open) => open && markNotificationsSeen()}>
-              <DropdownMenuTrigger asChild>
-                <Button aria-label="Notificações internas" size="icon" variant="outline">
-                  <Bell className="h-4 w-4" />
-                  {notificationCount ? (
-                    <span className="absolute -mr-7 -mt-7 grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[11px] font-semibold text-white">
-                      {notificationCount}
-                    </span>
-                  ) : null}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72">
-                <DropdownMenuItem onSelect={() => navigate("/requests")}>
-                  {summary.data.pendingEntryRequests} entradas aguardando analise
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => navigate("/requests")}>
-                  {summary.data.pendingReceipts} transferências aguardando recebimento
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {!isManagerSystem ? (
+              <DropdownMenu onOpenChange={(open) => open && markNotificationsSeen()}>
+                <DropdownMenuTrigger asChild>
+                  <Button aria-label="Notificações internas" size="icon" variant="outline">
+                    <Bell className="h-4 w-4" />
+                    {notificationCount ? (
+                      <span className="absolute -mr-7 -mt-7 grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[11px] font-semibold text-white">
+                        {notificationCount}
+                      </span>
+                    ) : null}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72">
+                  <DropdownMenuItem onSelect={() => navigate("/requests")}>
+                    {summary.data.pendingEntryRequests} entradas aguardando analise
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => navigate("/requests")}>
+                    {summary.data.pendingReceipts} transferências aguardando recebimento
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">

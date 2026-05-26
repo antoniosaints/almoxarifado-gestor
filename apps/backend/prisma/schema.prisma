@@ -31,6 +31,27 @@ enum TransferRequestStatus {
   CANCELLED
 }
 
+enum ManagerLicenseStatus {
+  PENDING
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+enum ManagerLicenseType {
+  MONTHLY
+  ANNUAL
+  LIFETIME
+  TRIAL
+}
+
+enum ManagerBillingStatus {
+  OPEN
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
 model User {
   id                       String            @id @default(cuid())
   name                     String
@@ -267,4 +288,68 @@ model SystemSettings {
   reportFooterText      String   @default("Documento gerado pelo sistema de almoxarifado municipal.")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model ManagerSubscriber {
+  id        String           @id @default(cuid())
+  name      String
+  document  String?          @unique
+  email     String           @unique
+  phone     String?
+  city      String?
+  state     String?
+  notes     String?
+  active    Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  licenses  ManagerLicense[]
+  billings  ManagerBilling[]
+}
+
+model ManagerLicense {
+  id                 String               @id @default(cuid())
+  subscriberId       String
+  systemKey          String
+  licenseKey         String               @unique
+  type               ManagerLicenseType   @default(MONTHLY)
+  status             ManagerLicenseStatus @default(PENDING)
+  seats              Int                  @default(1)
+  startsAt           DateTime             @default(now())
+  expiresAt          DateTime?
+  validatedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  monthlyValue       Decimal              @default(0)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  subscriber         ManagerSubscriber    @relation(fields: [subscriberId], references: [id])
+  billings           ManagerBilling[]
+
+  @@index([subscriberId])
+  @@index([systemKey])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model ManagerBilling {
+  id           String               @id @default(cuid())
+  subscriberId String
+  licenseId    String?
+  systemKey    String
+  reference    String
+  description  String?
+  amount       Decimal              @default(0)
+  dueDate      DateTime
+  paidAt       DateTime?
+  status       ManagerBillingStatus @default(OPEN)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  subscriber   ManagerSubscriber    @relation(fields: [subscriberId], references: [id])
+  license      ManagerLicense?      @relation(fields: [licenseId], references: [id], onDelete: SetNull)
+
+  @@index([subscriberId])
+  @@index([licenseId])
+  @@index([systemKey])
+  @@index([status])
+  @@index([dueDate])
 }
