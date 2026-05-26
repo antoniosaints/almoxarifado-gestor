@@ -1,4 +1,6 @@
 import { UserRole } from "@prisma/client";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import PDFDocument from "pdfkit";
 import { Router, type Response } from "express";
 import type { SessionUser } from "../lib/auth.js";
@@ -6,6 +8,7 @@ import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
 import { warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import { getSystemSettings } from "../services/settings-service.js";
+import { getLocalUploadRoot } from "../services/upload-service.js";
 
 export const reportRoutes = Router();
 
@@ -282,6 +285,48 @@ function drawReportChrome(
   document.restore();
 }
 
+function localUploadPathFromPublicUrl(url: string) {
+  const prefixedUrl = url.startsWith("uploads/") ? `/${url}` : url;
+
+  if (!prefixedUrl.startsWith("/uploads/")) {
+    return null;
+  }
+
+  let pathname: string;
+
+  try {
+    pathname = new URL(prefixedUrl, "http://local").pathname;
+  } catch {
+    return null;
+  }
+
+  if (!pathname.startsWith("/uploads/")) {
+    return null;
+  }
+
+  let relativePath: string;
+
+  try {
+    relativePath = decodeURIComponent(pathname.slice("/uploads/".length));
+  } catch {
+    return null;
+  }
+
+  const uploadRoot = getLocalUploadRoot();
+  const filePath = path.resolve(uploadRoot, relativePath);
+  const relativeToRoot = path.relative(uploadRoot, filePath);
+
+  if (
+    relativeToRoot === ".." ||
+    relativeToRoot.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeToRoot)
+  ) {
+    return null;
+  }
+
+  return filePath;
+}
+
 async function loadReportLogo(url: string | null | undefined) {
   const normalizedUrl = url?.trim();
 
@@ -303,6 +348,16 @@ async function loadReportLogo(url: string | null | undefined) {
       metadata.includes(";base64") ? payload : decodeURIComponent(payload),
       metadata.includes(";base64") ? "base64" : "utf8",
     );
+  }
+
+  const localUploadPath = localUploadPathFromPublicUrl(normalizedUrl);
+
+  if (localUploadPath) {
+    try {
+      return await readFile(localUploadPath);
+    } catch {
+      return null;
+    }
   }
 
   if (!/^https?:\/\//i.test(normalizedUrl)) {

@@ -22,6 +22,13 @@ function countPdfPages(body: Buffer) {
   return (body.toString("latin1").match(/\/Type\s*\/Page\b/g) ?? []).length;
 }
 
+function tinyPngBuffer() {
+  return Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+    "base64",
+  );
+}
+
 describe("api", () => {
   beforeEach(async () => {
     await resetDatabase(prisma);
@@ -1322,6 +1329,48 @@ describe("api", () => {
     expect(response.headers["content-type"]).toContain("application/pdf");
     expect(response.headers["content-disposition"]).toContain("relatorio-saldos.pdf");
     expect(countPdfPages(response.body)).toBe(1);
+  });
+
+  it("embeds uploaded report logos from local uploads in PDFs", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 8,
+        minimumQuantity: 2,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+
+    const uploadResponse = await request(app)
+      .post("/uploads/settings/report-logo")
+      .set("Authorization", authorizationFor(admin))
+      .set("Content-Type", "image/png")
+      .send(tinyPngBuffer());
+
+    expect(uploadResponse.status).toBe(201);
+    expect(uploadResponse.body.url).toMatch(
+      /^\/uploads\/settings\/report-logo\.png\?v=\d+$/,
+    );
+
+    const response = await request(app)
+      .get("/reports/stocks")
+      .set("Authorization", authorizationFor(admin));
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/pdf");
+    expect(response.body.toString("latin1")).toContain("/Subtype /Image");
   });
 
   it("exports invoice reports without empty duplicate pages", async () => {
