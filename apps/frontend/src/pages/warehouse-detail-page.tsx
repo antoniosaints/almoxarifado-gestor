@@ -39,6 +39,7 @@ import {
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MaskedInput } from "@/components/ui/masked-input";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -508,8 +509,9 @@ function InvoiceFields({
             </FormField>
             <FormField>
               <Label htmlFor="quick-supplier-cnpj">CNPJ</Label>
-              <Input
+              <MaskedInput
                 id="quick-supplier-cnpj"
+                mask="cnpj"
                 onChange={(event) =>
                   setSupplierDraft({ ...supplierDraft, cnpj: event.target.value })
                 }

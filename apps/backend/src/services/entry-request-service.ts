@@ -1,9 +1,11 @@
 import {
   MovementType,
+  Prisma,
   RequestStatus,
   type PrismaClient,
 } from "@prisma/client";
 import { AppError } from "../lib/errors.js";
+import { defaultSettings, settingsId } from "./settings-service.js";
 
 type EntryRequestInput = {
   movementDate: Date;
@@ -21,13 +23,129 @@ type ApprovalInput = {
   reviewedById: string;
 };
 
+const officeRequestInclude = {
+  product: {
+    include: {
+      unit: true,
+    },
+  },
+  requestedBy: {
+    select: {
+      email: true,
+      id: true,
+      name: true,
+    },
+  },
+  warehouse: {
+    include: {
+      category: true,
+    },
+  },
+} as const;
+
+type OfficeRequest = Prisma.EntryRequestGetPayload<{
+  include: typeof officeRequestInclude;
+}>;
+
+const defaultOfficeLetterSubject = "Solicitação de material/equipamento";
+const defaultOfficeLetterContentHtml = [
+  "<p><strong>OF&Iacute;CIO N&ordm; {{oficio_numero_ano}}</strong></p>",
+  "<p><strong>Assunto:</strong> Solicita&ccedil;&atilde;o de material/equipamento</p>",
+  "<p>Prezados,</p>",
+  "<p>Venho, por meio deste, solicitar a disponibiliza&ccedil;&atilde;o do(s) seguinte(s) item(ns):</p>",
+  "<p>{{itens_solicitados_html}}</p>",
+  "<p>A presente solicita&ccedil;&atilde;o se faz necess&aacute;ria para atender &agrave;s demandas e necessidades deste setor, visando garantir o bom funcionamento das atividades desenvolvidas.</p>",
+  "<p>Certos de contarmos com a colabora&ccedil;&atilde;o de Vossa Senhoria, aguardamos o atendimento desta solicita&ccedil;&atilde;o e renovamos nossos votos de estima e considera&ccedil;&atilde;o.</p>",
+  "<p>Atenciosamente,</p>",
+].join("");
+
 function assertPositiveQuantity(quantity: number) {
   if (!Number.isInteger(quantity) || quantity <= 0) {
     throw new AppError(400, "Informe uma quantidade maior que zero.");
   }
 }
 
+async function nextOfficeNumber(
+  prisma: Prisma.TransactionClient,
+  warehouseId: string,
+  year: number,
+) {
+  const lastRequest = await prisma.entryRequest.findFirst({
+    orderBy: { officeNumber: "desc" },
+    select: { officeNumber: true },
+    where: {
+      officeNumber: { not: null },
+      officeYear: year,
+      warehouseId,
+    },
+  });
+
+  return (lastRequest?.officeNumber ?? 0) + 1;
+}
+
+export function formatOfficeNumber(
+  officeNumber: number | null | undefined,
+  officeYear: number | null | undefined,
+) {
+  if (!officeNumber || !officeYear) {
+    return "";
+  }
+
+  return `${String(officeNumber).padStart(3, "0")}/${officeYear}`;
+}
+
 export async function createEntryRequest(
+  prisma: PrismaClient,
+  input: EntryRequestInput,
+) {
+  assertPositiveQuantity(input.quantity);
+
+  return prisma.$transaction(async (transaction) => {
+    const stock = await transaction.stock.findUnique({
+      include: {
+        warehouse: {
+          select: {
+            isGeneral: true,
+          },
+        },
+      },
+      where: {
+        warehouseId_productId: {
+          productId: input.productId,
+          warehouseId: input.warehouseId,
+        },
+      },
+    });
+
+    if (!stock) {
+      throw new AppError(
+        400,
+        "Solicite apenas produtos já cadastrados no estoque deste almoxarifado.",
+      );
+    }
+
+    const officeYear = input.movementDate.getFullYear();
+    const shouldCreateOffice = !stock.warehouse.isGeneral;
+    const officeNumber = shouldCreateOffice
+      ? await nextOfficeNumber(transaction, input.warehouseId, officeYear)
+      : null;
+
+    return transaction.entryRequest.create({
+      data: {
+        movementDate: input.movementDate,
+        observation: input.observation,
+        officeNumber,
+        officeYear: shouldCreateOffice ? officeYear : null,
+        productId: input.productId,
+        quantity: input.quantity,
+        requestedById: input.requestedById,
+        warehouseId: input.warehouseId,
+      },
+    });
+  });
+}
+
+async function createEntryRequestLegacy(
   prisma: PrismaClient,
   input: EntryRequestInput,
 ) {
@@ -224,5 +342,180 @@ export async function rejectEntryRequest(
       reviewedById,
       status: RequestStatus.REJECTED,
     },
+  });
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat("pt-BR").format(value);
+}
+
+function requestItem(request: OfficeRequest) {
+  return {
+    productName: request.product.name,
+    quantity: request.quantity,
+    unit: request.product.unit.abbreviation,
+  };
+}
+
+function renderItemsHtml(items: ReturnType<typeof requestItem>[]) {
+  return items
+    .map((item, index) => {
+      const suffix = index === items.length - 1 ? "." : ";";
+
+      return `${escapeHtml(item.productName)} - ${item.quantity} ${escapeHtml(
+        item.unit,
+      )}${suffix}`;
+    })
+    .join("<br />");
+}
+
+function renderItemsText(items: ReturnType<typeof requestItem>[]) {
+  return items
+    .map((item, index) => {
+      const suffix = index === items.length - 1 ? "." : ";";
+
+      return `${item.productName} - ${item.quantity} ${item.unit}${suffix}`;
+    })
+    .join("\n");
+}
+
+function renderTemplate(
+  template: string,
+  variables: Record<string, string>,
+  htmlVariables = new Set<string>(),
+) {
+  return template.replace(
+    /{{\s*([a-zA-Z0-9_]+)\s*}}/g,
+    (_match, variable: string) => {
+      const value = variables[variable] ?? "";
+
+      return htmlVariables.has(variable) ? value : escapeHtml(value);
+    },
+  );
+}
+
+function renderPlainTemplate(template: string, variables: Record<string, string>) {
+  return template.replace(
+    /{{\s*([a-zA-Z0-9_]+)\s*}}/g,
+    (_match, variable: string) => variables[variable] ?? "",
+  );
+}
+
+async function ensureOfficeNumber(
+  prisma: Prisma.TransactionClient,
+  request: OfficeRequest,
+) {
+  if (request.officeNumber && request.officeYear) {
+    return request;
+  }
+
+  const officeYear = request.officeYear ?? request.movementDate.getFullYear();
+  const officeNumber = await nextOfficeNumber(
+    prisma,
+    request.warehouseId,
+    officeYear,
+  );
+
+  return prisma.entryRequest.update({
+    data: {
+      officeNumber,
+      officeYear,
+    },
+    include: officeRequestInclude,
+    where: { id: request.id },
+  });
+}
+
+export async function getEntryRequestOfficeLetter(
+  prisma: PrismaClient,
+  requestId: string,
+  viewerName: string,
+) {
+  return prisma.$transaction(async (transaction) => {
+    const foundRequest = await transaction.entryRequest.findUnique({
+      include: officeRequestInclude,
+      where: { id: requestId },
+    });
+
+    if (!foundRequest) {
+      throw new AppError(404, "Solicitação não encontrada.");
+    }
+
+    if (foundRequest.warehouse.isGeneral) {
+      throw new AppError(
+        400,
+        "Ofício disponível apenas para almoxarifados solicitantes.",
+      );
+    }
+
+    const request = await ensureOfficeNumber(transaction, foundRequest);
+    const settings = await transaction.systemSettings.upsert({
+      create: defaultSettings,
+      update: {},
+      where: { id: settingsId },
+    });
+    const template = await transaction.officeLetterTemplate.findFirst({
+      orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+      where: { active: true },
+    });
+    const items = [requestItem(request)];
+    const numberFormatted = formatOfficeNumber(
+      request.officeNumber,
+      request.officeYear,
+    );
+    const variables = {
+      almoxarifado_nome: request.warehouse.name,
+      ano_oficio: String(request.officeYear ?? ""),
+      data_atual: formatDate(new Date()),
+      data_solicitacao: formatDate(request.movementDate),
+      itens_solicitados_html: renderItemsHtml(items),
+      itens_solicitados_texto: renderItemsText(items),
+      numero_oficio: request.officeNumber
+        ? String(request.officeNumber).padStart(3, "0")
+        : "",
+      oficio_numero_ano: numberFormatted,
+      produto_nome: request.product.name,
+      quantidade_solicitada: String(request.quantity),
+      secretaria_nome: request.warehouse.category.name,
+      solicitante_nome: request.requestedBy.name,
+      unidade_solicitada: request.product.unit.abbreviation,
+      usuario_logado: viewerName,
+    };
+    const subjectTemplate = template?.subject ?? defaultOfficeLetterSubject;
+    const contentTemplate =
+      template?.contentHtml ?? defaultOfficeLetterContentHtml;
+
+    return {
+      contentHtml: renderTemplate(
+        contentTemplate,
+        variables,
+        new Set(["itens_solicitados_html"]),
+      ),
+      header: {
+        logoUrl:
+          settings.officeLogoUrl ?? settings.reportLogoUrl ?? settings.logoUrl ?? null,
+        subtitle: request.warehouse.name,
+        title: request.warehouse.category.name,
+      },
+      items,
+      number: request.officeNumber,
+      numberFormatted,
+      request: {
+        id: request.id,
+        status: request.status,
+        warehouseId: request.warehouseId,
+      },
+      subject: renderPlainTemplate(subjectTemplate, variables),
+      year: request.officeYear,
+    };
   });
 }

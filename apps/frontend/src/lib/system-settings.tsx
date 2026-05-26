@@ -21,6 +21,7 @@ export const defaultSystemSettings: SystemSettings = {
   loginSubtitle: "Entre com seu usuário para acompanhar o estoque municipal.",
   loginTitle: "Almoxarifado Municipal",
   logoUrl: null,
+  officeLogoUrl: null,
   primaryColor: "#0f766e",
   reportFooterText: "Documento gerado pelo sistema de almoxarifado municipal.",
   reportLogoUrl: null,

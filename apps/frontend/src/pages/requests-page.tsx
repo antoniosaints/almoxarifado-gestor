@@ -1,4 +1,12 @@
-import { ArrowRightLeft, Check, PackagePlus, Warehouse, X } from "lucide-react";
+import {
+  ArrowRightLeft,
+  Building2,
+  Check,
+  FileText,
+  PackagePlus,
+  Warehouse,
+  X,
+} from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { DataTable } from "@/components/domain/data-table";
@@ -20,10 +28,12 @@ import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
+import { resolveAssetUrl } from "@/lib/assets";
 import { useSession } from "@/lib/session";
 import type {
   EntryRequest,
   Invoice,
+  OfficeLetter,
   Product,
   TransferRequest,
   Warehouse as WarehouseType,
@@ -52,6 +62,90 @@ function StatusBadge({ status }: { status: string }) {
     >
       {label ?? status}
     </Badge>
+  );
+}
+
+function OfficeLetterDialog({ request }: { request: EntryRequest }) {
+  const [open, setOpen] = useState(false);
+  const [letter, setLetter] = useState<OfficeLetter | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const logoUrl = resolveAssetUrl(letter?.header.logoUrl);
+
+  async function openDialog() {
+    setOpen(true);
+
+    if (letter || loading) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      setLetter(
+        await api<OfficeLetter>(`/entry-requests/${request.id}/office-letter`),
+      );
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao carregar oficio.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={() => void openDialog()} size="sm" variant="outline">
+        <FileText className="h-4 w-4" />
+        Ver oficio
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Oficio da solicitacao</DialogTitle>
+            <DialogDescription>
+              {request.warehouse.name} - {request.product.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {loading ? <LoadingLine /> : null}
+          {error ? <ResourceError message={error} /> : null}
+          {letter ? (
+            <article className="space-y-6 rounded-md border bg-background p-5 text-sm">
+              <header className="flex items-center gap-3 border-b pb-4">
+                <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
+                  {logoUrl ? (
+                    <img
+                      alt=""
+                      className="h-full w-full object-contain"
+                      src={logoUrl}
+                    />
+                  ) : (
+                    <Building2 className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold">{letter.header.title}</p>
+                  <p className="text-muted-foreground">{letter.header.subtitle}</p>
+                </div>
+              </header>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold">OFICIO Nº {letter.numberFormatted}</p>
+                <p className="text-muted-foreground">{letter.subject}</p>
+              </div>
+              <div
+                className="prose prose-sm max-w-none dark:prose-invert"
+                dangerouslySetInnerHTML={{ __html: letter.contentHtml }}
+              />
+            </article>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -836,6 +930,9 @@ export function RequestsPage() {
               {
                 cell: (request) => (
                   <div className="flex justify-end gap-2">
+                    {request.warehouse.isGeneral !== true ? (
+                      <OfficeLetterDialog request={request} />
+                    ) : null}
                     <Button asChild size="sm" variant="outline">
                       <Link
                         aria-label={`Abrir almoxarifado ${request.warehouse.name}`}

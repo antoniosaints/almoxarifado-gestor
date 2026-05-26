@@ -14,6 +14,7 @@ import {
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MaskedInput } from "@/components/ui/masked-input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
@@ -279,8 +280,9 @@ export function FleetDriversPage() {
                 </FormField>
                 <FormField>
                   <Label htmlFor="fleet-driver-cpf">CPF</Label>
-                  <Input
+                  <MaskedInput
                     id="fleet-driver-cpf"
+                    mask="cpf"
                     onChange={(event) => setDraft({ ...draft, cpf: event.target.value })}
                     value={draft.cpf}
                   />
@@ -289,8 +291,9 @@ export function FleetDriversPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField>
                   <Label htmlFor="fleet-driver-phone">Telefone</Label>
-                  <Input
+                  <MaskedInput
                     id="fleet-driver-phone"
+                    mask="phone"
                     onChange={(event) => setDraft({ ...draft, phone: event.target.value })}
                     value={draft.phone}
                   />

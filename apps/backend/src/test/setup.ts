@@ -12,7 +12,7 @@ if (!existsSync(databaseFile)) {
   closeSync(openSync(databaseFile, "w"));
 }
 
-execFileSync(prismaBinary, ["db", "push", "--skip-generate"], {
+execFileSync(prismaBinary, ["db", "push", "--skip-generate", "--accept-data-loss"], {
   cwd: backendRoot,
   env: {
     ...process.env,

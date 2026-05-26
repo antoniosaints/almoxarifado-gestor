@@ -94,6 +94,7 @@ export type SystemSettings = {
   loginSubtitle: string;
   loginTitle: string;
   logoUrl?: string | null;
+  officeLogoUrl?: string | null;
   primaryColor: string;
   reportFooterText: string;
   reportLogoUrl?: string | null;
@@ -172,7 +173,30 @@ export type EntryRequest = {
   reviewedAt?: string | null;
   reviewedBy?: Pick<User, "email" | "id" | "name"> | null;
   status: RequestStatus;
-  warehouse: Pick<Warehouse, "category" | "id" | "name">;
+  warehouse: Pick<Warehouse, "category" | "id" | "isGeneral" | "name">;
+};
+
+export type OfficeLetter = {
+  contentHtml: string;
+  header: {
+    logoUrl?: string | null;
+    subtitle: string;
+    title: string;
+  };
+  items: Array<{
+    productName: string;
+    quantity: number;
+    unit: string;
+  }>;
+  number: number;
+  numberFormatted: string;
+  request: {
+    id: string;
+    status: RequestStatus;
+    warehouseId: string;
+  };
+  subject: string;
+  year: number;
 };
 
 export type TransferRequest = {

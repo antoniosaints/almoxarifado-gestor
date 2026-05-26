@@ -246,12 +246,16 @@ model EntryRequest {
   requestedById    String
   reviewedById     String?
   reviewedAt       DateTime?
+  officeNumber     Int?
+  officeYear       Int?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   warehouse        Warehouse     @relation(fields: [warehouseId], references: [id])
   product          Product       @relation(fields: [productId], references: [id])
   requestedBy      User          @relation("EntryRequester", fields: [requestedById], references: [id])
   reviewedBy       User?         @relation("EntryReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([warehouseId, officeYear, officeNumber])
 }
 
 model TransferRequest {
@@ -358,6 +362,7 @@ model SystemSettings {
   systemName            String   @default("Prefeitura")
   faviconUrl            String?
   logoUrl               String?
+  officeLogoUrl         String?
   primaryColor          String   @default("#0f766e")
   loginBackgroundUrl    String?
   loginTitle            String   @default("Almoxarifado Municipal")

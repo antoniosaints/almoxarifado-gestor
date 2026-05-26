@@ -115,12 +115,24 @@ export const supplierInput = z.object({
 });
 
 const allowedOfficeVariables = [
+  "almoxarifado_nome",
+  "ano_oficio",
   "cnpj_empresa",
   "data_atual",
   "data_nota",
+  "data_solicitacao",
+  "itens_solicitados_html",
+  "itens_solicitados_texto",
   "nome_empresa",
   "nome_fantasia_empresa",
+  "numero_oficio",
   "numero_nota",
+  "oficio_numero_ano",
+  "produto_nome",
+  "quantidade_solicitada",
+  "secretaria_nome",
+  "solicitante_nome",
+  "unidade_solicitada",
   "usuario_logado",
   "valor_nota",
 ] as const;
@@ -181,6 +193,7 @@ export const systemSettingsInput = z.object({
   loginSubtitle: z.string().trim().min(2, "Informe o subtítulo do login."),
   loginTitle: z.string().trim().min(2, "Informe o título do login."),
   logoUrl: optionalUrl,
+  officeLogoUrl: optionalUrl,
   primaryColor: z
     .string()
     .trim()

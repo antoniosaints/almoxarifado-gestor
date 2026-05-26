@@ -21,6 +21,10 @@ export const settingsAssetSlots = {
     field: "loginImageUrl",
     key: "login-image",
   },
+  "office-logo": {
+    field: "officeLogoUrl",
+    key: "office-logo",
+  },
   "report-logo": {
     field: "reportLogoUrl",
     key: "report-logo",
