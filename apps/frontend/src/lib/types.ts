@@ -299,6 +299,7 @@ export type Insights = {
 };
 
 export type WarehouseCsvPreviewRow = {
+  alreadyImported: boolean;
   canImport: boolean;
   cnpj: string;
   companyName: string;
@@ -316,6 +317,7 @@ export type WarehouseCsvPreviewRow = {
   unit: string;
   unitPrice: number;
   warnings: string[];
+  willImport: boolean;
 };
 
 export type WarehouseCsvPreview = {

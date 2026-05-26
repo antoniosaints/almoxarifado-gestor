@@ -6,6 +6,7 @@ import { assertWarehouseAccess, warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import {
   approveEntryRequest,
+  buildEntryRequestOfficeLetterPdf,
   createEntryRequest,
   getEntryRequestOfficeLetter,
   rejectEntryRequest,
@@ -110,6 +111,33 @@ entryRequestRoutes.post(
         requestedById: user.id,
       }),
     );
+  }),
+);
+
+entryRequestRoutes.get(
+  "/:id/office-letter/pdf",
+  asyncHandler(async (request, response) => {
+    const { id } = idParam.parse(request.params);
+    const user = currentUser(response);
+    const entryRequest = await prisma.entryRequest.findUnique({
+      select: { warehouseId: true },
+      where: { id },
+    });
+
+    if (!entryRequest) {
+      throw new AppError(404, "SolicitaÃ§Ã£o nÃ£o encontrada.");
+    }
+
+    await assertWarehouseAccess(prisma, user, entryRequest.warehouseId);
+
+    const pdf = await buildEntryRequestOfficeLetterPdf(prisma, id, user.name);
+
+    response.setHeader("Content-Type", "application/pdf");
+    response.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${pdf.fileName}"`,
+    );
+    response.send(pdf.buffer);
   }),
 );
 

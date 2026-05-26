@@ -1097,6 +1097,54 @@ describe("api", () => {
     expect(office.body.contentHtml).toContain("Papel A4 - 4 UN.");
   });
 
+  it("exports an office letter PDF with the configured header logo", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    const auth = authorizationFor(admin);
+
+    await request(app)
+      .post("/uploads/settings/office-logo")
+      .set("Authorization", auth)
+      .set("Content-Type", "image/png")
+      .send(tinyPngBuffer());
+
+    const createdRequest = await request(app)
+      .post("/entry-requests")
+      .set("Authorization", auth)
+      .send({
+        movementDate: "2026-05-23T12:00:00.000Z",
+        productId: product.id,
+        quantity: 4,
+        warehouseId: warehouse.id,
+      });
+
+    const office = await request(app)
+      .get(`/entry-requests/${createdRequest.body.id}/office-letter/pdf`)
+      .set("Authorization", auth);
+
+    expect(office.status).toBe(200);
+    expect(office.headers["content-type"]).toContain("application/pdf");
+    expect(office.headers["content-disposition"]).toContain("oficio-001-2026.pdf");
+    expect(office.body.toString("latin1")).toContain("%PDF");
+    expect(office.body.toString("latin1")).toContain("/Subtype /Image");
+  });
+
   it("uploads one settings asset per slot and stores only the public URL", async () => {
     const { user } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({

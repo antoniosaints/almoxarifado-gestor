@@ -347,6 +347,198 @@ describe("WarehouseTabs", () => {
     expect(screen.queryByText("0000003 - Detergente")).not.toBeInTheDocument();
   });
 
+  it("reads Windows-1252 stock CSV files before sending the preview request", async () => {
+    let previewPayload: { csv: string } | null = null;
+    const csvBytes = new Uint8Array([
+      ...Array.from(
+        "nome_produto;unidade;quantidade;valor_unitario;observacao;numero_nota;cnpj_empresa;nome_empresa;data_nota\nA",
+        (char) => char.charCodeAt(0),
+      ),
+      0xe7,
+      ...Array.from(
+        "ucar;UN;1;2,50;Compra;NF-50;12345678000190;Fornecedor;25/05/2026",
+        (char) => char.charCodeAt(0),
+      ),
+    ]);
+    const file = new File([csvBytes], "estoque.csv", { type: "text/csv" });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input));
+
+        if (url.pathname === "/warehouses/health/import-csv/preview") {
+          previewPayload = JSON.parse(String(init?.body));
+
+          return new Response(
+            JSON.stringify({
+              rows: [
+                {
+                  alreadyImported: false,
+                  canImport: true,
+                  cnpj: "12345678000190",
+                  companyName: "Fornecedor",
+                  errors: [],
+                  index: 0,
+                  invoiceNumber: "NF-50",
+                  productName: "Açucar",
+                  quantity: 1,
+                  rowNumber: 2,
+                  suggestedProduct: null,
+                  suggestedUnit: null,
+                  totalValue: 2.5,
+                  unit: "UN",
+                  unitPrice: 2.5,
+                  warnings: [],
+                  willImport: true,
+                },
+              ],
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+            },
+          );
+        }
+
+        return new Response(JSON.stringify([]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            productCategories={[{ id: "office", name: "Expediente" }]}
+            products={[]}
+            warehouse={warehouse}
+            warehouses={[warehouse]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Importar CSV" }));
+    fireEvent.change(screen.getByLabelText("Arquivo CSV"), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(previewPayload?.csv).toContain("Açucar");
+    });
+  });
+
+  it("paginates the stock CSV preview inside the import modal", async () => {
+    const file = new File(
+      [
+        "nome_produto;unidade;quantidade;valor_unitario;observacao;numero_nota;cnpj_empresa;nome_empresa;data_nota\nProduto 1;UN;1;2,50;Compra;NF-60;12345678000190;Fornecedor;25/05/2026",
+      ],
+      "estoque.csv",
+      { type: "text/csv" },
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input));
+
+        if (url.pathname === "/warehouses/health/import-csv/preview") {
+          return new Response(
+            JSON.stringify({
+              rows: Array.from({ length: 25 }, (_, index) => ({
+                alreadyImported: false,
+                canImport: true,
+                cnpj: "12345678000190",
+                companyName: "Fornecedor",
+                errors: [],
+                index,
+                invoiceNumber: "NF-60",
+                productName: `Produto ${index + 1}`,
+                quantity: 1,
+                rowNumber: index + 2,
+                suggestedProduct: null,
+                suggestedUnit: null,
+                totalValue: 2.5,
+                unit: "UN",
+                unitPrice: 2.5,
+                warnings: [],
+                willImport: true,
+              })),
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+            },
+          );
+        }
+
+        return new Response(JSON.stringify([]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            productCategories={[{ id: "office", name: "Expediente" }]}
+            products={[]}
+            warehouse={warehouse}
+            warehouses={[warehouse]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Importar CSV" }));
+    fireEvent.change(screen.getByLabelText("Arquivo CSV"), {
+      target: { files: [file] },
+    });
+
+    expect(await screen.findByText("Produto 1")).toBeInTheDocument();
+    expect(screen.getByText("Página 1 de 2")).toBeInTheDocument();
+    expect(screen.queryByText("Produto 21")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Próxima" }));
+
+    expect(await screen.findByText("Produto 21")).toBeInTheDocument();
+    expect(screen.getByText("Página 2 de 2")).toBeInTheDocument();
+    expect(screen.queryByText("Produto 1")).not.toBeInTheDocument();
+  });
+
   it("uses row actions instead of inline minimum stock inputs", () => {
     render(
       <MemoryRouter>

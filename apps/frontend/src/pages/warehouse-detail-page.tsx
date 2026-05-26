@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  ArrowRight,
   ArrowRightLeft,
   BarChart3,
   Box,
@@ -53,6 +54,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { api, apiFile, useApiResource } from "@/lib/api";
+import { readCsvFile } from "@/lib/csv";
 import { useSession } from "@/lib/session";
 import type {
   Invoice,
@@ -108,6 +110,7 @@ type ProductDraft = {
 const warehouseTabValues = ["stock", "overview", "history"] as const;
 const createProductCsvValue = "__create_product__";
 const skipCsvRowValue = "__skip_row__";
+const warehouseCsvRowsPerPage = 20;
 
 function readStoredWarehouseTab(warehouseId: string) {
   if (typeof window === "undefined") {
@@ -1811,6 +1814,7 @@ function WarehouseCsvImportDialog({
   const [categoryId, setCategoryId] = useState(productCategories[0]?.id ?? "");
   const [minimumQuantity, setMinimumQuantity] = useState("0");
   const [preview, setPreview] = useState<WarehouseCsvPreview | null>(null);
+  const [previewPage, setPreviewPage] = useState(1);
   const [rowActions, setRowActions] = useState<Record<number, string>>({});
   const [previewLoading, setPreviewLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1841,6 +1845,19 @@ function WarehouseCsvImportDialog({
     (preview?.rows ?? []).every(
       (row) => row.canImport || rowActions[row.index] === skipCsvRowValue,
     );
+  const previewRows = preview?.rows ?? [];
+  const totalPreviewPages = Math.max(
+    1,
+    Math.ceil(previewRows.length / warehouseCsvRowsPerPage),
+  );
+  const currentPreviewPage = Math.min(previewPage, totalPreviewPages);
+  const pagedPreviewRows = previewRows.slice(
+    (currentPreviewPage - 1) * warehouseCsvRowsPerPage,
+    currentPreviewPage * warehouseCsvRowsPerPage,
+  );
+  const skippedPreviewRows = previewRows.filter(
+    (row) => row.alreadyImported || !row.canImport,
+  ).length;
 
   function openDialog() {
     setCsv("");
@@ -1848,6 +1865,7 @@ function WarehouseCsvImportDialog({
     setCategoryId(productCategories[0]?.id ?? "");
     setMinimumQuantity("0");
     setPreview(null);
+    setPreviewPage(1);
     setRowActions({});
     setMessage(null);
     setOpen(true);
@@ -1877,6 +1895,7 @@ function WarehouseCsvImportDialog({
       setCsv("");
       setFileName("");
       setPreview(null);
+      setPreviewPage(1);
       setRowActions({});
       return;
     }
@@ -1886,11 +1905,12 @@ function WarehouseCsvImportDialog({
       return;
     }
 
-    const selectedCsv = await file.text();
+    const selectedCsv = await readCsvFile(file);
 
     setCsv(selectedCsv);
     setFileName(file.name);
     setPreview(null);
+    setPreviewPage(1);
     setRowActions({});
     setPreviewLoading(true);
 
@@ -1904,13 +1924,16 @@ function WarehouseCsvImportDialog({
       );
 
       setPreview(nextPreview);
+      setPreviewPage(1);
       setRowActions(
         Object.fromEntries(
           nextPreview.rows.map((row) => [
             row.index,
-            row.canImport
-              ? row.suggestedProduct?.id ?? createProductCsvValue
-              : skipCsvRowValue,
+            row.alreadyImported
+              ? skipCsvRowValue
+              : row.canImport
+                ? row.suggestedProduct?.id ?? createProductCsvValue
+                : skipCsvRowValue,
           ]),
         ),
       );
@@ -1980,7 +2003,14 @@ function WarehouseCsvImportDialog({
             </DialogDescription>
           </DialogHeader>
           <Form onSubmit={submit}>
-            {message ? <ResourceError message={message} /> : null}
+            {message ? (
+              <Alert className="border-rose-200 bg-rose-50 text-rose-950">
+                <AlertTitle>Não foi possível importar o CSV</AlertTitle>
+                <AlertDescription className="text-rose-900">
+                  {message}
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_14rem]">
               <FormField>
                 <Label htmlFor="stock-csv-file">Arquivo CSV</Label>
@@ -2039,6 +2069,55 @@ function WarehouseCsvImportDialog({
 
             {preview ? (
               <div className="overflow-hidden rounded-lg border bg-card">
+                <div className="flex flex-col gap-2 border-b p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      {previewRows.length}
+                    </span>{" "}
+                    linha(s) lida(s).{" "}
+                    <span className="font-medium text-foreground">
+                      {previewRows.length - skippedPreviewRows}
+                    </span>{" "}
+                    para importar e{" "}
+                    <span className="font-medium text-foreground">
+                      {skippedPreviewRows}
+                    </span>{" "}
+                    ignorada(s).
+                  </div>
+                  {totalPreviewPages > 1 ? (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        disabled={currentPreviewPage === 1}
+                        onClick={() =>
+                          setPreviewPage((current) => Math.max(1, current - 1))
+                        }
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Anterior
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        Página {currentPreviewPage} de {totalPreviewPages}
+                      </span>
+                      <Button
+                        disabled={currentPreviewPage === totalPreviewPages}
+                        onClick={() =>
+                          setPreviewPage((current) =>
+                            Math.min(totalPreviewPages, current + 1),
+                          )
+                        }
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        Próxima
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2051,7 +2130,7 @@ function WarehouseCsvImportDialog({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {preview.rows.map((row) => (
+                    {pagedPreviewRows.map((row) => (
                       <TableRow key={row.index}>
                         <TableCell>{row.rowNumber}</TableCell>
                         <TableCell>
@@ -2077,7 +2156,9 @@ function WarehouseCsvImportDialog({
                             <p className="text-xs text-muted-foreground">
                               {row.unit}
                             </p>
-                            {row.suggestedProduct ? (
+                            {row.alreadyImported ? (
+                              <Badge variant="outline">Já importada</Badge>
+                            ) : row.suggestedProduct ? (
                               <Badge variant="success">Sugerido</Badge>
                             ) : (
                               <Badge variant="outline">Novo</Badge>
