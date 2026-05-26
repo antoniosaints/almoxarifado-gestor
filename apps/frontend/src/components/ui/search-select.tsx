@@ -182,11 +182,17 @@ export function SearchSelect({
           : rect.bottom + panelGap;
 
       setPanelPosition({
-        left,
+        left:
+          dialogContent && dialogRect
+            ? left - dialogRect.left + dialogContent.scrollLeft
+            : left,
         maxHeight,
         side,
-        strategy: "fixed",
-        top,
+        strategy: dialogContent ? "absolute" : "fixed",
+        top:
+          dialogContent && dialogRect
+            ? top - dialogRect.top + dialogContent.scrollTop
+            : top,
         width,
       });
     }
@@ -295,7 +301,12 @@ export function SearchSelect({
       </Button>
 
       {panel && typeof document !== "undefined"
-        ? createPortal(panel, document.body)
+        ? createPortal(
+            panel,
+            triggerRef.current
+              ? getDialogContent(triggerRef.current) ?? document.body
+              : document.body,
+          )
         : null}
     </div>
   );

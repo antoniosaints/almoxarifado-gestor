@@ -146,7 +146,7 @@ describe("SearchSelect", () => {
     getBoundingClientRect.mockRestore();
   });
 
-  it("renders modal dropdowns through the body without scrolling modal content", () => {
+  it("renders modal dropdowns inside dialog content so the search field stays clickable", () => {
     Object.defineProperty(window, "innerHeight", {
       configurable: true,
       value: 920,
@@ -214,9 +214,16 @@ describe("SearchSelect", () => {
     const panel = screen.getByTestId("search-select-panel");
 
     expect(panel).toHaveAttribute("data-side", "top");
-    expect(panel).toHaveClass("fixed");
-    expect(panel).toHaveStyle({ top: "236px" });
-    expect(screen.getByTestId("modal-scroll-area")).not.toContainElement(panel);
+    expect(panel).toHaveClass("absolute");
+    expect(panel).toHaveStyle({ top: "116px" });
+    expect(screen.getByTestId("modal-scroll-area")).toContainElement(panel);
+
+    const search = screen.getByPlaceholderText("Buscar...");
+
+    fireEvent.click(search);
+    fireEvent.change(search, { target: { value: "pct" } });
+
+    expect(search).toHaveValue("pct");
 
     getBoundingClientRect.mockRestore();
   });
