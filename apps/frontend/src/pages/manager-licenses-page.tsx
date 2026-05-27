@@ -1,4 +1,4 @@
-import { CheckCircle2, Pencil, Plus, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, Link2, Pencil, Plus, ShieldCheck, XCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
@@ -82,6 +82,7 @@ function licenseStatusLabel(status: ManagerLicense["status"]) {
     ACTIVE: "Ativa",
     CANCELLED: "Cancelada",
     EXPIRED: "Expirada",
+    LINKED: "Vinculada",
     PENDING: "Pendente",
   };
 
@@ -93,7 +94,7 @@ function licenseTypeLabel(type: ManagerLicenseType) {
 }
 
 function licenseStatusVariant(status: ManagerLicense["status"]) {
-  if (status === "ACTIVE") {
+  if (status === "ACTIVE" || status === "LINKED") {
     return "success" as const;
   }
 
@@ -165,6 +166,18 @@ export function ManagerLicensesPage() {
       await licenses.reload();
     } catch (caughtError) {
       setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao validar.");
+    }
+  }
+
+  async function linkLicense(id: string) {
+    try {
+      await api<ManagerLicense>(`/manager/licenses/${id}/link`, {
+        body: JSON.stringify({}),
+        method: "POST",
+      });
+      await licenses.reload();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao vincular.");
     }
   }
 
@@ -306,12 +319,25 @@ LICENSE_SYSTEM=ALMO-AC1619-A9E7F0`}
                 </Button>
                 <Button
                   aria-label={`Validar licença ${license.licenseKey}`}
-                  disabled={license.status === "ACTIVE" || license.status === "CANCELLED"}
+                  disabled={
+                    license.status === "ACTIVE" ||
+                    license.status === "LINKED" ||
+                    license.status === "CANCELLED"
+                  }
                   onClick={() => void validateLicense(license.id)}
                   size="icon"
                   variant="outline"
                 >
                   <CheckCircle2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  aria-label={`Vincular licença ${license.licenseKey}`}
+                  disabled={license.status === "LINKED" || license.status === "CANCELLED"}
+                  onClick={() => void linkLicense(license.id)}
+                  size="icon"
+                  variant="outline"
+                >
+                  <Link2 className="h-4 w-4" />
                 </Button>
                 <Button
                   aria-label={`Cancelar licença ${license.licenseKey}`}

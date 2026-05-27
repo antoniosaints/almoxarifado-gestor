@@ -443,5 +443,6 @@ export const managerLicenseCancelInput = z.object({
 });
 
 export const licenseValidationInput = z.object({
+  instanceDomain: optionalText,
   licenseKey: z.string().trim().min(1, "Informe a chave da licença."),
 });

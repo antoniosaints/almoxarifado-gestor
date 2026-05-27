@@ -2,7 +2,7 @@ import { UserRole } from "@prisma/client";
 import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import request from "supertest";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "./app.js";
 import { createAccessToken } from "./lib/auth.js";
 import { prisma } from "./lib/prisma.js";
@@ -31,6 +31,7 @@ function tinyPngBuffer() {
 
 describe("api", () => {
   beforeEach(async () => {
+    vi.unstubAllGlobals();
     delete process.env.LICENSE_SYSTEM;
     delete process.env.SECRET_VALIDATION_LICENSE;
     delete process.env.URL_VALIDATION_LICENSE;
@@ -1284,7 +1285,7 @@ describe("api", () => {
 
     expect(licenseResponse.status).toBe(201);
     expect(licenseResponse.body).toMatchObject({
-      status: "PENDING",
+      status: "ACTIVE",
       subscriberId: subscriberResponse.body.id,
       systemKey: "Almoxarifado",
     });
@@ -1324,6 +1325,7 @@ describe("api", () => {
 
     expect(overdueDashboard.status).toBe(200);
     expect(overdueDashboard.body.totals.overdueBillings).toBe(1);
+    expect(overdueDashboard.body.totals.overdueAmount).toBe(250);
 
     const paidBilling = await request(app)
       .post(`/manager/billings/${billingResponse.body.id}/pay`)
@@ -1338,10 +1340,26 @@ describe("api", () => {
       .set("Authorization", auth);
 
     expect(dashboard.status).toBe(200);
-    expect(dashboard.body.totals.totalRevenue).toBe(250);
+    expect(dashboard.body.totals).toMatchObject({
+      averageTicket: 250,
+      linkedLicenses: 0,
+      totalLicenses: 1,
+      totalRevenue: 250,
+    });
     expect(dashboard.body.revenueBySystem).toEqual([
       { name: "Almoxarifado", value: 250 },
     ]);
+    expect(dashboard.body.licenseStatusBreakdown).toEqual([
+      { name: "Ativas", value: 1 },
+    ]);
+    expect(dashboard.body.billingStatusBreakdown).toEqual([
+      { name: "Pagas", value: 1 },
+    ]);
+    expect(dashboard.body.monthlyRevenueTrend).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: 250 }),
+      ]),
+    );
 
     const cancelledLicense = await request(app)
       .post(`/manager/licenses/${licenseResponse.body.id}/cancel`)
@@ -1402,17 +1420,81 @@ describe("api", () => {
 
     const response = await request(app)
       .post("/api/validation?secret=secretvalidador")
+      .set("User-Agent", "cliente-almoxarifado/1.0")
+      .set("X-Forwarded-For", "203.0.113.10")
+      .set("X-License-Domain", "almox.cliente.gov.br")
       .send({ licenseKey: licenseResponse.body.licenseKey });
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       blockWrites: false,
       licenseKey: licenseResponse.body.licenseKey,
-      status: "ACTIVE",
+      status: "LINKED",
       systemKey: "Almoxarifado",
       valid: true,
     });
     expect(response.body.expiresAt).toEqual(expect.any(String));
+
+    await expect(
+      prisma.managerLicense.findUniqueOrThrow({
+        where: { id: licenseResponse.body.id },
+      }),
+    ).resolves.toMatchObject({
+      linkedDomain: "almox.cliente.gov.br",
+      linkedIp: "203.0.113.10",
+      linkedUserAgent: "cliente-almoxarifado/1.0",
+      status: "LINKED",
+      validationCount: 1,
+    });
+
+    const reusedResponse = await request(app)
+      .post("/api/validation?secret=secretvalidador")
+      .set("User-Agent", "cliente-almoxarifado/1.0")
+      .set("X-Forwarded-For", "198.51.100.44")
+      .set("X-License-Domain", "outra-instalacao.gov.br")
+      .send({ licenseKey: licenseResponse.body.licenseKey });
+
+    expect(reusedResponse.status).toBe(200);
+    expect(reusedResponse.body).toMatchObject({
+      blockWrites: true,
+      licenseKey: licenseResponse.body.licenseKey,
+      status: "LINK_MISMATCH",
+      valid: false,
+    });
+  });
+
+  it("allows manager admins to manually mark an active license as linked", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const auth = authorizationFor(admin);
+    const subscriber = await prisma.managerSubscriber.create({
+      data: {
+        email: "manual@example.com",
+        name: "Cliente manual",
+      },
+    });
+    const license = await prisma.managerLicense.create({
+      data: {
+        licenseKey: "ALMO-MANUAL-001",
+        subscriberId: subscriber.id,
+        systemKey: "Almoxarifado",
+      },
+    });
+
+    const response = await request(app)
+      .post(`/manager/licenses/${license.id}/link`)
+      .set("Authorization", auth)
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: license.id,
+      status: "LINKED",
+    });
+    expect(response.body.linkedAt).toEqual(expect.any(String));
   });
 
   it("keeps client write operations free when license env vars are not configured", async () => {
@@ -1466,6 +1548,75 @@ describe("api", () => {
       .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
 
     expect(readResponse.status).toBe(200);
+  });
+
+  it("forces client license validation on demand even when the local state is blocked", async () => {
+    process.env.LICENSE_SYSTEM = "ALMO-REVALIDADA";
+    process.env.URL_VALIDATION_LICENSE =
+      "https://manager.example.com/validation?secret=secret";
+    const { user } = await createBaseFixture(prisma);
+    const auth = authorizationFor({ ...user, role: UserRole.ADMIN });
+    await prisma.licenseValidationState.create({
+      data: {
+        blockWrites: true,
+        checkedAt: new Date("2026-05-20T12:00:00.000Z"),
+        expiresAt: new Date("2020-01-01T23:59:59.999Z"),
+        licenseKey: "ALMO-REVALIDADA",
+        message: "Licença vencida. Entre em contato com o responsável pelo sistema.",
+        mode: "managed",
+        nextCheckAt: new Date("2099-01-01T00:00:00.000Z"),
+        status: "EXPIRED",
+        valid: false,
+      },
+    });
+    const fetchMock = vi.fn(async () => ({
+      json: async () => ({
+        blockWrites: false,
+        checkedAt: "2026-05-27T12:00:00.000Z",
+        expiresAt: "2099-12-31T23:59:59.999Z",
+        licenseKey: "ALMO-REVALIDADA",
+        message: "Licença ativa.",
+        status: "LINKED",
+        valid: true,
+        warningLevel: "none",
+      }),
+      ok: true,
+      status: 200,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const refreshResponse = await request(app)
+      .post("/license/refresh")
+      .set("Authorization", auth)
+      .send({});
+
+    expect(refreshResponse.status).toBe(200);
+    expect(refreshResponse.body).toMatchObject({
+      blockWrites: false,
+      licenseKey: "ALMO-REVALIDADA",
+      message: "Licença ativa.",
+      status: "LINKED",
+      valid: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await expect(
+      prisma.licenseValidationState.findUniqueOrThrow({ where: { id: "system" } }),
+    ).resolves.toMatchObject({
+      blockWrites: false,
+      licenseKey: "ALMO-REVALIDADA",
+      status: "LINKED",
+      valid: true,
+    });
+
+    const writeResponse = await request(app)
+      .post("/warehouse-categories")
+      .set("Authorization", auth)
+      .send({
+        description: "Categoria liberada por revalidacao",
+        name: "Liberada",
+      });
+
+    expect(writeResponse.status).toBe(201);
   });
 
   it("serves public site content and protects site admin management", async () => {

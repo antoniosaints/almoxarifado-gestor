@@ -34,6 +34,7 @@ enum TransferRequestStatus {
 enum ManagerLicenseStatus {
   PENDING
   ACTIVE
+  LINKED
   CANCELLED
   EXPIRED
 }
@@ -529,11 +530,22 @@ model ManagerLicense {
   systemKey          String
   licenseKey         String               @unique
   type               ManagerLicenseType   @default(MONTHLY)
-  status             ManagerLicenseStatus @default(PENDING)
+  status             ManagerLicenseStatus @default(ACTIVE)
   seats              Int                  @default(1)
   startsAt           DateTime             @default(now())
   expiresAt          DateTime?
   validatedAt        DateTime?
+  linkedAt           DateTime?
+  linkedDomain       String?
+  linkedIp           String?
+  linkedUserAgent    String?
+  lastValidationAt   DateTime?
+  lastValidationDomain String?
+  lastValidationIp   String?
+  lastValidationUserAgent String?
+  validationCount    Int                  @default(0)
+  validationBlockedAt DateTime?
+  validationBlockedReason String?
   cancelledAt        DateTime?
   cancellationReason String?
   monthlyValue       Decimal              @default(0)

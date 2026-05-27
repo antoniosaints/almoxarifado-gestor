@@ -19,6 +19,7 @@ import {
   Newspaper,
   PackageSearch,
   PanelTop,
+  RefreshCw,
   Ruler,
   Settings,
   Sun,
@@ -39,7 +40,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { useApiResource } from "@/lib/api";
+import { api, useApiResource } from "@/lib/api";
 import { resolveAssetUrl } from "@/lib/assets";
 import { useRouteLoading } from "@/lib/route-loading";
 import { useSession } from "@/lib/session";
@@ -235,13 +236,22 @@ function licenseBannerTitle(status: LicenseStatus) {
 function LicenseStatusBanner({
   dismissible,
   onDismiss,
+  onRefresh,
+  refreshError,
+  refreshing,
   status,
 }: {
   dismissible: boolean;
   onDismiss: () => void;
+  onRefresh: () => void;
+  refreshError: string | null;
+  refreshing: boolean;
   status: LicenseStatus;
 }) {
   const blocked = status.blockWrites || status.warningLevel === "unvalidated";
+  const canRefresh =
+    status.mode === "managed" &&
+    (status.blockWrites || status.offline || status.warningLevel === "unvalidated");
 
   return (
     <div
@@ -253,7 +263,7 @@ function LicenseStatusBanner({
       )}
       role="status"
     >
-      <div className="mx-auto flex w-full max-w-[90rem] items-start gap-3">
+      <div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-start gap-3">
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">{licenseBannerTitle(status)}</p>
@@ -261,7 +271,23 @@ function LicenseStatusBanner({
             {status.message}
             {status.offline ? " Última validação conhecida mantida por falta de conexão." : ""}
           </p>
+          {refreshError ? (
+            <p className="mt-1 text-xs font-medium opacity-90">{refreshError}</p>
+          ) : null}
         </div>
+        {canRefresh ? (
+          <Button
+            aria-label="Verificar licença novamente"
+            className="shrink-0"
+            disabled={refreshing}
+            onClick={onRefresh}
+            size="sm"
+            variant={blocked ? "destructive" : "outline"}
+          >
+            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+            {refreshing ? "Verificando..." : "Verificar novamente"}
+          </Button>
+        ) : null}
         {dismissible ? (
           <Button
             aria-label="Fechar aviso de licença"
@@ -295,6 +321,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [dismissedLicenseWarning, setDismissedLicenseWarning] = useState(() =>
     localStorage.getItem("license-warning-dismissed") ?? "",
   );
+  const [licenseRefreshError, setLicenseRefreshError] = useState<string | null>(null);
+  const [refreshingLicense, setRefreshingLicense] = useState(false);
   const title =
     [...navigationItems(role)]
       .sort((left, right) => right.to.length - left.to.length)
@@ -367,6 +395,33 @@ export function AppShell({ children }: { children: ReactNode }) {
   function dismissLicenseWarning() {
     localStorage.setItem("license-warning-dismissed", licenseWarningKey);
     setDismissedLicenseWarning(licenseWarningKey);
+  }
+
+  async function refreshLicenseStatus() {
+    if (refreshingLicense) {
+      return;
+    }
+
+    setRefreshingLicense(true);
+    setLicenseRefreshError(null);
+
+    try {
+      const nextStatus = await api<LicenseStatus>("/license/refresh", {
+        body: JSON.stringify({}),
+        method: "POST",
+      });
+
+      licenseStatus.setData(nextStatus);
+      setDismissedLicenseWarning("");
+    } catch (caughtError) {
+      setLicenseRefreshError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Não foi possível verificar a licença agora.",
+      );
+    } finally {
+      setRefreshingLicense(false);
+    }
   }
 
   const subtitle = import.meta.env.VITE_NAME_SYSTEM ?? "GEMA - Gestão Municipal de Almoxarifado.";
@@ -483,6 +538,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <LicenseStatusBanner
             dismissible={licenseBannerDismissible}
             onDismiss={dismissLicenseWarning}
+            onRefresh={() => void refreshLicenseStatus()}
+            refreshError={licenseRefreshError}
+            refreshing={refreshingLicense}
             status={licenseStatus.data}
           />
         ) : null}

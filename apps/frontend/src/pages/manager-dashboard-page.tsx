@@ -3,7 +3,9 @@ import {
   Building2,
   CalendarClock,
   CreditCard,
+  DollarSign,
   KeyRound,
+  Link2,
   TrendingUp,
 } from "lucide-react";
 import {
@@ -11,6 +13,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -50,6 +54,7 @@ function licenseStatusLabel(status: ManagerLicense["status"]) {
     ACTIVE: "Ativa",
     CANCELLED: "Cancelada",
     EXPIRED: "Expirada",
+    LINKED: "Vinculada",
     PENDING: "Pendente",
   };
 
@@ -57,7 +62,7 @@ function licenseStatusLabel(status: ManagerLicense["status"]) {
 }
 
 function licenseStatusVariant(status: ManagerLicense["status"]) {
-  if (status === "ACTIVE") {
+  if (status === "ACTIVE" || status === "LINKED") {
     return "success" as const;
   }
 
@@ -114,8 +119,29 @@ function MoneyTooltip({
   );
 }
 
-function chartData(data: Array<{ name: string; value: number }>) {
-  return data.length ? data : [{ name: "Sem receita", value: 1 }];
+function CountTooltip({
+  active,
+  label,
+  payload,
+}: {
+  active?: boolean;
+  label?: string;
+  payload?: Array<{ value?: number }>;
+}) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border bg-card px-3 py-2 text-sm shadow-sm">
+      <p className="font-medium">{label}</p>
+      <p className="text-muted-foreground">{Number(payload[0]?.value ?? 0)}</p>
+    </div>
+  );
+}
+
+function chartData(data: Array<{ name: string; value: number }>, emptyLabel: string) {
+  return data.length ? data : [{ name: emptyLabel, value: 0 }];
 }
 
 export function ManagerDashboardPage() {
@@ -137,8 +163,23 @@ export function ManagerDashboardPage() {
   }
 
   const { totals } = dashboard.data;
-  const revenueBySystem = chartData(dashboard.data.revenueBySystem);
-  const revenueByLicenseType = chartData(dashboard.data.revenueByLicenseType);
+  const revenueBySystem = chartData(dashboard.data.revenueBySystem, "Sem receita");
+  const revenueByLicenseType = chartData(
+    dashboard.data.revenueByLicenseType,
+    "Sem receita",
+  );
+  const monthlyRevenueTrend = chartData(
+    dashboard.data.monthlyRevenueTrend,
+    "Sem receita",
+  );
+  const licenseStatusBreakdown = chartData(
+    dashboard.data.licenseStatusBreakdown,
+    "Sem licenças",
+  );
+  const billingStatusBreakdown = chartData(
+    dashboard.data.billingStatusBreakdown,
+    "Sem cobranças",
+  );
 
   return (
     <section className="space-y-6">
@@ -156,7 +197,7 @@ export function ManagerDashboardPage() {
         <SummaryCard
           icon={<KeyRound className="h-4 w-4" />}
           label="Licenças ativas"
-          value={totals.activeLicenses}
+          value={`${totals.activeLicenses}/${totals.totalLicenses}`}
         />
         <SummaryCard
           icon={<TrendingUp className="h-4 w-4" />}
@@ -167,6 +208,26 @@ export function ManagerDashboardPage() {
           icon={<CreditCard className="h-4 w-4" />}
           label="MRR previsto"
           value={formatCurrency(totals.monthlyRecurring)}
+        />
+        <SummaryCard
+          icon={<Link2 className="h-4 w-4" />}
+          label="Licenças vinculadas"
+          value={`${totals.linkedLicenses}/${totals.totalLicenses}`}
+        />
+        <SummaryCard
+          icon={<CalendarClock className="h-4 w-4" />}
+          label="Vencimentos em 30 dias"
+          value={totals.expiringLicenses}
+        />
+        <SummaryCard
+          icon={<AlertTriangle className="h-4 w-4" />}
+          label="Valor vencido"
+          value={formatCurrency(totals.overdueAmount)}
+        />
+        <SummaryCard
+          icon={<DollarSign className="h-4 w-4" />}
+          label="Ticket médio"
+          value={formatCurrency(totals.averageTicket)}
         />
       </div>
 
@@ -249,6 +310,101 @@ export function ManagerDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle>Receita mensal</CardTitle>
+            <CardDescription>Evolução dos faturamentos pagos nos últimos meses.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-72 min-h-72 min-w-0 overflow-hidden">
+            <ResponsiveContainer height="100%" minWidth={0} width="100%">
+              <LineChart data={monthlyRevenueTrend} margin={{ bottom: 8, left: 0, right: 8 }}>
+                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                <XAxis dataKey="name" fontSize={12} stroke="hsl(var(--muted-foreground))" />
+                <YAxis
+                  fontSize={12}
+                  stroke="hsl(var(--muted-foreground))"
+                  tickFormatter={(value) => formatCurrency(Number(value))}
+                  width={90}
+                />
+                <Tooltip content={<MoneyTooltip />} />
+                <Line
+                  dataKey="value"
+                  dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={3}
+                  type="monotone"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle>Status das licenças</CardTitle>
+            <CardDescription>Distribuição operacional das chaves cadastradas.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-72 min-h-72 min-w-0 overflow-hidden">
+            <ResponsiveContainer height="100%" minWidth={0} width="100%">
+              <BarChart data={licenseStatusBreakdown} margin={{ bottom: 8, left: 0, right: 8 }}>
+                <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                <XAxis dataKey="name" fontSize={12} stroke="hsl(var(--muted-foreground))" />
+                <YAxis allowDecimals={false} fontSize={12} stroke="hsl(var(--muted-foreground))" />
+                <Tooltip content={<CountTooltip />} cursor={{ fill: "hsl(var(--muted))" }} />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {licenseStatusBreakdown.map((entry, index) => (
+                    <Cell fill={chartColors[index % chartColors.length]} key={entry.name} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="min-w-0">
+        <CardHeader>
+          <CardTitle>Status das cobranças</CardTitle>
+          <CardDescription>Mapa rápido de cobranças pagas, abertas e vencidas.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-[14rem_1fr]">
+          <div className="h-56 min-h-56 min-w-0 overflow-hidden">
+            <ResponsiveContainer height="100%" minWidth={0} width="100%">
+              <PieChart>
+                <Tooltip content={<CountTooltip />} />
+                <Pie
+                  data={billingStatusBreakdown}
+                  dataKey="value"
+                  innerRadius={48}
+                  nameKey="name"
+                  outerRadius={78}
+                  paddingAngle={4}
+                >
+                  {billingStatusBreakdown.map((entry, index) => (
+                    <Cell fill={chartColors[index % chartColors.length]} key={entry.name} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:content-center">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Em aberto</p>
+              <p className="text-xl font-semibold">{formatCurrency(totals.openAmount)}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Vencidas</p>
+              <p className="text-xl font-semibold">{formatCurrency(totals.overdueAmount)}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Pagas no total</p>
+              <p className="text-xl font-semibold">{formatCurrency(totals.totalRevenue)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="space-y-3">

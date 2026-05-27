@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LicenseStatus } from "@/lib/types";
@@ -245,5 +245,87 @@ describe("AppShell", () => {
     expect(
       screen.getByText("Licença vencida. Entre em contato com o responsável pelo sistema."),
     ).toBeInTheDocument();
+  });
+
+  it("lets users manually retry blocked license validation from the banner", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/license/status")) {
+        return {
+          json: async () => ({
+            ...unmanagedLicense,
+            blockWrites: true,
+            licenseKey: "ALMO-EXPIRADA",
+            message: "Licença vencida. Entre em contato com o responsável pelo sistema.",
+            mode: "managed",
+            status: "EXPIRED",
+            valid: false,
+            warningLevel: "blocked",
+          }),
+          ok: true,
+          status: 200,
+        };
+      }
+
+      if (url.includes("/license/refresh") && init?.method === "POST") {
+        return {
+          json: async () => ({
+            ...unmanagedLicense,
+            checkedAt: "2026-05-27T12:00:00.000Z",
+            licenseKey: "ALMO-EXPIRADA",
+            message: "Licença ativa.",
+            mode: "managed",
+            status: "LINKED",
+            valid: true,
+            warningLevel: "none",
+          }),
+          ok: true,
+          status: 200,
+        };
+      }
+
+      return {
+        json: async () => ({
+          pendingEntryRequests: 0,
+          pendingReceipts: 0,
+          total: 0,
+        }),
+        ok: true,
+        status: 200,
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { AppShell, SessionProvider } = await importShellFor("");
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Admin",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <AppShell>
+            <p>Conteúdo</p>
+          </AppShell>
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Verificar licença novamente" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/license/refresh"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Sistema em modo somente leitura")).not.toBeInTheDocument(),
+    );
   });
 });

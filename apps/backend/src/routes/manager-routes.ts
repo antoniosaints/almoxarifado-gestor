@@ -10,6 +10,7 @@ import {
   createManagerSubscriber,
   deactivateManagerSubscriber,
   getManagerDashboard,
+  linkManagerLicense,
   listManagerBillings,
   listManagerLicenses,
   listManagerSubscribers,
@@ -105,6 +106,15 @@ managerRoutes.post(
     const { id } = idParam.parse(request.params);
 
     response.json(await validateManagerLicense(prisma, id));
+  }),
+);
+
+managerRoutes.post(
+  "/licenses/:id/link",
+  asyncHandler(async (request, response) => {
+    const { id } = idParam.parse(request.params);
+
+    response.json(await linkManagerLicense(prisma, id));
   }),
 );
 

@@ -76,6 +76,40 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(date: Date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: "short",
+    year: "2-digit",
+  }).format(date);
+}
+
+function licenseStatusLabel(status: ManagerLicenseStatus) {
+  const labels = {
+    [ManagerLicenseStatus.ACTIVE]: "Ativas",
+    [ManagerLicenseStatus.CANCELLED]: "Canceladas",
+    [ManagerLicenseStatus.EXPIRED]: "Expiradas",
+    [ManagerLicenseStatus.LINKED]: "Vinculadas",
+    [ManagerLicenseStatus.PENDING]: "Pendentes",
+  };
+
+  return labels[status];
+}
+
+function billingStatusLabel(status: ManagerBillingStatus) {
+  const labels = {
+    [ManagerBillingStatus.CANCELLED]: "Canceladas",
+    [ManagerBillingStatus.OPEN]: "Abertas",
+    [ManagerBillingStatus.OVERDUE]: "Vencidas",
+    [ManagerBillingStatus.PAID]: "Pagas",
+  };
+
+  return labels[status];
+}
+
 function licenseKeyPrefix(systemKey: string) {
   const prefix = systemKey
     .normalize("NFD")
@@ -212,6 +246,7 @@ export async function createManagerLicense(
       monthlyValue: input.monthlyValue,
       seats: input.seats,
       startsAt: input.startsAt,
+      status: ManagerLicenseStatus.ACTIVE,
       subscriberId: input.subscriberId,
       systemKey: normalizeSystemKey(input.systemKey),
       type: input.type,
@@ -253,6 +288,22 @@ export async function validateManagerLicense(
       cancellationReason: null,
       status: ManagerLicenseStatus.ACTIVE,
       validatedAt: new Date(),
+    },
+    include: licenseInclude,
+    where: { id },
+  });
+}
+
+export async function linkManagerLicense(
+  prisma: PrismaClient,
+  id: string,
+) {
+  return prisma.managerLicense.update({
+    data: {
+      cancelledAt: null,
+      cancellationReason: null,
+      linkedAt: new Date(),
+      status: ManagerLicenseStatus.LINKED,
     },
     include: licenseInclude,
     where: { id },
@@ -392,7 +443,8 @@ export async function getManagerDashboard(prisma: PrismaClient) {
   );
   const activeLicenses = licenses.filter(
     (license) =>
-      license.status === ManagerLicenseStatus.ACTIVE &&
+      (license.status === ManagerLicenseStatus.ACTIVE ||
+        license.status === ManagerLicenseStatus.LINKED) &&
       (!license.expiresAt || license.expiresAt >= now),
   );
   const expiredLicenses = licenses.filter(
@@ -406,6 +458,18 @@ export async function getManagerDashboard(prisma: PrismaClient) {
   );
   const revenueBySystem = new Map<string, number>();
   const revenueByLicenseType = new Map<string, number>();
+  const licenseStatusBreakdown = new Map<string, number>();
+  const billingStatusBreakdown = new Map<string, number>();
+
+  for (const license of licenses) {
+    const label = licenseStatusLabel(license.status);
+    licenseStatusBreakdown.set(label, (licenseStatusBreakdown.get(label) ?? 0) + 1);
+  }
+
+  for (const billing of billings) {
+    const label = billingStatusLabel(billing.status);
+    billingStatusBreakdown.set(label, (billingStatusBreakdown.get(label) ?? 0) + 1);
+  }
 
   for (const billing of paidBillings) {
     revenueBySystem.set(
@@ -419,7 +483,62 @@ export async function getManagerDashboard(prisma: PrismaClient) {
     );
   }
 
+  const monthlyRevenue = new Map<string, { name: string; value: number }>();
+  for (let index = 5; index >= 0; index -= 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
+    monthlyRevenue.set(monthKey(date), {
+      name: monthLabel(date),
+      value: 0,
+    });
+  }
+
+  for (const billing of paidBillings) {
+    if (!billing.paidAt) {
+      continue;
+    }
+
+    const key = monthKey(new Date(billing.paidAt));
+    const current = monthlyRevenue.get(key);
+
+    if (current) {
+      current.value += money(billing.amount);
+    }
+  }
+
+  const openBillings = billings.filter(
+    (billing) =>
+      billing.status === ManagerBillingStatus.OPEN ||
+      billing.status === ManagerBillingStatus.OVERDUE,
+  );
+  const openAmount = openBillings.reduce(
+    (total, billing) => total + money(billing.amount),
+    0,
+  );
+  const overdueAmount = overdueBillings.reduce(
+    (total, billing) => total + money(billing.amount),
+    0,
+  );
+  const linkedLicenses = licenses.filter(
+    (license) => license.status === ManagerLicenseStatus.LINKED,
+  );
+  const upcomingExpirations = licenses
+    .filter(
+      (license) =>
+        license.status !== ManagerLicenseStatus.CANCELLED &&
+        license.expiresAt &&
+        license.expiresAt >= now &&
+        license.expiresAt <= nextThirtyDays,
+    )
+    .slice(0, 10);
+
   return {
+    billingStatusBreakdown: [...billingStatusBreakdown.entries()]
+      .map(([name, value]) => ({ name, value }))
+      .sort((left, right) => right.value - left.value),
+    licenseStatusBreakdown: [...licenseStatusBreakdown.entries()]
+      .map(([name, value]) => ({ name, value }))
+      .sort((left, right) => right.value - left.value),
+    monthlyRevenueTrend: [...monthlyRevenue.values()],
     overdueBillings: overdueBillings.slice(0, 8),
     revenueByLicenseType: [...revenueByLicenseType.entries()]
       .map(([name, value]) => ({ name, value }))
@@ -430,6 +549,12 @@ export async function getManagerDashboard(prisma: PrismaClient) {
     totals: {
       activeLicenses: activeLicenses.length,
       activeSubscribers: subscribers.filter((subscriber) => subscriber.active).length,
+      averageTicket: activeLicenses.length
+        ? activeLicenses.reduce(
+            (total, license) => total + money(license.monthlyValue),
+            0,
+          ) / activeLicenses.length
+        : 0,
       cancelledLicenses: licenses.filter(
         (license) => license.status === ManagerLicenseStatus.CANCELLED,
       ).length,
@@ -437,15 +562,15 @@ export async function getManagerDashboard(prisma: PrismaClient) {
         .filter((billing) => billing.paidAt && billing.paidAt >= monthStart)
         .reduce((total, billing) => total + money(billing.amount), 0),
       expiredLicenses: expiredLicenses.length,
+      expiringLicenses: upcomingExpirations.length,
+      linkedLicenses: linkedLicenses.length,
       monthlyRecurring: activeLicenses.reduce(
         (total, license) => total + money(license.monthlyValue),
         0,
       ),
-      openBillings: billings.filter(
-        (billing) =>
-          billing.status === ManagerBillingStatus.OPEN ||
-          billing.status === ManagerBillingStatus.OVERDUE,
-      ).length,
+      openAmount,
+      openBillings: openBillings.length,
+      overdueAmount,
       overdueBillings: overdueBillings.length,
       pendingLicenses: licenses.filter(
         (license) => license.status === ManagerLicenseStatus.PENDING,
@@ -454,16 +579,9 @@ export async function getManagerDashboard(prisma: PrismaClient) {
         (total, billing) => total + money(billing.amount),
         0,
       ),
+      totalLicenses: licenses.length,
       totalSubscribers: subscribers.length,
     },
-    upcomingExpirations: licenses
-      .filter(
-        (license) =>
-          license.status !== ManagerLicenseStatus.CANCELLED &&
-          license.expiresAt &&
-          license.expiresAt >= now &&
-          license.expiresAt <= nextThirtyDays,
-      )
-      .slice(0, 10),
+    upcomingExpirations,
   };
 }

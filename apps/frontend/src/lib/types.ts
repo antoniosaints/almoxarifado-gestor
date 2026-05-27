@@ -443,7 +443,12 @@ export type ProductCsvPreview = {
   rows: ProductCsvPreviewRow[];
 };
 
-export type ManagerLicenseStatus = "PENDING" | "ACTIVE" | "CANCELLED" | "EXPIRED";
+export type ManagerLicenseStatus =
+  | "PENDING"
+  | "ACTIVE"
+  | "LINKED"
+  | "CANCELLED"
+  | "EXPIRED";
 
 export type ManagerLicenseType = "MONTHLY" | "ANNUAL" | "LIFETIME" | "TRIAL";
 
@@ -489,6 +494,14 @@ export type ManagerLicense = {
   expiresAt?: string | null;
   id: string;
   licenseKey: string;
+  linkedAt?: string | null;
+  linkedDomain?: string | null;
+  linkedIp?: string | null;
+  linkedUserAgent?: string | null;
+  lastValidationAt?: string | null;
+  lastValidationDomain?: string | null;
+  lastValidationIp?: string | null;
+  lastValidationUserAgent?: string | null;
   monthlyValue: number | string;
   seats: number;
   startsAt: string;
@@ -499,6 +512,9 @@ export type ManagerLicense = {
   type: ManagerLicenseType;
   updatedAt: string;
   validatedAt?: string | null;
+  validationBlockedAt?: string | null;
+  validationBlockedReason?: string | null;
+  validationCount?: number;
 };
 
 export type ManagerBilling = {
@@ -519,19 +535,28 @@ export type ManagerBilling = {
 };
 
 export type ManagerDashboard = {
+  billingStatusBreakdown: Array<{ name: string; value: number }>;
+  licenseStatusBreakdown: Array<{ name: string; value: number }>;
+  monthlyRevenueTrend: Array<{ name: string; value: number }>;
   overdueBillings: ManagerBilling[];
   revenueByLicenseType: Array<{ name: string; value: number }>;
   revenueBySystem: Array<{ name: string; value: number }>;
   totals: {
     activeLicenses: number;
     activeSubscribers: number;
+    averageTicket: number;
     cancelledLicenses: number;
     currentMonthRevenue: number;
     expiredLicenses: number;
+    expiringLicenses: number;
+    linkedLicenses: number;
     monthlyRecurring: number;
+    openAmount: number;
     openBillings: number;
+    overdueAmount: number;
     overdueBillings: number;
     pendingLicenses: number;
+    totalLicenses: number;
     totalRevenue: number;
     totalSubscribers: number;
   };

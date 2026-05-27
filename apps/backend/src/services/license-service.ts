@@ -3,8 +3,9 @@ import type {
   ManagerSubscriber,
   PrismaClient,
 } from "@prisma/client";
+import { ManagerLicenseStatus } from "@prisma/client";
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
 import { AppError } from "../lib/errors.js";
 import { prisma } from "../lib/prisma.js";
 
@@ -47,6 +48,12 @@ type RemoteValidationPayload = {
   systemKey?: string | null;
   valid?: boolean;
   warningLevel?: LicenseValidationStatus["warningLevel"];
+};
+
+type LicenseValidationRequestInfo = {
+  domain: string | null;
+  ip: string | null;
+  userAgent: string | null;
 };
 
 function configuredLicenseKey() {
@@ -131,6 +138,10 @@ function validationMessage(
 ) {
   if (status === "CANCELLED") {
     return "Licença cancelada. Entre em contato com o responsável pelo sistema.";
+  }
+
+  if (status === "LINK_MISMATCH") {
+    return "Licença vinculada a outra instalação. Entre em contato com o responsável pelo sistema.";
   }
 
   if (status === "PENDING") {
@@ -297,7 +308,64 @@ async function persistStatus(
   });
 }
 
-async function requestRemoteValidation() {
+function firstHeaderValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
+function firstForwardedIp(value: string | string[] | undefined) {
+  return firstHeaderValue(value)?.split(",")[0]?.trim() || null;
+}
+
+function hostnameFromUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDomain(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return value
+    .replace(/^https?:\/\//i, "")
+    .split("/")[0]
+    ?.split(":")[0]
+    ?.trim()
+    .toLowerCase() || null;
+}
+
+export function licenseValidationRequestInfo(request: Request) {
+  const forwardedHost = firstHeaderValue(request.headers["x-forwarded-host"]);
+  const host = firstHeaderValue(request.headers.host);
+  const explicitDomain = firstHeaderValue(request.headers["x-license-domain"]);
+  const originDomain = hostnameFromUrl(firstHeaderValue(request.headers.origin));
+  const refererDomain = hostnameFromUrl(firstHeaderValue(request.headers.referer));
+
+  return {
+    domain: normalizeDomain(
+      explicitDomain ?? forwardedHost ?? originDomain ?? refererDomain ?? host,
+    ),
+    ip:
+      firstForwardedIp(request.headers["x-forwarded-for"]) ??
+      request.socket.remoteAddress ??
+      request.ip ??
+      null,
+    userAgent: firstHeaderValue(request.headers["user-agent"]),
+  } satisfies LicenseValidationRequestInfo;
+}
+
+async function requestRemoteValidation(info?: LicenseValidationRequestInfo | null) {
   const url = configuredValidationUrl();
   const licenseKey = configuredLicenseKey();
 
@@ -310,8 +378,14 @@ async function requestRemoteValidation() {
 
   try {
     const response = await fetch(url, {
-      body: JSON.stringify({ licenseKey }),
-      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        instanceDomain: info?.domain ?? null,
+        licenseKey,
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        ...(info?.domain ? { "X-License-Domain": info.domain } : {}),
+      },
       method: "POST",
       signal: controller.signal,
     });
@@ -330,7 +404,11 @@ function shouldRefresh(state: { nextCheckAt: Date | null } | null, now = new Dat
   return !state?.nextCheckAt || state.nextCheckAt <= now;
 }
 
-export async function getClientLicenseStatus(prismaClient: PrismaClient) {
+export async function getClientLicenseStatus(
+  prismaClient: PrismaClient,
+  info?: LicenseValidationRequestInfo | null,
+  options: { force?: boolean } = {},
+) {
   if (!isControlConfigured()) {
     return unmanagedStatus();
   }
@@ -339,16 +417,16 @@ export async function getClientLicenseStatus(prismaClient: PrismaClient) {
     where: { id: stateId },
   });
 
-  if (state?.blockWrites) {
+  if (state?.blockWrites && !options.force) {
     return normalizeStoredStatus(state);
   }
 
-  if (state && !shouldRefresh(state)) {
+  if (state && !options.force && !shouldRefresh(state)) {
     return normalizeStoredStatus(state);
   }
 
   try {
-    const remoteStatus = await requestRemoteValidation();
+    const remoteStatus = await requestRemoteValidation(info);
     await persistStatus(prismaClient, remoteStatus);
     return remoteStatus;
   } catch (error) {
@@ -376,9 +454,17 @@ export async function getClientLicenseStatus(prismaClient: PrismaClient) {
   }
 }
 
+export async function refreshClientLicenseStatus(
+  prismaClient: PrismaClient,
+  info?: LicenseValidationRequestInfo | null,
+) {
+  return getClientLicenseStatus(prismaClient, info, { force: true });
+}
+
 export async function validateManagerLicenseForClient(
   prismaClient: PrismaClient,
   licenseKey: string,
+  requestInfo?: LicenseValidationRequestInfo | null,
 ) {
   const normalizedKey = licenseKey.trim();
 
@@ -407,7 +493,90 @@ export async function validateManagerLicenseForClient(
     } satisfies LicenseValidationStatus;
   }
 
+  if (license.status === ManagerLicenseStatus.ACTIVE && !license.linkedAt) {
+    const linkedLicense = await prismaClient.managerLicense.update({
+      data: {
+        lastValidationAt: new Date(),
+        lastValidationDomain: requestInfo?.domain ?? null,
+        lastValidationIp: requestInfo?.ip ?? null,
+        lastValidationUserAgent: requestInfo?.userAgent ?? null,
+        linkedAt: new Date(),
+        linkedDomain: requestInfo?.domain ?? null,
+        linkedIp: requestInfo?.ip ?? null,
+        linkedUserAgent: requestInfo?.userAgent ?? null,
+        status: ManagerLicenseStatus.LINKED,
+        validatedAt: new Date(),
+        validationCount: license.validationCount + 1,
+      },
+      include: { subscriber: true },
+      where: { id: license.id },
+    });
+
+    return managerLicenseStatus(linkedLicense);
+  }
+
+  if (license.status === ManagerLicenseStatus.LINKED) {
+    const mismatch = hasLinkMismatch(license, requestInfo);
+
+    if (mismatch) {
+      const reason = `Tentativa de uso por ${requestInfo?.domain ?? "domínio desconhecido"} / ${requestInfo?.ip ?? "IP desconhecido"}.`;
+
+      await prismaClient.managerLicense.update({
+        data: {
+          lastValidationAt: new Date(),
+          lastValidationDomain: requestInfo?.domain ?? null,
+          lastValidationIp: requestInfo?.ip ?? null,
+          lastValidationUserAgent: requestInfo?.userAgent ?? null,
+          validationBlockedAt: new Date(),
+          validationBlockedReason: reason,
+        },
+        where: { id: license.id },
+      });
+
+      return {
+        ...managerLicenseStatus(license),
+        blockWrites: true,
+        message: validationMessage("LINK_MISMATCH", "blocked", license.expiresAt),
+        status: "LINK_MISMATCH",
+        valid: false,
+        warningLevel: "blocked",
+      } satisfies LicenseValidationStatus;
+    }
+
+    const linkedLicense = await prismaClient.managerLicense.update({
+      data: {
+        lastValidationAt: new Date(),
+        lastValidationDomain: requestInfo?.domain ?? null,
+        lastValidationIp: requestInfo?.ip ?? null,
+        lastValidationUserAgent: requestInfo?.userAgent ?? null,
+        linkedDomain: license.linkedDomain ?? requestInfo?.domain ?? null,
+        linkedIp: license.linkedIp ?? requestInfo?.ip ?? null,
+        linkedUserAgent: license.linkedUserAgent ?? requestInfo?.userAgent ?? null,
+        validationCount: license.validationCount + 1,
+      },
+      include: { subscriber: true },
+      where: { id: license.id },
+    });
+
+    return managerLicenseStatus(linkedLicense);
+  }
+
   return managerLicenseStatus(license);
+}
+
+function hasLinkMismatch(
+  license: ManagerLicense,
+  requestInfo: LicenseValidationRequestInfo | null | undefined,
+) {
+  const domain = normalizeDomain(requestInfo?.domain);
+  const linkedDomain = normalizeDomain(license.linkedDomain);
+  const ip = requestInfo?.ip?.trim() || null;
+  const linkedIp = license.linkedIp?.trim() || null;
+
+  return Boolean(
+    (linkedDomain && domain && linkedDomain !== domain) ||
+      (linkedIp && ip && linkedIp !== ip),
+  );
 }
 
 function managerLicenseStatus(license: ManagerLicenseWithSubscriber) {
@@ -437,7 +606,7 @@ function managerLicenseStatus(license: ManagerLicenseWithSubscriber) {
     status,
     subscriberName: license.subscriber.name,
     systemKey: license.systemKey,
-    valid: !blockWrites && status === "ACTIVE",
+    valid: !blockWrites && (status === "ACTIVE" || status === "LINKED"),
     warningLevel,
   } satisfies LicenseValidationStatus;
 }
@@ -462,7 +631,10 @@ export const enforceLicenseWriteAccess: RequestHandler = async (request, _respon
   }
 
   try {
-    const status = await getClientLicenseStatus(prisma);
+    const status = await getClientLicenseStatus(
+      prisma,
+      licenseValidationRequestInfo(request),
+    );
 
     if (status.mode === "managed" && status.blockWrites) {
       next(new AppError(403, status.message, "LICENSE_WRITE_BLOCKED"));
