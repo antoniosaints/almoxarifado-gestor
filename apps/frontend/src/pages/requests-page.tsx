@@ -5,6 +5,8 @@ import {
   FileDown,
   FileText,
   PackagePlus,
+  Plus,
+  Trash2,
   Warehouse,
   X,
 } from "lucide-react";
@@ -64,6 +66,67 @@ function StatusBadge({ status }: { status: string }) {
       {label ?? status}
     </Badge>
   );
+}
+
+type EntryRequestItemDraft = {
+  id: string;
+  productId: string;
+  quantity: string;
+};
+
+type ApprovalItemPayload = {
+  id?: string;
+  productId: string;
+  quantity: number;
+};
+
+function createEntryRequestItemDraft(
+  productId = "",
+  quantity = "1",
+): EntryRequestItemDraft {
+  return {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`,
+    productId,
+    quantity,
+  };
+}
+
+function entryRequestItems(request: EntryRequest) {
+  return request.items?.length
+    ? request.items
+    : [
+        {
+          id: request.id,
+          product: request.product,
+          productId: request.product.id,
+          quantity: request.quantity,
+        },
+      ];
+}
+
+function entryRequestProductSummary(request: EntryRequest) {
+  const items = entryRequestItems(request);
+  const firstItem = items[0];
+
+  if (!firstItem) {
+    return request.product.name;
+  }
+
+  return items.length === 1
+    ? firstItem.product.name
+    : `${firstItem.product.name} + ${items.length - 1} item(ns)`;
+}
+
+function entryRequestQuantitySummary(request: EntryRequest) {
+  return entryRequestItems(request)
+    .map(
+      (item) =>
+        `${item.quantity} ${item.product.unit.abbreviation} ${item.product.name}`,
+    )
+    .join(", ");
 }
 
 function OfficeLetterDialog({ request }: { request: EntryRequest }) {
@@ -141,7 +204,7 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
           <DialogHeader>
             <DialogTitle>Oficio da solicitacao</DialogTitle>
             <DialogDescription>
-              {request.warehouse.name} - {request.product.name}
+              {request.warehouse.name} - {entryRequestProductSummary(request)}
             </DialogDescription>
           </DialogHeader>
 
@@ -200,39 +263,41 @@ function ApprovalDialog({
   onApprove: (
     requestId: string,
     invoiceId: string | undefined,
-    quantity: number,
+    items: ApprovalItemPayload[],
   ) => Promise<void>;
   request: EntryRequest;
   warehouses: WarehouseType[];
 }) {
   const [invoiceId, setInvoiceId] = useState("");
   const [open, setOpen] = useState(false);
-  const [quantity, setQuantity] = useState(String(request.quantity));
-  const approvedQuantity = Number.parseInt(quantity, 10);
-  const summaryQuantity =
-    Number.isInteger(approvedQuantity) && approvedQuantity > 0
-      ? approvedQuantity
-      : request.quantity;
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const items = entryRequestItems(request);
+  const approvalItems = items.map((item) => {
+    const quantity = Number.parseInt(quantities[item.id] ?? String(item.quantity), 10);
+
+    return {
+      id: item.id,
+      productId: item.productId,
+      quantity,
+    };
+  });
+  const canApprove = approvalItems.every(
+    (item) => Number.isInteger(item.quantity) && item.quantity > 0,
+  );
   const sourceWarehouse = warehouses.find((warehouse) => warehouse.isGeneral);
   const destinationWarehouse = warehouses.find(
     (warehouse) => warehouse.id === request.warehouse.id,
   );
-  const sourceStock = sourceWarehouse?.stocks.find(
-    (stock) => stock.productId === request.product.id,
-  );
-  const destinationStock = destinationWarehouse?.stocks.find(
-    (stock) => stock.productId === request.product.id,
-  );
-  const sourceBefore = sourceStock?.currentQuantity ?? 0;
-  const destinationBefore = destinationStock?.currentQuantity ?? 0;
-  const sourceAfter = sourceBefore - summaryQuantity;
-  const destinationAfter = destinationBefore + summaryQuantity;
 
   useEffect(() => {
     if (open) {
-      setQuantity(String(request.quantity));
+      setQuantities(
+        Object.fromEntries(
+          entryRequestItems(request).map((item) => [item.id, String(item.quantity)]),
+        ),
+      );
     }
-  }, [open, request.quantity]);
+  }, [open, request]);
 
   return (
     <>
@@ -245,39 +310,85 @@ function ApprovalDialog({
           <DialogHeader>
             <DialogTitle>Aprovar entrada</DialogTitle>
             <DialogDescription>
-              {request.product.name} para {request.warehouse.name}
+              {entryRequestProductSummary(request)} para {request.warehouse.name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor={`quantity-${request.id}`}>Quantidade aprovada</Label>
-                <Input
-                  id={`quantity-${request.id}`}
-                  min="1"
-                  onChange={(event) => setQuantity(event.target.value)}
-                  type="number"
-                  value={quantity}
-                />
-              </div>
-              <div className="rounded-md border bg-muted/40 p-3 text-sm">
-                <p>
-                  Estoque geral: {sourceBefore}{" "}
-                  {request.product.unit.abbreviation}
-                </p>
-                <p>
-                  Após aprovar: {sourceAfter}{" "}
-                  {request.product.unit.abbreviation}
-                </p>
-                <p>
-                  Destino atual: {destinationBefore}{" "}
-                  {request.product.unit.abbreviation}
-                </p>
-                <p>
-                  Destino após entrada: {destinationAfter}{" "}
-                  {request.product.unit.abbreviation}
-                </p>
-              </div>
+            <div className="space-y-3">
+              {items.map((item, index) => {
+                const quantity = quantities[item.id] ?? String(item.quantity);
+                const approvedQuantity = Number.parseInt(quantity, 10);
+                const summaryQuantity =
+                  Number.isInteger(approvedQuantity) && approvedQuantity > 0
+                    ? approvedQuantity
+                    : item.quantity;
+                const sourceStock = sourceWarehouse?.stocks.find(
+                  (stock) => stock.productId === item.productId,
+                );
+                const destinationStock = destinationWarehouse?.stocks.find(
+                  (stock) => stock.productId === item.productId,
+                );
+                const sourceBefore = sourceStock?.currentQuantity ?? 0;
+                const destinationBefore = destinationStock?.currentQuantity ?? 0;
+                const sourceAfter = sourceBefore - summaryQuantity;
+                const destinationAfter = destinationBefore + summaryQuantity;
+
+                return (
+                  <div
+                    className="grid gap-4 rounded-md border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_10rem]"
+                    key={item.id}
+                  >
+                    <div className="min-w-0 space-y-2">
+                      <div>
+                        <p className="truncate text-sm font-medium">
+                          {item.product.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Solicitado: {item.quantity}{" "}
+                          {item.product.unit.abbreviation}
+                        </p>
+                      </div>
+                      <div className="rounded-md border bg-background p-3 text-sm">
+                        <p>
+                          Estoque geral: {sourceBefore}{" "}
+                          {item.product.unit.abbreviation}
+                        </p>
+                        <p>
+                          Após aprovar: {sourceAfter}{" "}
+                          {item.product.unit.abbreviation}
+                        </p>
+                        <p>
+                          Destino atual: {destinationBefore}{" "}
+                          {item.product.unit.abbreviation}
+                        </p>
+                        <p>
+                          Destino após entrada: {destinationAfter}{" "}
+                          {item.product.unit.abbreviation}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor={`quantity-${request.id}-${item.id}`}>
+                        {items.length === 1
+                          ? "Quantidade aprovada"
+                          : `Quantidade aprovada ${index + 1}`}
+                      </Label>
+                      <Input
+                        id={`quantity-${request.id}-${item.id}`}
+                        min="1"
+                        onChange={(event) =>
+                          setQuantities((current) => ({
+                            ...current,
+                            [item.id]: event.target.value,
+                          }))
+                        }
+                        type="number"
+                        value={quantity}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <div>
               <Label htmlFor={`invoice-${request.id}`}>Nota fiscal opcional</Label>
@@ -298,12 +409,12 @@ function ApprovalDialog({
               />
             </div>
             <Button
-              disabled={!Number.isInteger(approvedQuantity) || approvedQuantity <= 0}
+              disabled={!canApprove}
               onClick={() => {
                 void onApprove(
                   request.id,
                   invoiceId || undefined,
-                  approvedQuantity,
+                  approvalItems,
                 ).then(() => setOpen(false));
               }}
             >
@@ -363,14 +474,26 @@ function DirectEntryRequestDialog({
   const [open, setOpen] = useState(false);
   const [warehouseId, setWarehouseId] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
-  const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("1");
+  const [items, setItems] = useState<EntryRequestItemDraft[]>([
+    createEntryRequestItemDraft(),
+  ]);
   const [movementDate, setMovementDate] = useState(todayInputValue());
   const [observation, setObservation] = useState("");
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const availableWarehouses = warehouses.filter((warehouse) => !warehouse.isGeneral);
+  const validItems = items
+    .map((item) => ({
+      productId: item.productId,
+      quantity: Number.parseInt(item.quantity, 10),
+    }))
+    .filter(
+      (item) =>
+        item.productId &&
+        Number.isInteger(item.quantity) &&
+        item.quantity > 0,
+    );
 
   useEffect(() => {
     if (!open) {
@@ -385,7 +508,7 @@ function DirectEntryRequestDialog({
   useEffect(() => {
     if (!open || !warehouseId) {
       setProducts([]);
-      setProductId("");
+      setItems([createEntryRequestItemDraft()]);
       return;
     }
 
@@ -403,10 +526,17 @@ function DirectEntryRequestDialog({
 
         if (!ignore) {
           setProducts(nextProducts);
-          setProductId((current) =>
-            nextProducts.some((product) => product.id === current)
-              ? current
-              : nextProducts[0]?.id ?? "",
+          setItems((current) =>
+            current.map((item, index) => ({
+              ...item,
+              productId: nextProducts.some(
+                (product) => product.id === item.productId,
+              )
+                ? item.productId
+                : index === 0
+                  ? nextProducts[0]?.id ?? ""
+                  : "",
+            })),
           );
         }
       } catch (caughtError) {
@@ -433,24 +563,65 @@ function DirectEntryRequestDialog({
 
   function openDialog() {
     setMessage(null);
-    setQuantity("1");
+    setItems([createEntryRequestItemDraft(products[0]?.id ?? "")]);
     setMovementDate(todayInputValue());
     setObservation("");
     setOpen(true);
   }
 
+  function updateItem(
+    itemId: string,
+    field: "productId" | "quantity",
+    value: string,
+  ) {
+    setItems((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item,
+      ),
+    );
+  }
+
+  function addItem() {
+    setItems((current) => [
+      ...current,
+      createEntryRequestItemDraft(products[0]?.id ?? ""),
+    ]);
+  }
+
+  function removeItem(itemId: string) {
+    setItems((current) =>
+      current.length > 1
+        ? current.filter((item) => item.id !== itemId)
+        : current,
+    );
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!validItems.length) {
+      setMessage("Informe ao menos um produto com quantidade maior que zero.");
+      return;
+    }
+
+    const primaryItem = validItems[0];
+
     setSaving(true);
     setMessage(null);
 
     try {
       await api("/entry-requests", {
         body: JSON.stringify({
+          items: validItems,
           movementDate,
           observation,
-          productId,
-          quantity,
+          productId: primaryItem.productId,
+          quantity: primaryItem.quantity,
           warehouseId,
         }),
         method: "POST",
@@ -491,7 +662,7 @@ function DirectEntryRequestDialog({
                 id="request-warehouse"
                 onValueChange={(nextWarehouseId) => {
                   setWarehouseId(nextWarehouseId);
-                  setProductId("");
+                  setItems([createEntryRequestItemDraft()]);
                 }}
                 options={availableWarehouses.map((warehouse) => ({
                   label: warehouse.name,
@@ -502,52 +673,88 @@ function DirectEntryRequestDialog({
                 value={warehouseId}
               />
             </FormField>
-            <FormField>
-              <Label htmlFor="request-product">Produto</Label>
-              <SearchSelect
-                ariaLabel="Produto"
+            <div className="space-y-3">
+              {items.map((item, index) => (
+                <div
+                  className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto]"
+                  key={item.id}
+                >
+                  <FormField>
+                    <Label htmlFor={`request-product-${item.id}`}>
+                      {items.length === 1 ? "Produto" : `Produto ${index + 1}`}
+                    </Label>
+                    <SearchSelect
+                      ariaLabel={
+                        items.length === 1 ? "Produto" : `Produto ${index + 1}`
+                      }
+                      disabled={!warehouseId || loadingProducts}
+                      emptyMessage={
+                        loadingProducts
+                          ? "Carregando produtos..."
+                          : "Nenhum produto disponível."
+                      }
+                      id={`request-product-${item.id}`}
+                      onValueChange={(value) =>
+                        updateItem(item.id, "productId", value)
+                      }
+                      options={products.map((product) => ({
+                        label: `${product.code} - ${product.name}`,
+                        searchText: `${product.category.name} ${product.unit.abbreviation}`,
+                        value: product.id,
+                      }))}
+                      placeholder={loadingProducts ? "Carregando..." : "Selecione"}
+                      value={item.productId}
+                    />
+                  </FormField>
+                  <FormField>
+                    <Label htmlFor={`request-quantity-${item.id}`}>
+                      Quantidade
+                    </Label>
+                    <Input
+                      id={`request-quantity-${item.id}`}
+                      min="1"
+                      onChange={(event) =>
+                        updateItem(item.id, "quantity", event.target.value)
+                      }
+                      required
+                      type="number"
+                      value={item.quantity}
+                    />
+                  </FormField>
+                  <div className="flex items-end">
+                    <Button
+                      aria-label={`Remover item ${index + 1}`}
+                      disabled={items.length === 1}
+                      onClick={() => removeItem(item.id)}
+                      size="icon"
+                      type="button"
+                      variant="outline"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
                 disabled={!warehouseId || loadingProducts}
-                emptyMessage={
-                  loadingProducts
-                    ? "Carregando produtos..."
-                    : "Nenhum produto disponível."
-                }
-                id="request-product"
-                onValueChange={setProductId}
-                options={products.map((product) => ({
-                  label: `${product.code} - ${product.name}`,
-                  searchText: `${product.category.name} ${product.unit.abbreviation}`,
-                  value: product.id,
-                }))}
-                placeholder={
-                  loadingProducts ? "Carregando..." : "Selecione"
-                }
-                value={productId}
+                onClick={addItem}
+                type="button"
+                variant="outline"
+              >
+                <Plus className="h-4 w-4" />
+                Adicionar item
+              </Button>
+            </div>
+            <FormField>
+              <Label htmlFor="request-date">Data da movimentação</Label>
+              <Input
+                id="request-date"
+                onChange={(event) => setMovementDate(event.target.value)}
+                required
+                type="datetime-local"
+                value={movementDate}
               />
             </FormField>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField>
-                <Label htmlFor="request-quantity">Quantidade</Label>
-                <Input
-                  id="request-quantity"
-                  min="1"
-                  onChange={(event) => setQuantity(event.target.value)}
-                  required
-                  type="number"
-                  value={quantity}
-                />
-              </FormField>
-              <FormField>
-                <Label htmlFor="request-date">Data da movimentação</Label>
-                <Input
-                  id="request-date"
-                  onChange={(event) => setMovementDate(event.target.value)}
-                  required
-                  type="datetime-local"
-                  value={movementDate}
-                />
-              </FormField>
-            </div>
             <FormField>
               <Label htmlFor="request-observation">Observação</Label>
               <Textarea
@@ -557,7 +764,9 @@ function DirectEntryRequestDialog({
               />
             </FormField>
             <Button
-              disabled={!warehouseId || !productId || saving || loadingProducts}
+              disabled={
+                !warehouseId || !validItems.length || saving || loadingProducts
+              }
               type="submit"
             >
               <PackagePlus className="h-4 w-4" />
@@ -808,11 +1017,17 @@ export function RequestsPage() {
   async function approve(
     requestId: string,
     invoiceId: string | undefined,
-    quantity: number,
+    items: ApprovalItemPayload[],
   ) {
     try {
+      const primaryItem = items[0];
+
       await api(`/entry-requests/${requestId}/approve`, {
-        body: JSON.stringify({ invoiceId, quantity }),
+        body: JSON.stringify({
+          invoiceId,
+          items,
+          quantity: primaryItem?.quantity,
+        }),
         method: "POST",
       });
       setMessage({ error: false, text: "Solicitação aprovada." });
@@ -938,7 +1153,9 @@ export function RequestsPage() {
               {
                 cell: (request) => (
                   <>
-                    <p className="font-medium">{request.product.name}</p>
+                    <p className="font-medium">
+                      {entryRequestProductSummary(request)}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {formatDate(request.movementDate)}
                     </p>
@@ -953,8 +1170,11 @@ export function RequestsPage() {
                 key: "warehouse",
               },
               {
-                cell: (request) =>
-                  `${request.quantity} ${request.product.unit.abbreviation}`,
+                cell: (request) => (
+                  <p className="max-w-xs truncate" title={entryRequestQuantitySummary(request)}>
+                    {entryRequestQuantitySummary(request)}
+                  </p>
+                ),
                 header: "Quantidade",
                 key: "quantity",
               },
@@ -1015,9 +1235,12 @@ export function RequestsPage() {
             searchPlaceholder="Buscar entrada solicitada..."
             searchText={(request) =>
               [
-                request.product.name,
-                request.product.code,
-                request.product.unit.abbreviation,
+                ...entryRequestItems(request).flatMap((item) => [
+                  item.product.name,
+                  item.product.code,
+                  item.product.unit.abbreviation,
+                  String(item.quantity),
+                ]),
                 request.warehouse.name,
                 request.requestedBy.name,
                 request.status,

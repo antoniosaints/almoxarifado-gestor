@@ -1007,19 +1007,50 @@ describe("api", () => {
       variables: ["nome_empresa", "cnpj_empresa"],
     });
 
+    const second = await request(app)
+      .post("/office-templates")
+      .set("Authorization", auth)
+      .send({
+        contentHtml: "<p>Modelo ativo</p>",
+        name: "Modelo ativo",
+        subject: "Assunto ativo",
+      });
+
+    expect(second.status).toBe(201);
+    expect(second.body).toMatchObject({
+      active: true,
+      name: "Modelo ativo",
+    });
+
     const list = await request(app)
       .get("/office-templates")
       .set("Authorization", auth);
 
     expect(list.status).toBe(200);
+    expect(list.body.filter((template: { active: boolean }) => template.active)).toHaveLength(1);
     expect(list.body[0]).toMatchObject({
-      id: created.body.id,
+      id: second.body.id,
+      subject: "Assunto ativo",
+    });
+    expect(
+      list.body.find((template: { id: string }) => template.id === created.body.id),
+    ).toMatchObject({
+      active: false,
       subject: "Comunicado para {{nome_empresa}}",
     });
   });
 
   it("renders an office letter for a non-general entry request", async () => {
-    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const { product, productCategory, unit, user, warehouseCategory } =
+      await createBaseFixture(prisma);
+    const secondProduct = await prisma.product.create({
+      data: {
+        categoryId: productCategory.id,
+        code: "0000002",
+        name: "Caneta azul",
+        unitId: unit.id,
+      },
+    });
     const admin = await prisma.user.update({
       where: { id: user.id },
       data: { role: UserRole.ADMIN },
@@ -1030,12 +1061,19 @@ describe("api", () => {
         name: "Almoxarifado da Saude",
       },
     });
-    await prisma.stock.create({
-      data: {
-        currentQuantity: 0,
-        productId: product.id,
-        warehouseId: warehouse.id,
-      },
+    await prisma.stock.createMany({
+      data: [
+        {
+          currentQuantity: 0,
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+        {
+          currentQuantity: 0,
+          productId: secondProduct.id,
+          warehouseId: warehouse.id,
+        },
+      ],
     });
     const auth = authorizationFor(admin);
 
@@ -1063,6 +1101,10 @@ describe("api", () => {
       .post("/entry-requests")
       .set("Authorization", auth)
       .send({
+        items: [
+          { productId: product.id, quantity: 4 },
+          { productId: secondProduct.id, quantity: 2 },
+        ],
         movementDate: "2026-05-23T12:00:00.000Z",
         productId: product.id,
         quantity: 4,
@@ -1088,13 +1130,19 @@ describe("api", () => {
           quantity: 4,
           unit: "UN",
         },
+        {
+          productName: "Caneta azul",
+          quantity: 2,
+          unit: "UN",
+        },
       ],
       numberFormatted: "001/2026",
       subject: "Solicitacao de material/equipamento",
       year: 2026,
     });
     expect(office.body.contentHtml).toContain("OFICIO Nº 001/2026");
-    expect(office.body.contentHtml).toContain("Papel A4 - 4 UN.");
+    expect(office.body.contentHtml).toContain("Papel A4 - 4 UN;");
+    expect(office.body.contentHtml).toContain("Caneta azul - 2 UN.");
   });
 
   it("exports an office letter PDF with the configured header logo", async () => {

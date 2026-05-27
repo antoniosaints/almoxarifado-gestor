@@ -20,6 +20,18 @@ import {
 export const entryRequestRoutes = Router();
 
 const entryRequestInclude = {
+  items: {
+    include: {
+      product: {
+        include: {
+          unit: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  },
   product: {
     include: {
       unit: true,
@@ -171,6 +183,7 @@ entryRequestRoutes.post(
     response.json(
       await approveEntryRequest(prisma, {
         invoiceId: input.invoiceId,
+        items: input.items,
         quantity: input.quantity,
         requestId: id,
         reviewedById: currentUser(response).id,

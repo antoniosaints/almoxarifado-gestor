@@ -12,6 +12,10 @@ import { defaultSettings, settingsId } from "./settings-service.js";
 import { getLocalUploadRoot } from "./upload-service.js";
 
 type EntryRequestInput = {
+  items?: Array<{
+    productId: string;
+    quantity: number;
+  }>;
   movementDate: Date;
   observation?: string | null;
   productId: string;
@@ -22,12 +26,29 @@ type EntryRequestInput = {
 
 type ApprovalInput = {
   invoiceId?: string | null;
+  items?: Array<{
+    id?: string;
+    productId?: string;
+    quantity: number;
+  }>;
   quantity?: number;
   requestId: string;
   reviewedById: string;
 };
 
 const officeRequestInclude = {
+  items: {
+    include: {
+      product: {
+        include: {
+          unit: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  },
   product: {
     include: {
       unit: true,
@@ -69,6 +90,106 @@ function assertPositiveQuantity(quantity: number) {
   }
 }
 
+function normalizeEntryRequestItems(input: EntryRequestInput) {
+  const items = input.items?.length
+    ? input.items
+    : [{ productId: input.productId, quantity: input.quantity }];
+
+  for (const item of items) {
+    assertPositiveQuantity(item.quantity);
+  }
+
+  return items;
+}
+
+type NormalizedApprovalItem = {
+  id?: string;
+  productId: string;
+  quantity: number;
+};
+
+function requestItemsFromRecord(
+  request: Prisma.EntryRequestGetPayload<{ include: { items: true } }>,
+): NormalizedApprovalItem[] {
+  if (request.items.length) {
+    return request.items.map((item) => ({
+      id: item.id,
+      productId: item.productId,
+      quantity: item.quantity,
+    }));
+  }
+
+  return [
+    {
+      productId: request.productId,
+      quantity: request.quantity,
+    },
+  ];
+}
+
+function normalizeApprovalItems(
+  request: Prisma.EntryRequestGetPayload<{ include: { items: true } }>,
+  input: ApprovalInput,
+) {
+  const requestItems = requestItemsFromRecord(request);
+
+  if (!input.items?.length) {
+    const approvedQuantity = input.quantity ?? requestItems[0]?.quantity ?? request.quantity;
+
+    assertPositiveQuantity(approvedQuantity);
+
+    return requestItems.map((item, index) => ({
+      ...item,
+      quantity: index === 0 ? approvedQuantity : item.quantity,
+    }));
+  }
+
+  const requestedById = new Map(
+    requestItems
+      .filter((item) => item.id)
+      .map((item) => [item.id as string, item]),
+  );
+  const requestedByProductId = new Map(
+    requestItems.map((item) => [item.productId, item]),
+  );
+  const approvedById = new Map<string, NonNullable<ApprovalInput["items"]>[number]>();
+  const approvedByProductId = new Map<
+    string,
+    NonNullable<ApprovalInput["items"]>[number]
+  >();
+
+  for (const item of input.items) {
+    assertPositiveQuantity(item.quantity);
+
+    const requestedItem =
+      (item.id ? requestedById.get(item.id) : undefined) ??
+      (item.productId ? requestedByProductId.get(item.productId) : undefined);
+
+    if (!requestedItem) {
+      throw new AppError(400, "Item aprovado nao pertence a solicitacao.");
+    }
+
+    if (item.id) {
+      approvedById.set(item.id, item);
+    }
+
+    if (item.productId) {
+      approvedByProductId.set(item.productId, item);
+    }
+  }
+
+  return requestItems.map((item) => {
+    const approvedItem =
+      (item.id ? approvedById.get(item.id) : undefined) ??
+      approvedByProductId.get(item.productId);
+
+    return {
+      ...item,
+      quantity: approvedItem?.quantity ?? item.quantity,
+    };
+  });
+}
+
 async function nextOfficeNumber(
   prisma: Prisma.TransactionClient,
   warehouseId: string,
@@ -102,26 +223,37 @@ export async function createEntryRequest(
   prisma: PrismaClient,
   input: EntryRequestInput,
 ) {
-  assertPositiveQuantity(input.quantity);
+  const items = normalizeEntryRequestItems(input);
+  const primaryItem = items[0];
+
+  if (!primaryItem) {
+    throw new AppError(400, "Informe ao menos um item para solicitar.");
+  }
 
   return prisma.$transaction(async (transaction) => {
-    const stock = await transaction.stock.findUnique({
-      include: {
-        warehouse: {
-          select: {
-            isGeneral: true,
-          },
-        },
+    const warehouse = await transaction.warehouse.findUnique({
+      select: {
+        isGeneral: true,
       },
       where: {
-        warehouseId_productId: {
-          productId: input.productId,
-          warehouseId: input.warehouseId,
-        },
+        id: input.warehouseId,
       },
     });
+    const productIds = [...new Set(items.map((item) => item.productId))];
+    const stocks = await transaction.stock.findMany({
+      select: {
+        productId: true,
+      },
+      where: {
+        productId: {
+          in: productIds,
+        },
+        warehouseId: input.warehouseId,
+      },
+    });
+    const stockedProductIds = new Set(stocks.map((stock) => stock.productId));
 
-    if (!stock) {
+    if (!warehouse || productIds.some((productId) => !stockedProductIds.has(productId))) {
       throw new AppError(
         400,
         "Solicite apenas produtos já cadastrados no estoque deste almoxarifado.",
@@ -129,19 +261,25 @@ export async function createEntryRequest(
     }
 
     const officeYear = input.movementDate.getFullYear();
-    const shouldCreateOffice = !stock.warehouse.isGeneral;
+    const shouldCreateOffice = !warehouse.isGeneral;
     const officeNumber = shouldCreateOffice
       ? await nextOfficeNumber(transaction, input.warehouseId, officeYear)
       : null;
 
     return transaction.entryRequest.create({
       data: {
+        items: {
+          create: items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+          })),
+        },
         movementDate: input.movementDate,
         observation: input.observation,
         officeNumber,
         officeYear: shouldCreateOffice ? officeYear : null,
-        productId: input.productId,
-        quantity: input.quantity,
+        productId: primaryItem.productId,
+        quantity: primaryItem.quantity,
         requestedById: input.requestedById,
         warehouseId: input.warehouseId,
       },
@@ -153,12 +291,17 @@ async function createEntryRequestLegacy(
   prisma: PrismaClient,
   input: EntryRequestInput,
 ) {
-  assertPositiveQuantity(input.quantity);
+  const items = normalizeEntryRequestItems(input);
+  const primaryItem = items[0];
+
+  if (!primaryItem) {
+    throw new AppError(400, "Informe ao menos um item para solicitar.");
+  }
 
   const stock = await prisma.stock.findUnique({
     where: {
       warehouseId_productId: {
-        productId: input.productId,
+        productId: primaryItem.productId,
         warehouseId: input.warehouseId,
       },
     },
@@ -176,10 +319,16 @@ async function createEntryRequestLegacy(
 
   return prisma.entryRequest.create({
     data: {
+      items: {
+        create: items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+      },
       movementDate: input.movementDate,
       observation: input.observation,
-      productId: input.productId,
-      quantity: input.quantity,
+      productId: primaryItem.productId,
+      quantity: primaryItem.quantity,
       requestedById: input.requestedById,
       warehouseId: input.warehouseId,
     },
@@ -192,6 +341,9 @@ export async function approveEntryRequest(
 ) {
   return prisma.$transaction(async (transaction) => {
     const request = await transaction.entryRequest.findUniqueOrThrow({
+      include: {
+        items: true,
+      },
       where: { id: input.requestId },
     });
 
@@ -199,8 +351,12 @@ export async function approveEntryRequest(
       throw new AppError(409, "Esta solicitação já foi analisada.");
     }
 
-    const approvedQuantity = input.quantity ?? request.quantity;
-    assertPositiveQuantity(approvedQuantity);
+    const approvedItems = normalizeApprovalItems(request, input);
+    const primaryItem = approvedItems[0];
+
+    if (!primaryItem) {
+      throw new AppError(400, "Informe ao menos um item para aprovar.");
+    }
 
     const generalWarehouse = await transaction.warehouse.findFirst({
       where: {
@@ -213,115 +369,144 @@ export async function approveEntryRequest(
       throw new AppError(409, "Cadastre um almoxarifado geral ativo para aprovar.");
     }
 
-    const generalStock = await transaction.stock.findUnique({
-      where: {
-        warehouseId_productId: {
+    const movementPairs = [];
+    const summaries = [];
+
+    for (const item of approvedItems) {
+      const generalStock = await transaction.stock.findUnique({
+        where: {
+          warehouseId_productId: {
+            warehouseId: generalWarehouse.id,
+            productId: item.productId,
+          },
+        },
+      });
+
+      if (!generalStock || generalStock.currentQuantity < item.quantity) {
+        throw new AppError(409, "Quantidade insuficiente no estoque geral.");
+      }
+
+      const destinationStockBefore = await transaction.stock.findUnique({
+        where: {
+          warehouseId_productId: {
+            warehouseId: request.warehouseId,
+            productId: item.productId,
+          },
+        },
+        select: { currentQuantity: true },
+      });
+
+      const sourceStock = await transaction.stock.update({
+        where: { id: generalStock.id },
+        data: {
+          currentQuantity: {
+            decrement: item.quantity,
+          },
+          lastMovementAt: request.movementDate,
+        },
+      });
+
+      const stock = await transaction.stock.upsert({
+        where: {
+          warehouseId_productId: {
+            warehouseId: request.warehouseId,
+            productId: item.productId,
+          },
+        },
+        update: {
+          currentQuantity: {
+            increment: item.quantity,
+          },
+          lastMovementAt: request.movementDate,
+        },
+        create: {
+          currentQuantity: item.quantity,
+          lastMovementAt: request.movementDate,
+          productId: item.productId,
+          warehouseId: request.warehouseId,
+        },
+      });
+
+      const sourceMovement = await transaction.stockMovement.create({
+        data: {
+          destinationWarehouseId: request.warehouseId,
+          movementDate: request.movementDate,
+          observation: request.observation,
+          productId: item.productId,
+          quantity: item.quantity,
+          responsibleUserId: input.reviewedById,
+          sourceWarehouseId: generalWarehouse.id,
+          stockId: sourceStock.id,
+          type: MovementType.TRANSFERENCIA_SAIDA,
           warehouseId: generalWarehouse.id,
-          productId: request.productId,
         },
-      },
-    });
+      });
 
-    if (!generalStock || generalStock.currentQuantity < approvedQuantity) {
-      throw new AppError(409, "Quantidade insuficiente no estoque geral.");
+      const movement = await transaction.stockMovement.create({
+        data: {
+          destinationWarehouseId: request.warehouseId,
+          invoiceId: input.invoiceId,
+          movementDate: request.movementDate,
+          observation: request.observation,
+          productId: item.productId,
+          quantity: item.quantity,
+          responsibleUserId: input.reviewedById,
+          sourceWarehouseId: generalWarehouse.id,
+          stockId: stock.id,
+          type: MovementType.TRANSFERENCIA_ENTRADA,
+          warehouseId: request.warehouseId,
+        },
+      });
+
+      if (item.id) {
+        await transaction.entryRequestItem.update({
+          data: {
+            quantity: item.quantity,
+          },
+          where: { id: item.id },
+        });
+      }
+
+      movementPairs.push({
+        movement,
+        sourceMovement,
+        sourceStock,
+        stock,
+      });
+      summaries.push({
+        approvedQuantity: item.quantity,
+        destinationAfter:
+          (destinationStockBefore?.currentQuantity ?? 0) + item.quantity,
+        destinationBefore: destinationStockBefore?.currentQuantity ?? 0,
+        productId: item.productId,
+        sourceAfter: generalStock.currentQuantity - item.quantity,
+        sourceBefore: generalStock.currentQuantity,
+      });
     }
-
-    const destinationStockBefore = await transaction.stock.findUnique({
-      where: {
-        warehouseId_productId: {
-          warehouseId: request.warehouseId,
-          productId: request.productId,
-        },
-      },
-      select: { currentQuantity: true },
-    });
-
-    const sourceStock = await transaction.stock.update({
-      where: { id: generalStock.id },
-      data: {
-        currentQuantity: {
-          decrement: approvedQuantity,
-        },
-        lastMovementAt: request.movementDate,
-      },
-    });
-
-    const stock = await transaction.stock.upsert({
-      where: {
-        warehouseId_productId: {
-          warehouseId: request.warehouseId,
-          productId: request.productId,
-        },
-      },
-      update: {
-        currentQuantity: {
-          increment: approvedQuantity,
-        },
-        lastMovementAt: request.movementDate,
-      },
-      create: {
-        currentQuantity: approvedQuantity,
-        lastMovementAt: request.movementDate,
-        productId: request.productId,
-        warehouseId: request.warehouseId,
-      },
-    });
-
-    const sourceMovement = await transaction.stockMovement.create({
-      data: {
-        destinationWarehouseId: request.warehouseId,
-        movementDate: request.movementDate,
-        observation: request.observation,
-        productId: request.productId,
-        quantity: approvedQuantity,
-        responsibleUserId: input.reviewedById,
-        sourceWarehouseId: generalWarehouse.id,
-        stockId: sourceStock.id,
-        type: MovementType.TRANSFERENCIA_SAIDA,
-        warehouseId: generalWarehouse.id,
-      },
-    });
-
-    const movement = await transaction.stockMovement.create({
-      data: {
-        destinationWarehouseId: request.warehouseId,
-        invoiceId: input.invoiceId,
-        movementDate: request.movementDate,
-        observation: request.observation,
-        productId: request.productId,
-        quantity: approvedQuantity,
-        responsibleUserId: input.reviewedById,
-        sourceWarehouseId: generalWarehouse.id,
-        stockId: stock.id,
-        type: MovementType.TRANSFERENCIA_ENTRADA,
-        warehouseId: request.warehouseId,
-      },
-    });
 
     const approvedRequest = await transaction.entryRequest.update({
       where: { id: request.id },
       data: {
-        quantity: approvedQuantity,
+        productId: primaryItem.productId,
+        quantity: primaryItem.quantity,
         reviewedAt: new Date(),
         reviewedById: input.reviewedById,
         status: RequestStatus.APPROVED,
       },
     });
+    const firstMovementPair = movementPairs[0];
+    const firstSummary = summaries[0];
 
     return {
-      movement,
+      itemSummaries: summaries,
+      movement: firstMovementPair?.movement,
+      movements: movementPairs.map((pair) => pair.movement),
       request: approvedRequest,
-      summary: {
-        approvedQuantity,
-        destinationAfter:
-          (destinationStockBefore?.currentQuantity ?? 0) + approvedQuantity,
-        destinationBefore: destinationStockBefore?.currentQuantity ?? 0,
-        sourceAfter: generalStock.currentQuantity - approvedQuantity,
-        sourceBefore: generalStock.currentQuantity,
-      },
-      sourceMovement,
-      sourceStock,
-      stock,
+      sourceMovement: firstMovementPair?.sourceMovement,
+      sourceMovements: movementPairs.map((pair) => pair.sourceMovement),
+      sourceStock: firstMovementPair?.sourceStock,
+      stock: firstMovementPair?.stock,
+      summary: firstSummary,
     };
   });
 }
@@ -370,7 +555,21 @@ function requestItem(request: OfficeRequest) {
   };
 }
 
-function renderItemsHtml(items: ReturnType<typeof requestItem>[]) {
+type OfficeRequestItem = ReturnType<typeof requestItem>;
+
+function requestItems(request: OfficeRequest): OfficeRequestItem[] {
+  if (request.items.length) {
+    return request.items.map((item) => ({
+      productName: item.product.name,
+      quantity: item.quantity,
+      unit: item.product.unit.abbreviation,
+    }));
+  }
+
+  return [requestItem(request)];
+}
+
+function renderItemsHtml(items: OfficeRequestItem[]) {
   return items
     .map((item, index) => {
       const suffix = index === items.length - 1 ? "." : ";";
@@ -382,7 +581,7 @@ function renderItemsHtml(items: ReturnType<typeof requestItem>[]) {
     .join("<br />");
 }
 
-function renderItemsText(items: ReturnType<typeof requestItem>[]) {
+function renderItemsText(items: OfficeRequestItem[]) {
   return items
     .map((item, index) => {
       const suffix = index === items.length - 1 ? "." : ";";
@@ -735,7 +934,8 @@ export async function getEntryRequestOfficeLetter(
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
       where: { active: true },
     });
-    const items = [requestItem(request)];
+    const items = requestItems(request);
+    const firstItem = items[0] ?? requestItem(request);
     const numberFormatted = formatOfficeNumber(
       request.officeNumber,
       request.officeYear,
@@ -751,11 +951,11 @@ export async function getEntryRequestOfficeLetter(
         ? String(request.officeNumber).padStart(3, "0")
         : "",
       oficio_numero_ano: numberFormatted,
-      produto_nome: request.product.name,
-      quantidade_solicitada: String(request.quantity),
+      produto_nome: firstItem.productName,
+      quantidade_solicitada: String(firstItem.quantity),
       secretaria_nome: request.warehouse.category.name,
       solicitante_nome: request.requestedBy.name,
-      unidade_solicitada: request.product.unit.abbreviation,
+      unidade_solicitada: firstItem.unit,
       usuario_logado: viewerName,
     };
     const subjectTemplate = template?.subject ?? defaultOfficeLetterSubject;

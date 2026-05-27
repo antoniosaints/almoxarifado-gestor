@@ -165,6 +165,7 @@ export type TransferRequestStatus =
 export type EntryRequest = {
   createdAt: string;
   id: string;
+  items?: EntryRequestItem[];
   movementDate: string;
   observation?: string | null;
   product: Pick<Product, "code" | "id" | "name" | "unit">;
@@ -174,6 +175,13 @@ export type EntryRequest = {
   reviewedBy?: Pick<User, "email" | "id" | "name"> | null;
   status: RequestStatus;
   warehouse: Pick<Warehouse, "category" | "id" | "isGeneral" | "name">;
+};
+
+export type EntryRequestItem = {
+  id: string;
+  product: Pick<Product, "code" | "id" | "name" | "unit">;
+  productId: string;
+  quantity: number;
 };
 
 export type OfficeLetter = {

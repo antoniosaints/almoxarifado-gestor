@@ -207,6 +207,87 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("toggles the active office template directly from the table", async () => {
+    let updatePayload: unknown;
+    let reserveActive = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (
+        url.pathname === "/office-templates/template-2" &&
+        init?.method === "PUT"
+      ) {
+        updatePayload = JSON.parse(String(init.body));
+        reserveActive = (updatePayload as { active: boolean }).active;
+
+        return new Response(
+          JSON.stringify({
+            ...(updatePayload as object),
+            id: "template-2",
+            variables: [],
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      if (url.pathname === "/office-templates") {
+        return new Response(
+          JSON.stringify([
+            {
+              active: !reserveActive,
+              contentHtml: "<p>OFICIO</p>",
+              description: "Modelo principal",
+              id: "template-1",
+              name: "Modelo principal",
+              subject: "Solicitacao",
+              variables: [],
+            },
+            {
+              active: reserveActive,
+              contentHtml: "<p>OFICIO reserva</p>",
+              description: "Modelo reserva",
+              id: "template-2",
+              name: "Modelo reserva",
+              subject: "Solicitacao reserva",
+              variables: [],
+            },
+          ]),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /oficios/i }));
+    fireEvent.click(
+      await screen.findByRole("switch", { name: "Ativar Modelo reserva" }),
+    );
+
+    await waitFor(() => {
+      expect(updatePayload).toMatchObject({
+        active: true,
+        contentHtml: "<p>OFICIO reserva</p>",
+        name: "Modelo reserva",
+        subject: "Solicitacao reserva",
+      });
+    });
+    expect(await screen.findByText("Modelo ativado.")).toBeInTheDocument();
+  });
+
   it("deletes office templates from the table action", async () => {
     let deletedTemplate = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

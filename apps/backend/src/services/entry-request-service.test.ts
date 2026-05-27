@@ -251,6 +251,119 @@ describe("entry request service", () => {
     expect(movements[1]?.invoiceId).toBe(invoice.id);
   });
 
+  it("approves every item in a multi-product entry request", async () => {
+    const { product, productCategory, unit, user, warehouseCategory } =
+      await createBaseFixture(prisma);
+    const secondProduct = await prisma.product.create({
+      data: {
+        categoryId: productCategory.id,
+        code: "0000002",
+        name: "Caneta azul",
+        unitId: unit.id,
+      },
+    });
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Educacao",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+
+    await prisma.stock.createMany({
+      data: [
+        {
+          currentQuantity: 12,
+          productId: product.id,
+          warehouseId: generalWarehouse.id,
+        },
+        {
+          currentQuantity: 9,
+          productId: secondProduct.id,
+          warehouseId: generalWarehouse.id,
+        },
+        {
+          currentQuantity: 1,
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+        {
+          currentQuantity: 2,
+          productId: secondProduct.id,
+          warehouseId: warehouse.id,
+        },
+      ],
+    });
+
+    const request = await createEntryRequest(prisma, {
+      items: [
+        { productId: product.id, quantity: 5 },
+        { productId: secondProduct.id, quantity: 3 },
+      ],
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 5,
+      requestedById: operator.id,
+      warehouseId: warehouse.id,
+    });
+    const requestItems = await prisma.entryRequestItem.findMany({
+      orderBy: { createdAt: "asc" },
+      where: { requestId: request.id },
+    });
+
+    const result = await approveEntryRequest(prisma, {
+      items: [
+        { id: requestItems[0]?.id, quantity: 4 },
+        { id: requestItems[1]?.id, quantity: 2 },
+      ],
+      requestId: request.id,
+      reviewedById: user.id,
+    });
+
+    const destinationStocks = await prisma.stock.findMany({
+      orderBy: { productId: "asc" },
+      where: { warehouseId: warehouse.id },
+    });
+    const generalStocks = await prisma.stock.findMany({
+      orderBy: { productId: "asc" },
+      where: { warehouseId: generalWarehouse.id },
+    });
+    const movements = await prisma.stockMovement.findMany();
+
+    expect(result.itemSummaries).toHaveLength(2);
+    expect(result.movements).toHaveLength(2);
+    expect(movements).toHaveLength(4);
+    expect(
+      destinationStocks.find((stock) => stock.productId === product.id)
+        ?.currentQuantity,
+    ).toBe(5);
+    expect(
+      destinationStocks.find((stock) => stock.productId === secondProduct.id)
+        ?.currentQuantity,
+    ).toBe(4);
+    expect(
+      generalStocks.find((stock) => stock.productId === product.id)
+        ?.currentQuantity,
+    ).toBe(8);
+    expect(
+      generalStocks.find((stock) => stock.productId === secondProduct.id)
+        ?.currentQuantity,
+    ).toBe(7);
+  });
+
   it("approves a request with an adjusted quantity and returns stock summary", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const generalWarehouse = await prisma.warehouse.create({

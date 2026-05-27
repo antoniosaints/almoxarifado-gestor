@@ -175,6 +175,7 @@ model Product {
   stocks           Stock[]
   movements        StockMovement[]
   entryRequests    EntryRequest[]
+  entryRequestItems EntryRequestItem[]
   transferRequests TransferRequest[]
 }
 
@@ -254,8 +255,23 @@ model EntryRequest {
   product          Product       @relation(fields: [productId], references: [id])
   requestedBy      User          @relation("EntryRequester", fields: [requestedById], references: [id])
   reviewedBy       User?         @relation("EntryReviewer", fields: [reviewedById], references: [id])
+  items            EntryRequestItem[]
 
   @@unique([warehouseId, officeYear, officeNumber])
+}
+
+model EntryRequestItem {
+  id        String       @id @default(cuid())
+  requestId String
+  productId String
+  quantity  Int
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  request   EntryRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  product   Product      @relation(fields: [productId], references: [id])
+
+  @@index([requestId])
+  @@index([productId])
 }
 
 model TransferRequest {

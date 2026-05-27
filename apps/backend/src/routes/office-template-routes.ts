@@ -51,8 +51,18 @@ officeTemplateRoutes.post(
   "/",
   asyncHandler(async (request, response) => {
     const input = officeTemplateInput.parse(request.body);
-    const template = await prisma.officeLetterTemplate.create({
-      data: templateData(input),
+    const data = templateData(input);
+    const template = await prisma.$transaction(async (transaction) => {
+      if (input.active) {
+        await transaction.officeLetterTemplate.updateMany({
+          data: { active: false },
+          where: { active: true },
+        });
+      }
+
+      return transaction.officeLetterTemplate.create({
+        data,
+      });
     });
 
     response.status(201).json(parseTemplate(template));
@@ -64,9 +74,22 @@ officeTemplateRoutes.put(
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const input = officeTemplateInput.parse(request.body);
-    const template = await prisma.officeLetterTemplate.update({
-      data: templateData(input),
-      where: { id },
+    const data = templateData(input);
+    const template = await prisma.$transaction(async (transaction) => {
+      if (input.active) {
+        await transaction.officeLetterTemplate.updateMany({
+          data: { active: false },
+          where: {
+            active: true,
+            id: { not: id },
+          },
+        });
+      }
+
+      return transaction.officeLetterTemplate.update({
+        data,
+        where: { id },
+      });
     });
 
     response.json(parseTemplate(template));

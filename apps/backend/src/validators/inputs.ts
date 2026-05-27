@@ -298,12 +298,81 @@ export const entryInput = movementBase.extend({
   warehouseId: z.string().min(1, "Escolha um almoxarifado."),
 });
 
-export const entryRequestInput = movementBase.extend({
-  warehouseId: z.string().min(1, "Escolha um almoxarifado."),
+const entryRequestItemInput = z.object({
+  productId: z.string().min(1, "Escolha um produto."),
+  quantity: z.coerce.number().int().positive("Informe uma quantidade maior que zero."),
 });
+
+export const entryRequestInput = z
+  .object({
+    items: z.array(entryRequestItemInput).optional(),
+    movementDate: z.coerce.date(),
+    observation: optionalText,
+    productId: z.string().min(1, "Escolha um produto.").optional(),
+    quantity: z.coerce
+      .number()
+      .int()
+      .positive("Informe uma quantidade maior que zero.")
+      .optional(),
+    warehouseId: z.string().min(1, "Escolha um almoxarifado."),
+  })
+  .superRefine((value, context) => {
+    if (value.items?.length) {
+      return;
+    }
+
+    if (!value.productId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Escolha ao menos um produto.",
+        path: ["productId"],
+      });
+    }
+
+    if (value.quantity === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Informe uma quantidade maior que zero.",
+        path: ["quantity"],
+      });
+    }
+  })
+  .transform((value) => {
+    const items =
+      value.items?.length
+        ? value.items
+        : [
+            {
+              productId: value.productId ?? "",
+              quantity: value.quantity ?? 0,
+            },
+          ];
+    const primaryItem = items[0];
+
+    return {
+      ...value,
+      items,
+      productId: value.productId ?? primaryItem?.productId ?? "",
+      quantity: value.quantity ?? primaryItem?.quantity ?? 0,
+    };
+  });
+
+const entryRequestApprovalItemInput = z
+  .object({
+    id: z.string().min(1).optional(),
+    productId: z.string().min(1).optional(),
+    quantity: z.coerce
+      .number()
+      .int()
+      .positive("Informe uma quantidade maior que zero."),
+  })
+  .refine((item) => item.id || item.productId, {
+    message: "Informe o item aprovado.",
+  });
 
 export const entryRequestApprovalInput = z.object({
   invoiceId: z.string().min(1).optional().nullable(),
+  items: z.array(entryRequestApprovalItemInput).optional(),
   quantity: z.coerce
     .number()
     .int()

@@ -233,6 +233,9 @@ function OfficeTemplatesTab({
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(
     null,
   );
+  const [togglingTemplateId, setTogglingTemplateId] = useState<string | null>(
+    null,
+  );
   const [message, setMessage] = useState<SettingsMessage | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const resolvedOfficeLogoUrl = resolveAssetUrl(officeLogoUrl);
@@ -410,6 +413,52 @@ function OfficeTemplatesTab({
     }
   }
 
+  async function toggleTemplateActive(
+    template: OfficeLetterTemplate,
+    active: boolean,
+  ) {
+    setTogglingTemplateId(template.id);
+    setMessage(null);
+
+    try {
+      await api<OfficeLetterTemplate>(`/office-templates/${template.id}`, {
+        body: JSON.stringify({
+          active,
+          contentHtml: template.contentHtml,
+          description: template.description ?? "",
+          name: template.name,
+          subject: template.subject,
+        }),
+        method: "PUT",
+      });
+      templates.setData((current) =>
+        current.map((currentTemplate) => ({
+          ...currentTemplate,
+          active: active
+            ? currentTemplate.id === template.id
+            : currentTemplate.id === template.id
+              ? false
+              : currentTemplate.active,
+        })),
+      );
+      setMessage({
+        kind: "success",
+        text: active ? "Modelo ativado." : "Modelo inativado.",
+      });
+      await templates.reload();
+    } catch (caughtError) {
+      setMessage({
+        kind: "error",
+        text:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Falha ao alterar status do modelo.",
+      });
+    } finally {
+      setTogglingTemplateId(null);
+    }
+  }
+
   function templateVariablesLabel(template: OfficeLetterTemplate) {
     return template.variables.length
       ? template.variables.map((variable) => `{{${variable}}}`).join(", ")
@@ -499,11 +548,21 @@ function OfficeTemplatesTab({
             },
             {
               cell: (template) => (
-                <Badge variant={template.active ? "success" : "zero"}>
-                  {template.active ? "Ativo" : "Inativo"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    aria-label={`${template.active ? "Inativar" : "Ativar"} ${template.name}`}
+                    checked={template.active}
+                    disabled={togglingTemplateId === template.id}
+                    onCheckedChange={(active) => {
+                      void toggleTemplateActive(template, active);
+                    }}
+                  />
+                  <Badge variant={template.active ? "success" : "zero"}>
+                    {template.active ? "Ativo" : "Inativo"}
+                  </Badge>
+                </div>
               ),
-              header: "Status",
+              header: "Ativo",
               key: "status",
             },
             {

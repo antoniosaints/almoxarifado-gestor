@@ -6,6 +6,10 @@ import type { EntryRequest, TransferRequest } from "@/lib/types";
 import { RequestsPage } from "./requests-page";
 
 const product = {
+  category: {
+    id: "office",
+    name: "Expediente",
+  },
   code: "0000001",
   id: "paper",
   name: "Papel A4",
@@ -13,6 +17,21 @@ const product = {
     abbreviation: "PCT",
     id: "pack",
     name: "Pacote",
+  },
+};
+
+const secondProduct = {
+  category: {
+    id: "office",
+    name: "Expediente",
+  },
+  code: "0000002",
+  id: "pen",
+  name: "Caneta azul",
+  unit: {
+    abbreviation: "UN",
+    id: "unit",
+    name: "Unidade",
   },
 };
 
@@ -350,6 +369,85 @@ describe("RequestsPage", () => {
     expect(screen.getByLabelText("Produto")).toBeInTheDocument();
   });
 
+  it("sends multiple items when creating a direct entry request", async () => {
+    let requestPayload: unknown;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/entry-requests" && init?.method === "POST") {
+        requestPayload = JSON.parse(String(init.body));
+
+        return new Response(JSON.stringify({ id: "new-request" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+
+      const payload =
+        url.pathname === "/entry-requests"
+          ? []
+          : url.pathname === "/transfer-requests"
+            ? []
+            : url.pathname === "/warehouses"
+              ? [warehouse]
+              : url.pathname === "/entry-requests/available-products"
+                ? [product, secondProduct]
+                : [];
+
+      return new Response(JSON.stringify(payload), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <RequestsPage />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Solicitar" }));
+    await screen.findByText("0000001 - Papel A4");
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar item" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Produto 2")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByLabelText("Produto 2"));
+    fireEvent.click(await screen.findByRole("button", { name: "0000002 - Caneta azul" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Solicitar entrada" });
+    const quantities = within(dialog).getAllByLabelText("Quantidade");
+    fireEvent.change(quantities[0], { target: { value: "3" } });
+    fireEvent.change(quantities[1], { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar solicitação" }));
+
+    await waitFor(() => {
+      expect(requestPayload).toMatchObject({
+        items: [
+          { productId: product.id, quantity: 3 },
+          { productId: secondProduct.id, quantity: 2 },
+        ],
+        productId: product.id,
+        quantity: 3,
+      });
+    });
+  });
+
   it("shows approval stock summary and sends adjusted quantity", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -357,6 +455,12 @@ describe("RequestsPage", () => {
       if (url.pathname === "/entry-requests/entry-request/approve") {
         expect(init?.method).toBe("POST");
         expect(JSON.parse(String(init?.body))).toMatchObject({
+          items: [
+            {
+              productId: product.id,
+              quantity: 2,
+            },
+          ],
           quantity: 2,
         });
 
