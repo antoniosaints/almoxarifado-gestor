@@ -93,7 +93,7 @@ function movementLabel(kind: MovementFormProps["kind"]) {
   }
 
   if (kind === "output") {
-    return "Saida avulsa";
+    return "Saída avulsa";
   }
 
   return "Transferir";
@@ -487,7 +487,7 @@ function InvoiceFields({
           <Form onSubmit={saveSupplier}>
             {supplierMessage ? <ResourceError message={supplierMessage} /> : null}
             <FormField>
-              <Label htmlFor="quick-supplier-name">Razao social</Label>
+              <Label htmlFor="quick-supplier-name">Razão social</Label>
               <Input
                 id="quick-supplier-name"
                 onChange={(event) =>
@@ -607,7 +607,7 @@ function MovementForm({
       setMinimumQuantity("0");
       setMessage(
         kind === "entryRequest"
-          ? "Solicitacao enviada."
+          ? "Solicitação enviada."
           : kind === "transfer"
             ? "Transferência enviada para recebimento."
             : "Movimentação registrada.",
@@ -628,7 +628,7 @@ function MovementForm({
         <Alert
           className={
             message === "Movimentação registrada." ||
-            message === "Solicitacao enviada." ||
+            message === "Solicitação enviada." ||
             message === "Transferência enviada para recebimento."
               ? "border-emerald-200 bg-emerald-50 text-emerald-950"
               : "border-rose-200 bg-rose-50 text-rose-950"
@@ -636,10 +636,10 @@ function MovementForm({
         >
           <AlertTitle>
             {message === "Movimentação registrada." ||
-            message === "Solicitacao enviada." ||
+            message === "Solicitação enviada." ||
             message === "Transferência enviada para recebimento."
               ? "Pronto"
-              : "Atencao"}
+              : "Atenção"}
           </AlertTitle>
           <AlertDescription className="text-current">
             {message}
@@ -667,7 +667,7 @@ function MovementForm({
           <SearchSelect
             ariaLabel="Produto"
             disabled={Boolean(lockedProduct)}
-            emptyMessage="Nenhum produto disponivel."
+            emptyMessage="Nenhum produto disponível."
             id={`${kind}-product`}
             onValueChange={setProductId}
             options={productOptions
@@ -702,7 +702,7 @@ function MovementForm({
           <Input
             id="output-destination"
             onChange={(event) => setDestinationNote(event.target.value)}
-            placeholder="Ex.: manutencao da escola municipal"
+            placeholder="Ex.: manutenção da escola municipal"
             value={destinationNote}
           />
         </FormField>
@@ -1301,7 +1301,7 @@ function BulkStockActionDialog({
               ))}
               {!stocks.length ? (
                 <p className="p-3 text-sm text-muted-foreground">
-                  Nenhum estoque disponivel.
+                  Nenhum estoque disponível.
                 </p>
               ) : null}
             </div>
@@ -1454,7 +1454,7 @@ function StockTable({
                         disabled={stock.currentQuantity <= 0}
                         initialProductId={stock.productId}
                         kind="output"
-                        label="Saida avulsa"
+                        label="Saída avulsa"
                         lockedProduct={stock.product}
                         onSaved={onMovementSaved}
                         products={[stock.product]}
@@ -1507,7 +1507,7 @@ function StockTable({
                         disabled={stock.currentQuantity <= 0}
                         initialProductId={stock.productId}
                         kind="output"
-                        label="Saida avulsa"
+                        label="Saída avulsa"
                         lockedProduct={stock.product}
                         onSaved={onMovementSaved}
                         products={[stock.product]}
@@ -2183,7 +2183,7 @@ function WarehouseCsvImportDialog({
                         </TableCell>
                         <TableCell>
                           <SearchSelect
-                            ariaLabel={`Acao da linha ${row.rowNumber}`}
+                            ariaLabel={`Ação da linha ${row.rowNumber}`}
                             id={`stock-csv-row-${row.index}`}
                             onValueChange={(value) =>
                               setRowActions((current) => ({
@@ -2205,7 +2205,7 @@ function WarehouseCsvImportDialog({
 
             <Button disabled={!canSubmit || saving || previewLoading} type="submit">
               <Upload className="h-4 w-4" />
-              {saving ? "Importando..." : "Confirmar importacao"}
+              {saving ? "Importando..." : "Confirmar importação"}
             </Button>
           </Form>
         </DialogContent>
@@ -2527,12 +2527,12 @@ export function WarehouseDetailPage() {
         />
         <SummaryCard
           icon={<PackagePlus className="h-4 w-4" />}
-          label="Entradas no mes"
+          label="Entradas no mês"
           value={monthEntries}
         />
         <SummaryCard
           icon={<PackageMinus className="h-4 w-4" />}
-          label="Saidas no mes"
+          label="Saídas no mês"
           value={monthOutputs}
         />
       </div>

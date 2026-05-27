@@ -105,7 +105,7 @@ export function InsightsPage() {
   const { totals } = insights.data;
   const movementChartData = [
     { name: "Entradas", path: "/movements", value: totals.monthlyEntries },
-    { name: "Saidas", path: "/movements", value: totals.monthlyOutputs },
+    { name: "Saídas", path: "/movements", value: totals.monthlyOutputs },
     { name: "Transferências", path: "/requests", value: totals.monthlyTransfers },
     { name: "Pendências", path: "/requests", value: totals.pendingRequests },
   ];
@@ -382,7 +382,7 @@ export function InsightsPage() {
                 </Button>
               ),
               cellClassName: "text-right",
-              header: "Acao",
+              header: "Ação",
               headerClassName: "text-right",
               key: "action",
             },
@@ -458,7 +458,7 @@ export function InsightsPage() {
                 </Button>
               ),
               cellClassName: "text-right",
-              header: "Acao",
+              header: "Ação",
               headerClassName: "text-right",
               key: "action",
             },
@@ -515,7 +515,7 @@ export function InsightsPage() {
               },
             ]}
             data={insights.data.topProducts}
-            emptyMessage="Nenhum produto movimentado neste mes."
+            emptyMessage="Nenhum produto movimentado neste mês."
             getRowId={(product) => product.productId}
             initialPageSize={5}
             searchPlaceholder="Buscar produto..."

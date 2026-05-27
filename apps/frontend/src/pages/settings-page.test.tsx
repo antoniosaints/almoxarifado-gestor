@@ -76,7 +76,7 @@ describe("SettingsPage", () => {
               ? (templatePayload as { contentHtml: string }).contentHtml
               : "",
             id: "template-1",
-            name: "Oficio fornecedor",
+            name: "Ofício fornecedor",
             subject: "Aviso",
             variables: ["nome_empresa"],
           }),
@@ -104,17 +104,17 @@ describe("SettingsPage", () => {
 
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /oficios/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /ofícios/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Novo modelo" }));
     fireEvent.change(screen.getByLabelText("Nome do modelo"), {
-      target: { value: "Oficio fornecedor" },
+      target: { value: "Ofício fornecedor" },
     });
     fireEvent.change(screen.getByLabelText("Assunto"), {
       target: { value: "Aviso" },
     });
     fireEvent.click(screen.getByRole("button", { name: "{{nome_empresa}}" }));
 
-    expect(screen.getByLabelText("Conteudo do oficio")).toHaveTextContent(
+    expect(screen.getByLabelText("Conteúdo do ofício")).toHaveTextContent(
       "{{nome_empresa}}",
     );
 
@@ -123,7 +123,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(templatePayload).toMatchObject({
         contentHtml: expect.stringContaining("{{nome_empresa}}"),
-        name: "Oficio fornecedor",
+        name: "Ofício fornecedor",
         subject: "Aviso",
       });
     });
@@ -159,11 +159,11 @@ describe("SettingsPage", () => {
             {
               active: true,
               contentHtml:
-                "<p>OFICIO <strong>{{oficio_numero_ano}}</strong></p>",
+                "<p>OFÍCIO <strong>{{oficio_numero_ano}}</strong></p>",
               description: "Modelo existente",
               id: "template-1",
               name: "Modelo existente",
-              subject: "Solicitacao",
+              subject: "Solicitação",
               variables: ["oficio_numero_ano"],
             },
           ]),
@@ -184,12 +184,12 @@ describe("SettingsPage", () => {
 
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /oficios/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /ofícios/i }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Editar Modelo existente" }),
     );
 
-    const editor = screen.getByLabelText("Conteudo do oficio");
+    const editor = screen.getByLabelText("Conteúdo do ofício");
 
     await waitFor(() => {
       expect(editor.querySelector("strong")).not.toBeNull();
@@ -242,7 +242,7 @@ describe("SettingsPage", () => {
               description: "Modelo principal",
               id: "template-1",
               name: "Modelo principal",
-              subject: "Solicitacao",
+              subject: "Solicitação",
               variables: [],
             },
             {
@@ -251,7 +251,7 @@ describe("SettingsPage", () => {
               description: "Modelo reserva",
               id: "template-2",
               name: "Modelo reserva",
-              subject: "Solicitacao reserva",
+              subject: "Solicitação reserva",
               variables: [],
             },
           ]),
@@ -272,7 +272,7 @@ describe("SettingsPage", () => {
 
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /oficios/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /ofícios/i }));
     fireEvent.click(
       await screen.findByRole("switch", { name: "Ativar Modelo reserva" }),
     );
@@ -282,7 +282,7 @@ describe("SettingsPage", () => {
         active: true,
         contentHtml: "<p>OFICIO reserva</p>",
         name: "Modelo reserva",
-        subject: "Solicitacao reserva",
+        subject: "Solicitação reserva",
       });
     });
     expect(await screen.findByText("Modelo ativado.")).toBeInTheDocument();
@@ -314,7 +314,7 @@ describe("SettingsPage", () => {
                     description: "Modelo existente",
                     id: "template-1",
                     name: "Modelo existente",
-                    subject: "Solicitacao",
+                    subject: "Solicitação",
                     variables: [],
                   },
                 ],
@@ -336,7 +336,7 @@ describe("SettingsPage", () => {
 
     render(<SettingsPage />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /oficios/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /ofícios/i }));
     fireEvent.click(
       await screen.findByRole("button", { name: "Excluir Modelo existente" }),
     );
@@ -348,6 +348,6 @@ describe("SettingsPage", () => {
         expect.objectContaining({ method: "DELETE" }),
       );
     });
-    expect(await screen.findByText("Modelo de oficio excluido.")).toBeInTheDocument();
+    expect(await screen.findByText("Modelo de ofício excluído.")).toBeInTheDocument();
   });
 });

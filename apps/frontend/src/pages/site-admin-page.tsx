@@ -86,11 +86,11 @@ const collectionConfigs: CollectionConfig[] = [
     collection: "banners",
     description: "Gerencie os banners e chamadas do carrossel principal.",
     fields: [
-      { label: "Titulo", name: "title", type: "text" },
-      { label: "Subtitulo", name: "subtitle", type: "textarea" },
+      { label: "Título", name: "title", type: "text" },
+      { label: "Subtítulo", name: "subtitle", type: "textarea" },
       { label: "URL da imagem", name: "imageUrl", type: "text" },
-      { label: "Texto do botao", name: "buttonLabel", type: "text" },
-      { label: "Link do botao", name: "buttonUrl", type: "text" },
+      { label: "Texto do botão", name: "buttonLabel", type: "text" },
+      { label: "Link do botão", name: "buttonUrl", type: "text" },
       { label: "Ordem", name: "sortOrder", type: "number" },
       { label: "Ativo", name: "active", type: "checkbox" },
     ],
@@ -104,7 +104,7 @@ const collectionConfigs: CollectionConfig[] = [
       { label: "Chave", name: "key", type: "text" },
       { label: "Nome", name: "name", type: "text" },
       { label: "Resumo", name: "summary", type: "textarea" },
-      { label: "Descricao", name: "description", type: "textarea" },
+      { label: "Descrição", name: "description", type: "textarea" },
       { label: "URL da imagem", name: "imageUrl", type: "text" },
       { label: "Recursos", name: "features", type: "lines" },
       { label: "Ordem", name: "sortOrder", type: "number" },
@@ -115,26 +115,26 @@ const collectionConfigs: CollectionConfig[] = [
   },
   {
     collection: "features",
-    description: "Cards de beneficios e etapas de implantacao.",
+    description: "Cards de benefícios e etapas de implantação.",
     fields: [
-      { label: "Titulo", name: "title", type: "text" },
-      { label: "Descricao", name: "description", type: "textarea" },
+      { label: "Título", name: "title", type: "text" },
+      { label: "Descrição", name: "description", type: "textarea" },
       { label: "Grupo", name: "group", type: "text" },
-      { label: "Icone", name: "icon", type: "text" },
+      { label: "Ícone", name: "icon", type: "text" },
       { label: "Ordem", name: "sortOrder", type: "number" },
       { label: "Ativo", name: "active", type: "checkbox" },
     ],
-    newLabel: "Novo beneficio",
-    title: "Beneficios",
+    newLabel: "Novo benefício",
+    title: "Benefícios",
   },
   {
     collection: "posts",
-    description: "Conteudos e novidades para a area publica.",
+    description: "Conteúdos e novidades para a área pública.",
     fields: [
-      { label: "Titulo", name: "title", type: "text" },
+      { label: "Título", name: "title", type: "text" },
       { label: "Slug", name: "slug", type: "text" },
       { label: "Resumo", name: "summary", type: "textarea" },
-      { label: "Conteudo", name: "content", type: "textarea" },
+      { label: "Conteúdo", name: "content", type: "textarea" },
       { label: "URL da capa", name: "coverImageUrl", type: "text" },
       { label: "Publicado", name: "published", type: "checkbox" },
     ],
@@ -143,10 +143,10 @@ const collectionConfigs: CollectionConfig[] = [
   },
   {
     collection: "plans",
-    description: "Cards de planos futuros, sem exibicao de preco.",
+    description: "Cards de planos futuros, sem exibição de preço.",
     fields: [
       { label: "Nome", name: "name", type: "text" },
-      { label: "Descricao", name: "description", type: "textarea" },
+      { label: "Descrição", name: "description", type: "textarea" },
       { label: "Selo", name: "badge", type: "text" },
       { label: "CTA", name: "ctaLabel", type: "text" },
       { label: "Recursos", name: "features", type: "lines" },
@@ -348,7 +348,7 @@ function CollectionEditor({
         body,
         method: selected ? "PUT" : "POST",
       });
-      setMessage("Conteudo salvo.");
+      setMessage("Conteúdo salvo.");
       setSelectedId(null);
       await reload();
     } catch (caughtError) {
@@ -427,7 +427,7 @@ function CollectionEditor({
         <CardHeader>
           <CardTitle>{selected ? "Editar item" : config.newLabel}</CardTitle>
           <CardDescription>
-            Campos vazios podem ser preenchidos depois. Itens inativos nao aparecem no site publico.
+            Campos vazios podem ser preenchidos depois. Itens inativos não aparecem no site público.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -441,7 +441,7 @@ function CollectionEditor({
           ))}
           {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
           <Button disabled={saving} onClick={save}>
-            {saving ? "Salvando..." : selected ? "Salvar alteracoes" : "Criar item"}
+            {saving ? "Salvando..." : selected ? "Salvar alterações" : "Criar item"}
           </Button>
         </CardContent>
       </Card>
@@ -491,7 +491,7 @@ function SettingsEditor({
       <CardHeader>
         <CardTitle>Identidade e contato</CardTitle>
         <CardDescription>
-          Edite textos principais, CTAs, WhatsApp, logos e cores usados no site publico.
+          Edite textos principais, CTAs, WhatsApp, logos e cores usados no site público.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
@@ -512,7 +512,7 @@ function SettingsEditor({
           />
         </div>
         <div className="grid gap-2 md:col-span-2">
-          <Label htmlFor="site-headline">Titulo principal</Label>
+          <Label htmlFor="site-headline">Título principal</Label>
           <Input
             id="site-headline"
             onChange={(event) => update("headline", event.target.value)}
@@ -520,7 +520,7 @@ function SettingsEditor({
           />
         </div>
         <div className="grid gap-2 md:col-span-2">
-          <Label htmlFor="site-subheadline">Subtitulo</Label>
+          <Label htmlFor="site-subheadline">Subtítulo</Label>
           <Textarea
             id="site-subheadline"
             onChange={(event) => update("subheadline", event.target.value)}
@@ -536,7 +536,7 @@ function SettingsEditor({
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="site-email">Email</Label>
+          <Label htmlFor="site-email">E-mail</Label>
           <Input
             id="site-email"
             onChange={(event) => update("contactEmail", event.target.value)}
@@ -544,7 +544,7 @@ function SettingsEditor({
           />
         </div>
         <div className="grid gap-2 md:col-span-2">
-          <Label htmlFor="site-message">Mensagem padrao do WhatsApp</Label>
+          <Label htmlFor="site-message">Mensagem padrão do WhatsApp</Label>
           <Textarea
             id="site-message"
             onChange={(event) => update("whatsappMessage", event.target.value)}
@@ -576,7 +576,7 @@ function SettingsEditor({
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="site-secondary-cta">CTA secundario</Label>
+          <Label htmlFor="site-secondary-cta">CTA secundário</Label>
           <Input
             id="site-secondary-cta"
             onChange={(event) => update("secondaryCtaLabel", event.target.value)}
@@ -593,7 +593,7 @@ function SettingsEditor({
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="site-footer">Rodape</Label>
+          <Label htmlFor="site-footer">Rodapé</Label>
           <Input
             id="site-footer"
             onChange={(event) => update("footerText", event.target.value)}
@@ -664,9 +664,9 @@ export function SiteAdminPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Resumo do conteudo</CardTitle>
+          <CardTitle>Resumo do conteúdo</CardTitle>
           <CardDescription>
-            Sistemas e planos visiveis para revisao rapida antes de editar.
+            Sistemas e planos visíveis para revisão rápida antes de editar.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2">

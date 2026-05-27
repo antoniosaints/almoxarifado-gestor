@@ -101,7 +101,7 @@ export function DataTable<T>({
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Linhas</span>
             <Select
-              aria-label="Linhas por pagina"
+              aria-label="Linhas por página"
               className="h-9 w-20"
               onChange={(event) => setPageSize(Number(event.target.value))}
               value={String(pageSize)}
@@ -158,7 +158,7 @@ export function DataTable<T>({
         </span>
         <div className="flex items-center gap-2">
           <Button
-            aria-label="Pagina anterior"
+            aria-label="Página anterior"
             disabled={currentPage === 0}
             onClick={() => setPageIndex((value) => Math.max(0, value - 1))}
             size="sm"
@@ -171,13 +171,13 @@ export function DataTable<T>({
             {currentPage + 1} / {pageCount}
           </span>
           <Button
-            aria-label="Proxima pagina"
+            aria-label="Próxima página"
             disabled={currentPage >= pageCount - 1}
             onClick={() => setPageIndex((value) => Math.min(pageCount - 1, value + 1))}
             size="sm"
             variant="outline"
           >
-            Proxima
+            Próxima
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

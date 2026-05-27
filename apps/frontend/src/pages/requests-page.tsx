@@ -155,7 +155,7 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "Falha ao carregar oficio.",
+          : "Falha ao carregar ofício.",
       );
     } finally {
       setLoading(false);
@@ -197,12 +197,12 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
     <>
       <Button onClick={() => void openDialog()} size="sm" variant="outline">
         <FileText className="h-4 w-4" />
-        Ver oficio
+        Ver ofício
       </Button>
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Oficio da solicitacao</DialogTitle>
+            <DialogTitle>Ofício da solicitação</DialogTitle>
             <DialogDescription>
               {request.warehouse.name} - {entryRequestProductSummary(request)}
             </DialogDescription>

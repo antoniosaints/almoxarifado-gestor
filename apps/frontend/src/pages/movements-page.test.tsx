@@ -90,7 +90,7 @@ describe("MovementsTable", () => {
       }),
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Auditoria da movimentacao" });
+    const dialog = screen.getByRole("dialog", { name: "Auditoria da movimentação" });
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByText("Administrador")).toBeInTheDocument();
     expect(within(dialog).getByText("Almoxarifado Central")).toBeInTheDocument();

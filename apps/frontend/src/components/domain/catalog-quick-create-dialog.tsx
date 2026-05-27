@@ -67,7 +67,7 @@ export function CategoryCreateDialog({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nova categoria</DialogTitle>
-            <DialogDescription>Categoria usada no catalogo de produtos.</DialogDescription>
+            <DialogDescription>Categoria usada no catálogo de produtos.</DialogDescription>
           </DialogHeader>
           <Form onSubmit={submit}>
             {message ? <ResourceError message={message} /> : null}
@@ -146,7 +146,7 @@ export function UnitCreateDialog({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nova unidade</DialogTitle>
-            <DialogDescription>Nome e sigla usados no catalogo de produtos.</DialogDescription>
+            <DialogDescription>Nome e sigla usados no catálogo de produtos.</DialogDescription>
           </DialogHeader>
           <Form onSubmit={submit}>
             {message ? <ResourceError message={message} /> : null}

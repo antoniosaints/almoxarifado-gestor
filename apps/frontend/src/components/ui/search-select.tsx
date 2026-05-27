@@ -84,7 +84,7 @@ export function SearchSelect({
   ariaLabel,
   className,
   disabled,
-  emptyMessage = "Nenhuma opcao encontrada.",
+  emptyMessage = "Nenhuma opção encontrada.",
   id,
   onValueChange,
   options,

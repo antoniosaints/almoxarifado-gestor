@@ -20,7 +20,7 @@ const adminPayload = {
       badge: "Sob consulta",
       ctaLabel: "Consultar",
       description: "Plano inicial.",
-      features: ["Implantacao"],
+      features: ["Implantação"],
       highlighted: false,
       id: "plan-1",
       name: "Essencial",
@@ -30,16 +30,16 @@ const adminPayload = {
   posts: [],
   settings: {
     contactEmail: "contato@gema.local",
-    eyebrow: "Solucoes municipais",
+    eyebrow: "Soluções municipais",
     footerText: "GEMA Sistemas",
-    headline: "Sistemas para gestao publica",
+    headline: "Sistemas para gestão pública",
     id: "site",
     primaryColor: "#0f766e",
     primaryCtaLabel: "Falar com especialista",
     secondaryCtaLabel: "Conhecer sistemas",
     siteName: "GEMA Sistemas",
     subheadline: "Frota e almoxarifado.",
-    whatsappMessage: "Ola, quero conhecer os sistemas.",
+    whatsappMessage: "Olá, quero conhecer os sistemas.",
     whatsappNumber: "5599999999999",
   },
   systems: [
@@ -75,7 +75,7 @@ describe("SiteAdminPage", () => {
     expect(screen.getByText("Identidade e contato")).toBeInTheDocument();
     expect(screen.getAllByText("Banners").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Sistemas").length).toBeGreaterThan(0);
-    expect(screen.getByText("Beneficios")).toBeInTheDocument();
+    expect(screen.getByText("Benefícios")).toBeInTheDocument();
     expect(screen.getAllByText("Posts").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Planos").length).toBeGreaterThan(0);
     expect(screen.getByText("FAQ")).toBeInTheDocument();

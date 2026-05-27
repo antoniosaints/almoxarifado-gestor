@@ -127,7 +127,7 @@ export function UnitsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{draft?.id ? "Editar unidade" : "Nova unidade"}</DialogTitle>
-            <DialogDescription>Nome e sigla usados no catalogo de produtos.</DialogDescription>
+            <DialogDescription>Nome e sigla usados no catálogo de produtos.</DialogDescription>
           </DialogHeader>
           {draft ? (
             <Form onSubmit={save}>

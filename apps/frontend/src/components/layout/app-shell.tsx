@@ -103,7 +103,7 @@ const siteItems = [
   { icon: Settings, label: "Identidade", role: "ADMIN", to: "/admin/identity" },
   { icon: Image, label: "Banners", role: "ADMIN", to: "/admin/banners" },
   { icon: Boxes, label: "Sistemas", role: "ADMIN", to: "/admin/systems" },
-  { icon: PanelTop, label: "Beneficios", role: "ADMIN", to: "/admin/features" },
+  { icon: PanelTop, label: "Benefícios", role: "ADMIN", to: "/admin/features" },
   { icon: Newspaper, label: "Posts", role: "ADMIN", to: "/admin/posts" },
   { icon: CreditCard, label: "Planos", role: "ADMIN", to: "/admin/plans" },
   { icon: HelpCircle, label: "FAQ", role: "ADMIN", to: "/admin/faq" },
@@ -219,7 +219,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       .find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`))
       ?.label ??
     (isManagerSystem
-      ? "Gestao"
+      ? "Gestão"
       : isSiteSystem
         ? "Site"
         : isFleetSystem
@@ -349,7 +349,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-72">
                   <DropdownMenuItem onSelect={() => navigate("/requests")}>
-                    {summary.data.pendingEntryRequests} entradas aguardando analise
+                    {summary.data.pendingEntryRequests} entradas aguardando análise
                   </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => navigate("/requests")}>
                     {summary.data.pendingReceipts} transferências aguardando recebimento
@@ -361,7 +361,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">
                   <UserRound className="h-4 w-4" />
-                  {session?.user.name ?? "Usuario"}
+                  {session?.user.name ?? "Usuário"}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

@@ -5,9 +5,9 @@ export const isFleetSystem = systemType === "fleet" || systemType === "frota";
 export const isSiteSystem = systemType === "site";
 
 export const systemModeLabel = isManagerSystem
-  ? "Gestao de assinaturas"
+  ? "Gestão de assinaturas"
   : isSiteSystem
     ? "Site institucional"
   : isFleetSystem
     ? "Controle de frota"
-    : "Operacao de estoque";
+    : "Operação de estoque";

@@ -24,7 +24,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 
 export const movementLabels: Record<MovementType, string> = {
   ENTRADA: "Entrada",
-  SAIDA: "Saida",
+  SAIDA: "Saída",
   TRANSFERENCIA_ENTRADA: "Transferência recebida",
   TRANSFERENCIA_SAIDA: "Transferência enviada",
 };
@@ -104,9 +104,9 @@ function MovementDetailsDialog({
     <Dialog onOpenChange={onOpenChange} open={Boolean(movement)}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Auditoria da movimentacao</DialogTitle>
+          <DialogTitle>Auditoria da movimentação</DialogTitle>
           <DialogDescription>
-            Detalhes completos da operacao registrada no estoque.
+            Detalhes completos da operação registrada no estoque.
           </DialogDescription>
         </DialogHeader>
         {movement ? (
@@ -141,7 +141,7 @@ function MovementDetailsDialog({
                 value={`${movement.quantity} ${movement.product.unit.abbreviation}`}
               />
               <DetailItem
-                label="Valor unitario"
+                label="Valor unitário"
                 value={unitPrice === null ? "-" : formatCurrency(unitPrice)}
               />
               <DetailItem
@@ -159,7 +159,7 @@ function MovementDetailsDialog({
                     : "-"
                 }
               />
-              <DetailItem label="Observacao" value={movement.observation ?? "-"} />
+              <DetailItem label="Observação" value={movement.observation ?? "-"} />
             </div>
           </div>
         ) : null}
@@ -280,7 +280,7 @@ export function MovementsTable({
         {
           cell: (movement: Movement) => (
             <Button
-              aria-label={`Visualizar movimentacao de ${movement.product.name}`}
+              aria-label={`Visualizar movimentação de ${movement.product.name}`}
               onClick={() => setMovementToView(movement)}
               size="icon"
               type="button"

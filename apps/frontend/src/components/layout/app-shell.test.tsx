@@ -20,7 +20,7 @@ describe("AppShell", () => {
           }}
         >
           <AppShell>
-            <p>Conteudo</p>
+            <p>Conteúdo</p>
           </AppShell>
         </SessionProvider>
       </MemoryRouter>,
@@ -56,7 +56,7 @@ describe("AppShell", () => {
           }}
         >
           <ManagerAppShell>
-            <p>Conteudo</p>
+            <p>Conteúdo</p>
           </ManagerAppShell>
         </ManagerSessionProvider>
       </MemoryRouter>,
@@ -93,7 +93,7 @@ describe("AppShell", () => {
           }}
         >
           <FleetAppShell>
-            <p>Conteudo</p>
+            <p>Conteúdo</p>
           </FleetAppShell>
         </FleetSessionProvider>
       </MemoryRouter>,
@@ -131,7 +131,7 @@ describe("AppShell", () => {
           }}
         >
           <SiteAppShell>
-            <p>Conteudo</p>
+            <p>Conteúdo</p>
           </SiteAppShell>
         </SiteSessionProvider>
       </MemoryRouter>,
@@ -141,6 +141,7 @@ describe("AppShell", () => {
     expect(screen.getByText("Identidade")).toBeInTheDocument();
     expect(screen.getByText("Banners")).toBeInTheDocument();
     expect(screen.getByText("Sistemas")).toBeInTheDocument();
+    expect(screen.getByText("Benefícios")).toBeInTheDocument();
     expect(screen.getByText("Posts")).toBeInTheDocument();
     expect(screen.getByText("Planos")).toBeInTheDocument();
     expect(screen.queryByText("Almoxarifados")).not.toBeInTheDocument();

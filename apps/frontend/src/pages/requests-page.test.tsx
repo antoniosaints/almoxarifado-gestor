@@ -262,7 +262,7 @@ describe("RequestsPage", () => {
                     status: "PENDING",
                     warehouseId: "health",
                   },
-                  subject: "Solicitacao de material/equipamento",
+                  subject: "Solicitação de material/equipamento",
                   year: 2026,
                 }
               : url.pathname === "/transfer-requests"
@@ -298,10 +298,10 @@ describe("RequestsPage", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Ver oficio" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ver ofício" }));
 
     const dialog = await screen.findByRole("dialog", {
-      name: "Oficio da solicitacao",
+      name: "Ofício da solicitação",
     });
 
     expect(within(dialog).getByText("Saude")).toBeInTheDocument();

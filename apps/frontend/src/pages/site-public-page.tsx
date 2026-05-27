@@ -31,7 +31,7 @@ const fallbackSiteContent: SiteContent = {
       id: "default-banner",
       sortOrder: 1,
       subtitle:
-        "Controle estoque, veiculos, documentos e indicadores com implantacao assistida.",
+        "Controle estoque, veículos, documentos e indicadores com implantação assistida.",
       title: "Sistemas profissionais para prefeituras",
     },
   ],
@@ -39,17 +39,17 @@ const fallbackSiteContent: SiteContent = {
     {
       active: true,
       answer:
-        "Nao. O contato e feito por WhatsApp para entender a demanda e montar a melhor proposta.",
+        "Não. O contato é feito por WhatsApp para entender a demanda e montar a melhor proposta.",
       id: "faq-price",
-      question: "O site mostra precos?",
+      question: "O site mostra preços?",
       sortOrder: 1,
     },
     {
       active: true,
       answer:
-        "Sim. A prefeitura pode iniciar por Frota, Almoxarifado ou pelos dois modulos.",
+        "Sim. A prefeitura pode iniciar por Frota, Almoxarifado ou pelos dois módulos.",
       id: "faq-modules",
-      question: "Posso comecar por um modulo?",
+      question: "Posso começar por um módulo?",
       sortOrder: 2,
     },
   ],
@@ -57,7 +57,7 @@ const fallbackSiteContent: SiteContent = {
     {
       active: true,
       description:
-        "Historico de movimentacoes, responsaveis e indicadores para acompanhar a operacao.",
+        "Histórico de movimentações, responsáveis e indicadores para acompanhar a operação.",
       group: "benefits",
       id: "benefit-control",
       sortOrder: 1,
@@ -75,31 +75,31 @@ const fallbackSiteContent: SiteContent = {
     {
       active: true,
       description:
-        "Relatorios e registros ajudam na prestacao de contas e na tomada de decisao.",
+        "Relatórios e registros ajudam na prestação de contas e na tomada de decisão.",
       group: "benefits",
       id: "benefit-audit",
       sortOrder: 3,
-      title: "Auditoria e transparencia",
+      title: "Auditoria e transparência",
     },
     {
       active: true,
-      description: "Mapeamos cadastros, permissoes e prioridades da equipe.",
+      description: "Mapeamos cadastros, permissões e prioridades da equipe.",
       group: "process",
       id: "process-diagnosis",
       sortOrder: 1,
-      title: "Diagnostico",
+      title: "Diagnóstico",
     },
     {
       active: true,
-      description: "Configuramos os modulos e acompanhamos os primeiros usos.",
+      description: "Configuramos os módulos e acompanhamos os primeiros usos.",
       group: "process",
       id: "process-setup",
       sortOrder: 2,
-      title: "Implantacao",
+      title: "Implantação",
     },
     {
       active: true,
-      description: "Treinamento e suporte para manter a operacao evoluindo.",
+      description: "Treinamento e suporte para manter a operação evoluindo.",
       group: "process",
       id: "process-support",
       sortOrder: 3,
@@ -112,7 +112,7 @@ const fallbackSiteContent: SiteContent = {
       badge: "Sob consulta",
       ctaLabel: "Consultar",
       description: "Para iniciar com um sistema e organizar a rotina principal.",
-      features: ["Implantacao assistida", "Usuarios administrativos", "Relatorios"],
+      features: ["Implantação assistida", "Usuários administrativos", "Relatórios"],
       highlighted: false,
       id: "plan-essential",
       name: "Essencial",
@@ -123,10 +123,10 @@ const fallbackSiteContent: SiteContent = {
       badge: "Mais completo",
       ctaLabel: "Falar com especialista",
       description: "Para equipes que precisam operar Frota e Almoxarifado juntos.",
-      features: ["Dois modulos", "Auditoria", "Suporte de implantacao"],
+      features: ["Dois módulos", "Auditoria", "Suporte de implantação"],
       highlighted: true,
       id: "plan-management",
-      name: "Gestao Municipal",
+      name: "Gestão Municipal",
       sortOrder: 2,
     },
   ],
@@ -136,16 +136,16 @@ const fallbackSiteContent: SiteContent = {
       id: "post-default",
       published: true,
       slug: "gestao-publica-digital",
-      summary: "Como dados confiaveis melhoram controle, prestacao de contas e rotina.",
-      title: "Gestao publica digital com rastreabilidade",
+      summary: "Como dados confiáveis melhoram controle, prestação de contas e rotina.",
+      title: "Gestão pública digital com rastreabilidade",
     },
   ],
   settings: {
     contactEmail: null,
-    eyebrow: "Solucoes para gestao publica",
+    eyebrow: "Soluções para gestão pública",
     faviconUrl: null,
-    footerText: "GEMA Sistemas - tecnologia para gestao publica.",
-    headline: "Sistemas municipais para controlar rotinas criticas",
+    footerText: "GEMA Sistemas - tecnologia para gestão pública.",
+    headline: "Sistemas municipais para controlar rotinas críticas",
     heroImageUrl: null,
     id: "site",
     logoUrl: null,
@@ -154,17 +154,17 @@ const fallbackSiteContent: SiteContent = {
     secondaryCtaLabel: "Conhecer sistemas",
     siteName: "GEMA Sistemas",
     subheadline:
-      "Frota e almoxarifado em uma plataforma pensada para equipes publicas que precisam de controle, rastreabilidade e suporte proximo.",
-    whatsappMessage: "Ola, quero conhecer os sistemas municipais.",
+      "Frota e almoxarifado em uma plataforma pensada para equipes públicas que precisam de controle, rastreabilidade e suporte próximo.",
+    whatsappMessage: "Olá, quero conhecer os sistemas municipais.",
     whatsappNumber: "5599999999999",
   },
   systems: [
     {
       active: true,
       description:
-        "Acompanhe veiculos, motoristas, abastecimentos, manutencoes, vencimentos e custos operacionais.",
+        "Acompanhe veículos, motoristas, abastecimentos, manutenções, vencimentos e custos operacionais.",
       features: [
-        "Cadastro de veiculos e motoristas",
+        "Cadastro de veículos e motoristas",
         "Alertas de vencimento",
         "Custos e consumo",
       ],
@@ -172,16 +172,16 @@ const fallbackSiteContent: SiteContent = {
       key: "frota",
       name: "Controle de Frota",
       sortOrder: 1,
-      summary: "Gestao completa da frota municipal.",
+      summary: "Gestão completa da frota municipal.",
     },
     {
       active: true,
       description:
-        "Controle almoxarifados, produtos, entradas, saidas, transferencias, notas fiscais e solicitacoes.",
+        "Controle almoxarifados, produtos, entradas, saídas, transferências, notas fiscais e solicitações.",
       features: [
         "Estoque por almoxarifado",
-        "Movimentacoes auditadas",
-        "Relatorios e documentos",
+        "Movimentações auditadas",
+        "Relatórios e documentos",
       ],
       id: "system-stock",
       key: "almoxarifado",
@@ -245,7 +245,7 @@ function HeroPreview() {
         <div className="flex items-center justify-between rounded-md bg-white/10 p-3 backdrop-blur">
           <div>
             <p className="text-xs text-white/65">Painel municipal</p>
-            <p className="text-lg font-semibold">Operacao integrada</p>
+            <p className="text-lg font-semibold">Operação integrada</p>
           </div>
           <Badge className="border-white/20 bg-white text-slate-950">Online</Badge>
         </div>
@@ -268,7 +268,7 @@ function HeroPreview() {
               <span className="text-xs text-slate-500">Hoje</span>
             </div>
             <div className="space-y-3">
-              {["Entrada de materiais", "Manutencao preventiva", "Transferencia interna"].map(
+              {["Entrada de materiais", "Manutenção preventiva", "Transferência interna"].map(
                 (item, index) => (
                   <div className="flex items-center gap-3" key={item}>
                     <span
@@ -324,13 +324,13 @@ export function SitePublicPage() {
               Sistemas
             </a>
             <a className="hover:text-slate-950" href="#beneficios">
-              Beneficios
+              Benefícios
             </a>
             <a className="hover:text-slate-950" href="#planos">
               Planos
             </a>
             <a className="hover:text-slate-950" href="#conteudos">
-              Conteudos
+              Conteúdos
             </a>
           </nav>
           <Button asChild className="hidden md:inline-flex">
@@ -411,9 +411,9 @@ export function SitePublicPage() {
       <section className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6" id="sistemas">
         <div className="mb-8 max-w-3xl">
           <p className="text-sm font-semibold uppercase text-teal-700">Sistemas</p>
-          <h2 className="mt-2 text-3xl font-semibold">Solucoes por rotina municipal</h2>
+          <h2 className="mt-2 text-3xl font-semibold">Soluções por rotina municipal</h2>
           <p className="mt-3 text-slate-600">
-            Comece pelos modulos que a prefeitura precisa agora e evolua com dados
+            Comece pelos módulos que a prefeitura precisa agora e evolua com dados
             consistentes.
           </p>
         </div>
@@ -454,7 +454,7 @@ export function SitePublicPage() {
       <section className="bg-white py-16" id="beneficios">
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <div className="mb-8 max-w-3xl">
-            <p className="text-sm font-semibold uppercase text-sky-700">Beneficios</p>
+            <p className="text-sm font-semibold uppercase text-sky-700">Benefícios</p>
             <h2 className="mt-2 text-3xl font-semibold">Mais controle sem complicar a equipe</h2>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
@@ -477,8 +477,8 @@ export function SitePublicPage() {
 
       <section className="mx-auto w-full max-w-7xl px-4 py-16 md:px-6">
         <div className="mb-8 max-w-3xl">
-          <p className="text-sm font-semibold uppercase text-amber-700">Implantacao</p>
-          <h2 className="mt-2 text-3xl font-semibold">Do diagnostico ao uso diario</h2>
+          <p className="text-sm font-semibold uppercase text-amber-700">Implantação</p>
+          <h2 className="mt-2 text-3xl font-semibold">Do diagnóstico ao uso diário</h2>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           {process.map((step, index) => (
@@ -497,9 +497,9 @@ export function SitePublicPage() {
         <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
           <div className="mb-8 max-w-3xl">
             <p className="text-sm font-semibold uppercase text-teal-300">Planos</p>
-            <h2 className="mt-2 text-3xl font-semibold">Opcoes para conversar com a equipe</h2>
+            <h2 className="mt-2 text-3xl font-semibold">Opções para conversar com a equipe</h2>
             <p className="mt-3 text-slate-300">
-              Sem precos publicos. Cada plano e ajustado depois de entender o cenario da prefeitura.
+              Sem preços públicos. Cada plano é ajustado depois de entender o cenário da prefeitura.
             </p>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
@@ -536,7 +536,7 @@ export function SitePublicPage() {
                   ))}
                 </div>
                 <Button asChild className="mt-6 w-full" variant={plan.highlighted ? "default" : "secondary"}>
-                  <a href={whatsappUrl(settings, `Ola, quero consultar o plano ${plan.name}.`)} rel="noreferrer" target="_blank">
+                  <a href={whatsappUrl(settings, `Olá, quero consultar o plano ${plan.name}.`)} rel="noreferrer" target="_blank">
                     {plan.ctaLabel}
                   </a>
                 </Button>
@@ -548,10 +548,10 @@ export function SitePublicPage() {
 
       <section className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-16 md:px-6 lg:grid-cols-[0.9fr_1.1fr]" id="conteudos">
         <div>
-          <p className="text-sm font-semibold uppercase text-sky-700">Conteudos</p>
-          <h2 className="mt-2 text-3xl font-semibold">Informacoes e novidades</h2>
+          <p className="text-sm font-semibold uppercase text-sky-700">Conteúdos</p>
+          <h2 className="mt-2 text-3xl font-semibold">Informações e novidades</h2>
           <p className="mt-3 text-slate-600">
-            Publique posts para orientar clientes, explicar modulos e apresentar novidades.
+            Publique posts para orientar clientes, explicar módulos e apresentar novidades.
           </p>
         </div>
         <div className="grid gap-3">
@@ -568,7 +568,7 @@ export function SitePublicPage() {
         <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 md:px-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
             <p className="text-sm font-semibold uppercase text-teal-700">FAQ</p>
-            <h2 className="mt-2 text-3xl font-semibold">Duvidas frequentes</h2>
+            <h2 className="mt-2 text-3xl font-semibold">Dúvidas frequentes</h2>
           </div>
           <div className="grid gap-3">
             {content.faqs.map((faq) => (

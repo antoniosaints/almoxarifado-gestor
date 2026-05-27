@@ -135,12 +135,12 @@ export function UsersPage() {
               <>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-medium">{user.name}</p>
-                  {user.isDefaultAdmin ? <Badge variant="low">Padrao</Badge> : null}
+                  {user.isDefaultAdmin ? <Badge variant="low">Padrão</Badge> : null}
                 </div>
                 <p className="text-xs text-muted-foreground">{user.email}</p>
               </>
             ),
-            header: "Usuario",
+            header: "Usuário",
             key: "user",
           },
           {
@@ -220,7 +220,7 @@ export function UsersPage() {
           [
             user.name,
             user.email,
-            user.isDefaultAdmin ? "padrao" : "",
+            user.isDefaultAdmin ? "padrão" : "",
             user.role === "ADMIN" ? "admin" : "operador",
             user.active ? "ativo" : "inativo",
             ...user.warehouseAssignments.map((assignment) => assignment.warehouse.name),
@@ -249,7 +249,7 @@ export function UsersPage() {
                   />
                 </FormField>
                 <FormField>
-                  <Label htmlFor="user-email">Email</Label>
+                  <Label htmlFor="user-email">E-mail</Label>
                   <Input
                     id="user-email"
                     onChange={(event) => setDraft({ ...draft, email: event.target.value })}
@@ -328,7 +328,7 @@ export function UsersPage() {
                   onChange={(event) => setDraft({ ...draft, active: event.target.checked })}
                   type="checkbox"
                 />
-                Usuario ativo
+                Usuário ativo
               </label>
               <Button type="submit">Salvar usuário</Button>
             </Form>

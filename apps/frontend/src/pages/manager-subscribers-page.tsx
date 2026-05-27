@@ -231,7 +231,7 @@ export function ManagerSubscribersPage() {
                   />
                 </FormField>
                 <FormField>
-                  <Label htmlFor="subscriber-email">Email</Label>
+                  <Label htmlFor="subscriber-email">E-mail</Label>
                   <Input
                     id="subscriber-email"
                     onChange={(event) => setDraft({ ...draft, email: event.target.value })}

@@ -229,7 +229,7 @@ function WarehouseReportDialog({
               ))}
               {!warehouses.length ? (
                 <p className="text-sm text-muted-foreground">
-                  Nenhum almoxarifado disponivel.
+                  Nenhum almoxarifado disponível.
                 </p>
               ) : null}
             </div>

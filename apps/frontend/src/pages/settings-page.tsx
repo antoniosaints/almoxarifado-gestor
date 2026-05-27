@@ -202,9 +202,9 @@ function createDefaultOfficeTemplateDraft(): OfficeTemplateDraft {
   return {
     active: true,
     contentHtml: defaultOfficeTemplateContentHtml,
-    description: "Modelo padrao para solicitacao de material por almoxarifado.",
-    name: "Solicitacao de material",
-    subject: "Solicitacao de material/equipamento",
+    description: "Modelo padrão para solicitação de material por almoxarifado.",
+    name: "Solicitação de material",
+    subject: "Solicitação de material/equipamento",
   };
 }
 
@@ -348,7 +348,7 @@ function OfficeTemplatesTab({
       !payload.subject.trim() ||
       !payload.contentHtml.trim()
     ) {
-      setEditorError("Informe nome, assunto e conteudo do oficio.");
+      setEditorError("Informe nome, assunto e conteúdo do ofício.");
       return;
     }
 
@@ -368,14 +368,14 @@ function OfficeTemplatesTab({
       );
 
       setSelectedTemplateId(saved.id);
-      setMessage({ kind: "success", text: "Modelo de oficio salvo." });
+      setMessage({ kind: "success", text: "Modelo de ofício salvo." });
       setEditing(false);
       await templates.reload();
     } catch (caughtError) {
       setEditorError(
           caughtError instanceof Error
             ? caughtError.message
-            : "Falha ao salvar modelo de oficio.",
+            : "Falha ao salvar modelo de ofício.",
       );
     } finally {
       setSaving(false);
@@ -398,7 +398,7 @@ function OfficeTemplatesTab({
         current.filter((template) => template.id !== templateToDelete.id),
       );
       setTemplateToDelete(null);
-      setMessage({ kind: "success", text: "Modelo de oficio excluido." });
+      setMessage({ kind: "success", text: "Modelo de ofício excluído." });
       await templates.reload();
     } catch (caughtError) {
       setMessage({
@@ -406,7 +406,7 @@ function OfficeTemplatesTab({
         text:
           caughtError instanceof Error
             ? caughtError.message
-            : "Falha ao excluir modelo de oficio.",
+            : "Falha ao excluir modelo de ofício.",
       });
     } finally {
       setDeletingTemplateId(null);
@@ -470,7 +470,7 @@ function OfficeTemplatesTab({
       <div className="grid gap-4 rounded-md border bg-background p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <ImageUrlField
           field="officeLogoUrl"
-          label="Logo do cabecalho do oficio"
+          label="Logo do cabeçalho do ofício"
           onUpload={onUpload}
           uploading={uploadingLogo}
           updateDraft={updateSettingsDraft}
@@ -511,7 +511,7 @@ function OfficeTemplatesTab({
       ) : null}
 
       {templates.loading ? (
-        <LoadingLine label="Carregando modelos de oficio..." />
+        <LoadingLine label="Carregando modelos de ofício..." />
       ) : templates.error ? (
         <ResourceError message={templates.error} />
       ) : (
@@ -522,7 +522,7 @@ function OfficeTemplatesTab({
                 <>
                   <p className="font-medium">{template.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {template.description || "Sem descricao"}
+                    {template.description || "Sem descrição"}
                   </p>
                 </>
               ),
@@ -543,7 +543,7 @@ function OfficeTemplatesTab({
                   {templateVariablesLabel(template)}
                 </p>
               ),
-              header: "Variaveis",
+              header: "Variáveis",
               key: "variables",
             },
             {
@@ -589,7 +589,7 @@ function OfficeTemplatesTab({
                 </div>
               ),
               cellClassName: "text-right",
-              header: "Acoes",
+              header: "Ações",
               headerClassName: "text-right",
               key: "actions",
             },
@@ -597,7 +597,7 @@ function OfficeTemplatesTab({
           data={templates.data}
           emptyMessage="Nenhum modelo cadastrado."
           getRowId={(template) => template.id}
-          searchPlaceholder="Buscar modelo, assunto ou variavel..."
+          searchPlaceholder="Buscar modelo, assunto ou variável..."
           searchText={(template) =>
             [
               template.name,
@@ -620,10 +620,10 @@ function OfficeTemplatesTab({
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
-              {selectedTemplateId ? "Editar modelo de oficio" : "Novo modelo de oficio"}
+              {selectedTemplateId ? "Editar modelo de ofício" : "Novo modelo de ofício"}
             </DialogTitle>
             <DialogDescription>
-              Configure os textos que serao usados na geracao do oficio.
+              Configure os textos que serão usados na geração do ofício.
             </DialogDescription>
           </DialogHeader>
           <Form onSubmit={saveTemplate}>
@@ -651,7 +651,7 @@ function OfficeTemplatesTab({
               </FormField>
             </div>
             <FormField>
-              <Label htmlFor="office-template-description">Descricao</Label>
+              <Label htmlFor="office-template-description">Descrição</Label>
               <Input
                 id="office-template-description"
                 onChange={(event) =>
@@ -672,10 +672,10 @@ function OfficeTemplatesTab({
                 <Bold className="h-4 w-4" />
               </Button>
               <Button
-                aria-label="Italico"
+                aria-label="Itálico"
                 onClick={() => formatContent("italic")}
                 size="icon"
-                title="Italico"
+                title="Itálico"
                 type="button"
                 variant="outline"
               >
@@ -702,10 +702,10 @@ function OfficeTemplatesTab({
                 <ListOrdered className="h-4 w-4" />
               </Button>
               <Button
-                aria-label="Alinhar a esquerda"
+                aria-label="Alinhar à esquerda"
                 onClick={() => formatContent("justifyLeft")}
                 size="icon"
-                title="Alinhar a esquerda"
+                title="Alinhar à esquerda"
                 type="button"
                 variant="outline"
               >
@@ -716,13 +716,13 @@ function OfficeTemplatesTab({
                 type="button"
                 variant="outline"
               >
-                Usar modelo padrao
+                Usar modelo padrão
               </Button>
             </div>
             <FormField>
-              <Label htmlFor="office-template-content">Conteudo do oficio</Label>
+              <Label htmlFor="office-template-content">Conteúdo do ofício</Label>
               <div
-                aria-label="Conteudo do oficio"
+                aria-label="Conteúdo do ofício"
                 aria-multiline="true"
                 className="min-h-48 rounded-md border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 contentEditable
@@ -735,7 +735,7 @@ function OfficeTemplatesTab({
             </FormField>
             <div className="space-y-2 rounded-md border bg-background p-3">
               <p className="text-xs font-medium uppercase text-muted-foreground">
-                Variaveis
+                Variáveis
               </p>
               <div className="flex flex-wrap gap-2">
                 {officeVariables.map((variable) => (
@@ -760,7 +760,7 @@ function OfficeTemplatesTab({
             </label>
             <div className="rounded-md border bg-background p-4">
               <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
-                Previa
+                Prévia
               </p>
               <div
                 className="prose prose-sm max-w-none dark:prose-invert"
@@ -803,9 +803,9 @@ function OfficeTemplatesTab({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Excluir modelo de oficio</DialogTitle>
+            <DialogTitle>Excluir modelo de ofício</DialogTitle>
             <DialogDescription>
-              O modelo sera removido da lista de modelos disponiveis.
+              O modelo será removido da lista de modelos disponíveis.
             </DialogDescription>
           </DialogHeader>
           {templateToDelete ? (
@@ -1058,7 +1058,7 @@ export function SettingsPage() {
           <TabsList>
             <TabsTrigger onClick={() => setActiveTab("appearance")} value="appearance">
               <Palette className="mr-1 h-4 w-4" />
-              Aparencia
+              Aparência
             </TabsTrigger>
             <TabsTrigger onClick={() => setActiveTab("brand")} value="brand">
               <Building2 className="mr-1 h-4 w-4" />
@@ -1074,7 +1074,7 @@ export function SettingsPage() {
             </TabsTrigger>
             <TabsTrigger onClick={() => setActiveTab("office")} value="office">
               <FileText className="mr-1 h-4 w-4" />
-              Oficios
+              Ofícios
             </TabsTrigger>
             <TabsTrigger onClick={() => setActiveTab("data")} value="data">
               <Database className="mr-1 h-4 w-4" />
@@ -1115,7 +1115,7 @@ export function SettingsPage() {
                   />
                 </FormField>
                 <FormField>
-                  <Label htmlFor="settings-primary-color-text">Cor primaria</Label>
+                  <Label htmlFor="settings-primary-color-text">Cor primária</Label>
                   <Input
                     id="settings-primary-color-text"
                     onChange={(event) => updateDraft("primaryColor", event.target.value)}
@@ -1285,7 +1285,7 @@ export function SettingsPage() {
                   value={draft.reportLogoUrl}
                 />
                 <FormField>
-                  <Label htmlFor="settings-report-footer">Rodape</Label>
+                  <Label htmlFor="settings-report-footer">Rodapé</Label>
                   <Textarea
                     id="settings-report-footer"
                     onChange={(event) => updateDraft("reportFooterText", event.target.value)}
@@ -1321,9 +1321,9 @@ export function SettingsPage() {
                       <p className="text-xs font-medium uppercase text-muted-foreground">
                         {draft.reportTitle}
                       </p>
-                      <p className="font-semibold">Relatorio de saldos de estoque</p>
+                      <p className="font-semibold">Relatório de saldos de estoque</p>
                       <p className="text-xs text-muted-foreground">
-                        Emitido por Usuario do sistema
+                        Emitido por Usuário do sistema
                       </p>
                     </div>
                   </div>

@@ -194,14 +194,14 @@ function SupplierManagementDialog({
           <DialogHeader>
             <DialogTitle>Fornecedores</DialogTitle>
             <DialogDescription>
-              Cadastre empresas para agilizar a criacao de notas fiscais.
+              Cadastre empresas para agilizar a criação de notas fiscais.
             </DialogDescription>
           </DialogHeader>
           {message ? <ResourceError message={message} /> : null}
           <Form onSubmit={submit}>
             <div className="grid gap-4 md:grid-cols-2">
               <FormField>
-                <Label htmlFor="supplier-name">Razao social</Label>
+                <Label htmlFor="supplier-name">Razão social</Label>
                 <Input
                   id="supplier-name"
                   onChange={(event) =>
@@ -323,7 +323,7 @@ function InvoiceXmlImportDialog({
   const [message, setMessage] = useState<string | null>(null);
   const productOptions = [
     {
-      label: "Automatico",
+      label: "Automático",
       searchText: "criar atualizar sugerido",
       value: automaticProductMappingValue,
     },
@@ -454,7 +454,7 @@ function InvoiceXmlImportDialog({
             <FormField>
               <Label htmlFor="invoice-import-warehouse">Almoxarifado</Label>
               <SearchSelect
-                ariaLabel="Almoxarifado da importacao"
+                ariaLabel="Almoxarifado da importação"
                 id="invoice-import-warehouse"
                 onValueChange={setWarehouseId}
                 options={warehouses.map((warehouse) => ({
@@ -469,7 +469,7 @@ function InvoiceXmlImportDialog({
             <FormField>
               <Label htmlFor="invoice-import-category">Categoria padrão</Label>
               <SearchSelect
-                ariaLabel="Categoria padrao dos novos produtos"
+                ariaLabel="Categoria padrão dos novos produtos"
                 id="invoice-import-category"
                 onValueChange={setCategoryId}
                 options={categories.map((category) => ({
@@ -522,7 +522,7 @@ function InvoiceXmlImportDialog({
                     </p>
                     <p>
                       {preview.invoice.number}
-                      {preview.invoice.series ? ` / serie ${preview.invoice.series}` : ""}
+                      {preview.invoice.series ? ` / série ${preview.invoice.series}` : ""}
                     </p>
                     <p className="text-muted-foreground">
                       {formatDate(preview.invoice.issueDate)}
@@ -530,7 +530,7 @@ function InvoiceXmlImportDialog({
                   </div>
                   <div>
                     <p className="text-xs font-medium uppercase text-muted-foreground">
-                      Endereco
+                      Endereço
                     </p>
                     <p>{preview.invoice.companyAddress ?? "-"}</p>
                     <p className="text-muted-foreground">
@@ -613,7 +613,7 @@ function InvoiceXmlImportDialog({
                                   updateProductMapping(item.index, productId)
                                 }
                                 options={productOptions}
-                                placeholder="Automatico"
+                                placeholder="Automático"
                                 searchPlaceholder="Buscar produto..."
                                 value={mappingValue}
                               />
@@ -639,7 +639,7 @@ function InvoiceXmlImportDialog({
               type="submit"
             >
               <Upload className="h-4 w-4" />
-              {saving ? "Importando..." : "Confirmar importacao"}
+              {saving ? "Importando..." : "Confirmar importação"}
             </Button>
           </Form>
         </DialogContent>
@@ -838,7 +838,7 @@ export function InvoiceMovementsDialog({
               </p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase text-muted-foreground">Endereco</p>
+              <p className="text-xs font-medium uppercase text-muted-foreground">Endereço</p>
               <p>{invoice.companyAddress ?? "-"}</p>
               <p className="text-muted-foreground">
                 {[invoice.companyCity, invoice.companyState].filter(Boolean).join(" / ") ||
@@ -848,7 +848,7 @@ export function InvoiceMovementsDialog({
             <div>
               <p className="text-xs font-medium uppercase text-muted-foreground">Nota</p>
               <p>
-                Serie {invoice.series ?? "-"} | Chave {invoice.invoiceKey ?? "-"}
+                Série {invoice.series ?? "-"} | Chave {invoice.invoiceKey ?? "-"}
               </p>
               <p className="text-muted-foreground">
                 CEP {invoice.companyZipCode ?? "-"} | Tel. {invoice.companyPhone ?? "-"}
@@ -1046,7 +1046,7 @@ export function InvoicesPage() {
           />
         </FormField>
         <FormField>
-          <Label htmlFor="invoice-to">Emissão ate</Label>
+          <Label htmlFor="invoice-to">Emissão até</Label>
           <Input
             id="invoice-to"
             onChange={(event) => setTo(event.target.value)}

@@ -236,7 +236,7 @@ export function CategoriesPage() {
         <TabsContent value="warehouses">
           <CategoryPanel
             createLabel="Nova categoria"
-            description="Agrupe almoxarifados por area municipal."
+            description="Agrupe almoxarifados por área municipal."
             items={warehouseCategories.data}
             onReload={warehouseCategories.reload}
             path="/warehouse-categories"
@@ -247,7 +247,7 @@ export function CategoriesPage() {
         <TabsContent value="products">
           <CategoryPanel
             createLabel="Nova categoria"
-            description="Organize produtos por uso e reposicao."
+            description="Organize produtos por uso e reposição."
             items={productCategories.data}
             onReload={productCategories.reload}
             path="/product-categories"

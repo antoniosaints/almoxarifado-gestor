@@ -115,14 +115,14 @@ export function LoginPage() {
               <Form onSubmit={submit}>
                 {error ? (
                   <Alert className="border-rose-200 bg-rose-50 text-rose-950">
-                    <AlertTitle>Entrada indisponivel</AlertTitle>
+                    <AlertTitle>Entrada indisponível</AlertTitle>
                     <AlertDescription className="text-rose-900">
                       {error}
                     </AlertDescription>
                   </Alert>
                 ) : null}
                 <FormField>
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">E-mail</Label>
                   <Input
                     id="email"
                     onChange={(event) => setEmail(event.target.value)}

@@ -197,7 +197,7 @@ describe("InvoiceMovementsDialog", () => {
               categoryId: "office",
               code: "0000002",
               id: "paper",
-              name: "Papel A4 catalogo",
+              name: "Papel A4 catálogo",
               unit: { abbreviation: "PCT", id: "pack", name: "Pacote" },
               unitId: "pack",
             },
@@ -255,8 +255,8 @@ describe("InvoiceMovementsDialog", () => {
     expect(screen.getByText("R$ 91,00")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Produto do item 1" }));
-    fireEvent.click(screen.getByText("0000002 - Papel A4 catalogo"));
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar importacao" }));
+    fireEvent.click(screen.getByText("0000002 - Papel A4 catálogo"));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar importação" }));
 
     await waitFor(() => {
       expect(importPayload).toMatchObject({
