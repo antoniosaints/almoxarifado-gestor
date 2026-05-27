@@ -99,11 +99,52 @@ describe("AppShell", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Veiculos")).toBeInTheDocument();
+    expect(screen.getByText(/Ve.culos/)).toBeInTheDocument();
     expect(screen.getByText("Motoristas")).toBeInTheDocument();
-    expect(screen.getByText("Operacoes")).toBeInTheDocument();
+    expect(screen.getByText(/Opera..es/)).toBeInTheDocument();
     expect(screen.getByText("Alertas")).toBeInTheDocument();
     expect(screen.queryByText("Almoxarifados")).not.toBeInTheDocument();
+    expect(screen.queryByText("Assinantes")).not.toBeInTheDocument();
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("shows the site admin navigation when VITE_TYPE_SYSTEM is site", async () => {
+    vi.stubEnv("VITE_TYPE_SYSTEM", "site");
+    vi.resetModules();
+
+    const [{ AppShell: SiteAppShell }, { SessionProvider: SiteSessionProvider }] =
+      await Promise.all([import("./app-shell"), import("@/lib/session")]);
+
+    render(
+      <MemoryRouter initialEntries={["/admin"]}>
+        <SiteSessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Admin",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <SiteAppShell>
+            <p>Conteudo</p>
+          </SiteAppShell>
+        </SiteSessionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByText("Site").length).toBeGreaterThan(0);
+    expect(screen.getByText("Identidade")).toBeInTheDocument();
+    expect(screen.getByText("Banners")).toBeInTheDocument();
+    expect(screen.getByText("Sistemas")).toBeInTheDocument();
+    expect(screen.getByText("Posts")).toBeInTheDocument();
+    expect(screen.getByText("Planos")).toBeInTheDocument();
+    expect(screen.queryByText("Almoxarifados")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ve.culos/)).not.toBeInTheDocument();
     expect(screen.queryByText("Assinantes")).not.toBeInTheDocument();
 
     vi.unstubAllEnvs();

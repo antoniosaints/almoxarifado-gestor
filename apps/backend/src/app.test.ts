@@ -1352,6 +1352,106 @@ describe("api", () => {
     });
   });
 
+  it("serves public site content and protects site admin management", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador-site@prefeitura.local",
+        name: "Operador site",
+        role: UserRole.OPERATOR,
+      },
+    });
+
+    const publicResponse = await request(app).get("/site/public");
+
+    expect(publicResponse.status).toBe(200);
+    expect(publicResponse.body.settings).toMatchObject({
+      primaryCtaLabel: "Falar com especialista",
+      siteName: "GEMA Sistemas",
+    });
+    expect(publicResponse.body.systems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "frota", name: "Controle de Frota" }),
+        expect.objectContaining({ key: "almoxarifado", name: "Almoxarifado" }),
+      ]),
+    );
+
+    const unauthenticated = await request(app).get("/site/admin/content");
+
+    expect(unauthenticated.status).toBe(401);
+
+    const denied = await request(app)
+      .put("/site/admin/settings")
+      .set("Authorization", authorizationFor(operator))
+      .send({
+        headline: "Gestao municipal em um so lugar",
+        primaryColor: "#0f766e",
+        siteName: "GEMA Sistemas",
+        whatsappNumber: "5599999999999",
+      });
+
+    expect(denied.status).toBe(403);
+
+    const settingsResponse = await request(app)
+      .put("/site/admin/settings")
+      .set("Authorization", authorizationFor(admin))
+      .send({
+        contactEmail: "contato@gema.local",
+        eyebrow: "Sistemas municipais",
+        footerText: "GEMA Sistemas",
+        headline: "Sistemas para gestao publica",
+        logoUrl: "/uploads/site/logo.png",
+        primaryColor: "#0f766e",
+        primaryCtaLabel: "Chamar no WhatsApp",
+        secondaryCtaLabel: "Conhecer solucoes",
+        siteName: "GEMA Sistemas Municipais",
+        subheadline: "Frota e almoxarifado com controle, relatorios e suporte.",
+        whatsappMessage: "Ola, quero conhecer os sistemas municipais.",
+        whatsappNumber: "5599999999999",
+      });
+
+    expect(settingsResponse.status).toBe(200);
+    expect(settingsResponse.body).toMatchObject({
+      contactEmail: "contato@gema.local",
+      siteName: "GEMA Sistemas Municipais",
+      whatsappNumber: "5599999999999",
+    });
+
+    const bannerResponse = await request(app)
+      .post("/site/admin/banners")
+      .set("Authorization", authorizationFor(admin))
+      .send({
+        active: true,
+        buttonLabel: "Falar agora",
+        buttonUrl: "whatsapp",
+        imageUrl: "/uploads/site/banner.png",
+        sortOrder: 2,
+        subtitle: "Implantacao assistida para equipes municipais.",
+        title: "Tecnologia pronta para sua rotina",
+      });
+
+    expect(bannerResponse.status).toBe(201);
+    expect(bannerResponse.body).toMatchObject({
+      active: true,
+      title: "Tecnologia pronta para sua rotina",
+    });
+
+    const adminContent = await request(app)
+      .get("/site/admin/content")
+      .set("Authorization", authorizationFor(admin));
+
+    expect(adminContent.status).toBe(200);
+    expect(adminContent.body.banners).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "Tecnologia pronta para sua rotina" }),
+      ]),
+    );
+  });
+
   it("rejects base64 image data in system settings payloads", async () => {
     const { user } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({
