@@ -103,6 +103,98 @@ export type SystemSettings = {
   systemName: string;
 };
 
+export type SiteSettings = {
+  contactEmail?: string | null;
+  eyebrow: string;
+  faviconUrl?: string | null;
+  footerText: string;
+  headline: string;
+  heroImageUrl?: string | null;
+  id: string;
+  logoUrl?: string | null;
+  primaryColor: string;
+  primaryCtaLabel: string;
+  secondaryCtaLabel: string;
+  siteName: string;
+  subheadline: string;
+  whatsappMessage: string;
+  whatsappNumber: string;
+};
+
+export type SiteBanner = {
+  active: boolean;
+  buttonLabel?: string | null;
+  buttonUrl?: string | null;
+  id: string;
+  imageUrl?: string | null;
+  sortOrder: number;
+  subtitle?: string | null;
+  title: string;
+};
+
+export type SiteSystem = {
+  active: boolean;
+  description?: string | null;
+  features: string[];
+  id: string;
+  imageUrl?: string | null;
+  key: string;
+  name: string;
+  sortOrder: number;
+  summary: string;
+};
+
+export type SiteFeature = {
+  active: boolean;
+  description: string;
+  group: string;
+  icon?: string | null;
+  id: string;
+  sortOrder: number;
+  title: string;
+};
+
+export type SitePost = {
+  content: string;
+  coverImageUrl?: string | null;
+  id: string;
+  published: boolean;
+  publishedAt?: string | null;
+  slug: string;
+  summary: string;
+  title: string;
+};
+
+export type SitePlan = {
+  active: boolean;
+  badge?: string | null;
+  ctaLabel: string;
+  description: string;
+  features: string[];
+  highlighted: boolean;
+  id: string;
+  name: string;
+  sortOrder: number;
+};
+
+export type SiteFaq = {
+  active: boolean;
+  answer: string;
+  id: string;
+  question: string;
+  sortOrder: number;
+};
+
+export type SiteContent = {
+  banners: SiteBanner[];
+  faqs: SiteFaq[];
+  features: SiteFeature[];
+  plans: SitePlan[];
+  posts: SitePost[];
+  settings: SiteSettings;
+  systems: SiteSystem[];
+};
+
 export type Supplier = {
   active: boolean;
   address?: string | null;

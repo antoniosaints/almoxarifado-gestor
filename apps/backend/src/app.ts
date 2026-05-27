@@ -17,6 +17,10 @@ import {
   publicSettingsRoutes,
   settingsRoutes,
 } from "./routes/settings-routes.js";
+import {
+  publicSiteRoutes,
+  siteAdminRoutes,
+} from "./routes/site-routes.js";
 import { stockRoutes } from "./routes/stock-routes.js";
 import { supplierRoutes } from "./routes/supplier-routes.js";
 import { transferRequestRoutes } from "./routes/transfer-request-routes.js";
@@ -43,8 +47,10 @@ app.get("/health", (_request, response) => {
 
 app.use("/auth", authRoutes);
 app.use("/settings", publicSettingsRoutes);
+app.use("/site", publicSiteRoutes);
 app.use(authenticate);
 app.use("/uploads", uploadRoutes);
+app.use("/site", siteAdminRoutes);
 app.use("/entry-requests", entryRequestRoutes);
 app.use("/insights", insightRoutes);
 app.use("/invoices", invoiceRoutes);

@@ -376,6 +376,121 @@ model SystemSettings {
   updatedAt             DateTime @updatedAt
 }
 
+model SiteSettings {
+  id                String   @id @default("site")
+  siteName          String   @default("GEMA Sistemas")
+  eyebrow           String   @default("Solucoes para gestao publica")
+  headline          String   @default("Sistemas municipais para controlar rotinas criticas")
+  subheadline       String   @default("Frota e almoxarifado em uma plataforma pensada para equipes publicas que precisam de controle, rastreabilidade e suporte proximo.")
+  primaryCtaLabel   String   @default("Falar com especialista")
+  secondaryCtaLabel String   @default("Conhecer solucoes")
+  heroImageUrl      String?
+  logoUrl           String?
+  faviconUrl        String?
+  primaryColor      String   @default("#0f766e")
+  whatsappNumber    String   @default("5599999999999")
+  whatsappMessage   String   @default("Ola, quero conhecer os sistemas municipais.")
+  contactEmail      String?
+  footerText        String   @default("GEMA Sistemas - tecnologia para gestao publica.")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model SiteBanner {
+  id          String   @id @default(cuid())
+  title       String
+  subtitle    String?
+  imageUrl    String?
+  buttonLabel String?
+  buttonUrl   String?
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
+  @@index([sortOrder])
+}
+
+model SiteSystem {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  name         String
+  summary      String
+  description  String?
+  imageUrl     String?
+  featuresJson String   @default("[]")
+  sortOrder    Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([active])
+  @@index([sortOrder])
+}
+
+model SiteFeature {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  icon        String?
+  group       String   @default("benefits")
+  sortOrder   Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
+  @@index([group])
+  @@index([sortOrder])
+}
+
+model SitePost {
+  id            String    @id @default(cuid())
+  title         String
+  slug          String    @unique
+  summary       String
+  content       String
+  coverImageUrl String?
+  published     Boolean   @default(false)
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([published])
+  @@index([publishedAt])
+}
+
+model SitePlan {
+  id           String   @id @default(cuid())
+  name         String
+  description  String
+  featuresJson String   @default("[]")
+  badge        String?
+  ctaLabel     String   @default("Consultar")
+  highlighted  Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([active])
+  @@index([sortOrder])
+}
+
+model SiteFaq {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+  @@index([sortOrder])
+}
+
 model ManagerSubscriber {
   id        String           @id @default(cuid())
   name      String

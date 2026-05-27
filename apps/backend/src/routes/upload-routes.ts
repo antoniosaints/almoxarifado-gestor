@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import {
   uploadSystemSettingsAsset,
 } from "../services/settings-service.js";
+import { uploadSiteAsset } from "../services/site-service.js";
 import {
   acceptedImageMimeTypes,
   getUploadMaxBytes,
@@ -28,6 +29,25 @@ uploadRoutes.post(
     }
 
     const result = await uploadSystemSettingsAsset(prisma, {
+      buffer: request.body,
+      contentType: request.get("content-type") ?? "",
+      slot: String(request.params.slot ?? ""),
+    });
+
+    response.status(201).json(result);
+  }),
+);
+
+uploadRoutes.post(
+  "/site/:slot",
+  requireRole(UserRole.ADMIN),
+  rawImageUpload,
+  asyncHandler(async (request, response) => {
+    if (!Buffer.isBuffer(request.body)) {
+      throw new AppError(400, "Selecione uma imagem PNG, JPG, WEBP ou SVG.");
+    }
+
+    const result = await uploadSiteAsset(prisma, {
       buffer: request.body,
       contentType: request.get("content-type") ?? "",
       slot: String(request.params.slot ?? ""),

@@ -8,11 +8,16 @@ import {
   CreditCard,
   FileDown,
   FileText,
+  HelpCircle,
+  Image,
   KeyRound,
   Layers3,
   Menu,
+  MessageCircle,
   Moon,
+  Newspaper,
   PackageSearch,
+  PanelTop,
   Ruler,
   Settings,
   Sun,
@@ -36,7 +41,12 @@ import { useApiResource } from "@/lib/api";
 import { resolveAssetUrl } from "@/lib/assets";
 import { useRouteLoading } from "@/lib/route-loading";
 import { useSession } from "@/lib/session";
-import { isFleetSystem, isManagerSystem, systemModeLabel } from "@/lib/system-mode";
+import {
+  isFleetSystem,
+  isManagerSystem,
+  isSiteSystem,
+  systemModeLabel,
+} from "@/lib/system-mode";
 import { useSystemSettings } from "@/lib/system-settings";
 import type { UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -88,7 +98,30 @@ const fleetItems = [
   to: string;
 }>;
 
-const items = isManagerSystem ? managerItems : isFleetSystem ? fleetItems : operationItems;
+const siteItems = [
+  { icon: Layers3, label: "Site", role: "ADMIN", to: "/admin" },
+  { icon: Settings, label: "Identidade", role: "ADMIN", to: "/admin/identity" },
+  { icon: Image, label: "Banners", role: "ADMIN", to: "/admin/banners" },
+  { icon: Boxes, label: "Sistemas", role: "ADMIN", to: "/admin/systems" },
+  { icon: PanelTop, label: "Beneficios", role: "ADMIN", to: "/admin/features" },
+  { icon: Newspaper, label: "Posts", role: "ADMIN", to: "/admin/posts" },
+  { icon: CreditCard, label: "Planos", role: "ADMIN", to: "/admin/plans" },
+  { icon: HelpCircle, label: "FAQ", role: "ADMIN", to: "/admin/faq" },
+  { icon: MessageCircle, label: "Contato", role: "ADMIN", to: "/admin/contact" },
+] satisfies Array<{
+  icon: typeof Boxes;
+  label: string;
+  role?: UserRole;
+  to: string;
+}>;
+
+const items = isManagerSystem
+  ? managerItems
+  : isSiteSystem
+    ? siteItems
+    : isFleetSystem
+      ? fleetItems
+      : operationItems;
 
 function navigationItems(role: UserRole) {
   return items.filter((item) => !item.role || item.role === role);
@@ -175,15 +208,23 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const role = session?.user.role ?? "OPERATOR";
   const routeKey = `${location.pathname}${location.search}`;
-  const notificationsEnabled = !isManagerSystem && !isFleetSystem;
+  const notificationsEnabled = !isManagerSystem && !isFleetSystem && !isSiteSystem;
   const notificationSeenKey = `almoxarifado-notifications-seen-${session?.user.id ?? "anon"}`;
   const [seenNotificationTotal, setSeenNotificationTotal] = useState(() =>
     Number(localStorage.getItem(notificationSeenKey) ?? 0),
   );
   const title =
-    navigationItems(role).find((item) => location.pathname.startsWith(item.to))
+    [...navigationItems(role)]
+      .sort((left, right) => right.to.length - left.to.length)
+      .find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`))
       ?.label ??
-    (isManagerSystem ? "Gestao" : isFleetSystem ? "Frota" : "Almoxarifado");
+    (isManagerSystem
+      ? "Gestao"
+      : isSiteSystem
+        ? "Site"
+        : isFleetSystem
+          ? "Frota"
+          : "Almoxarifado");
   const summary = useApiResource<{
     pendingEntryRequests: number;
     pendingReceipts: number;
@@ -223,6 +264,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const subtitle = import.meta.env.VITE_NAME_SYSTEM ?? "GEMA - Gestão Municipal de Almoxarifado.";
   const brandTitle = isManagerSystem
     ? "Gestor de licenças"
+    : isSiteSystem
+      ? "Admin do site"
     : isFleetSystem
       ? "Controle de frota"
       : settings.loginTitle;
@@ -238,7 +281,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div>
               <p className="text-sm font-semibold">{brandTitle}</p>
               <p className="text-xs text-muted-foreground">
-                {isManagerSystem || isFleetSystem ? systemModeLabel : subtitle}
+                {isManagerSystem || isFleetSystem || isSiteSystem
+                  ? systemModeLabel
+                  : subtitle}
               </p>
             </div>
           </div>
@@ -261,7 +306,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <SheetContent>
                 <div className="mb-5 pr-8">
                   <p className="font-semibold">
-                    {isManagerSystem || isFleetSystem ? brandTitle : settings.systemName}
+                    {isManagerSystem || isFleetSystem || isSiteSystem
+                      ? brandTitle
+                      : settings.systemName}
                   </p>
                   <p className="text-sm text-muted-foreground">{systemModeLabel}</p>
                 </div>
@@ -270,7 +317,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Sheet>
             <div>
               <p className="text-xs font-medium uppercase text-muted-foreground">
-                {isManagerSystem ? "Gestão" : isFleetSystem ? "Frota" : "Controle"}
+                {isManagerSystem
+                  ? "Gestão"
+                  : isSiteSystem
+                    ? "Site"
+                    : isFleetSystem
+                      ? "Frota"
+                      : "Controle"}
               </p>
               <h1 className="text-lg font-semibold">{title}</h1>
             </div>

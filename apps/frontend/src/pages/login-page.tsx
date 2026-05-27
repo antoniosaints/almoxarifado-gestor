@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { resolveAssetUrl } from "@/lib/assets";
 import { useSession } from "@/lib/session";
+import { isSiteSystem } from "@/lib/system-mode";
 import { useSystemSettings } from "@/lib/system-settings";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -42,7 +43,7 @@ export function LoginPage() {
         method: "POST",
       });
       setSession(session);
-      navigate("/dashboard");
+      navigate(isSiteSystem ? "/admin" : "/dashboard");
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Falha ao entrar.");
     } finally {
