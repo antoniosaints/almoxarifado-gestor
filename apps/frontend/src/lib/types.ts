@@ -449,6 +449,23 @@ export type ManagerLicenseType = "MONTHLY" | "ANNUAL" | "LIFETIME" | "TRIAL";
 
 export type ManagerBillingStatus = "OPEN" | "PAID" | "OVERDUE" | "CANCELLED";
 
+export type LicenseStatus = {
+  blockWrites: boolean;
+  checkedAt: string | null;
+  daysUntilExpiration: number | null;
+  expiresAt: string | null;
+  lastError?: string | null;
+  licenseKey: string | null;
+  message: string;
+  mode: "managed" | "unmanaged";
+  offline: boolean;
+  status: string;
+  subscriberName?: string | null;
+  systemKey?: string | null;
+  valid: boolean;
+  warningLevel: "none" | "warning" | "expires_today" | "blocked" | "unvalidated";
+};
+
 export type ManagerSubscriber = {
   active: boolean;
   billings?: ManagerBilling[];

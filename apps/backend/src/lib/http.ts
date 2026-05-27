@@ -71,7 +71,10 @@ export function requireRole(...roles: UserRole[]): RequestHandler {
 
 export const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   if (error instanceof AppError) {
-    response.status(error.status).json({ message: error.message });
+    response.status(error.status).json({
+      ...(error.code ? { code: error.code } : {}),
+      message: error.message,
+    });
     return;
   }
 

@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 export async function resetDatabase(prisma: PrismaClient) {
   await prisma.auditLog.deleteMany();
+  await prisma.licenseValidationState.deleteMany();
   await prisma.siteFaq.deleteMany();
   await prisma.sitePlan.deleteMany();
   await prisma.sitePost.deleteMany();

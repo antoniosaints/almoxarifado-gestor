@@ -571,6 +571,25 @@ model ManagerBilling {
   @@index([dueDate])
 }
 
+model LicenseValidationState {
+  id          String    @id @default("system")
+  mode        String    @default("unmanaged")
+  licenseKey  String?
+  status      String    @default("UNMANAGED")
+  valid       Boolean   @default(true)
+  blockWrites Boolean   @default(false)
+  checkedAt   DateTime?
+  nextCheckAt DateTime?
+  expiresAt   DateTime?
+  message     String?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([licenseKey])
+  @@index([status])
+}
+
 model FleetStructure {
   id                     String                   @id @default(cuid())
   name                   String                   @unique

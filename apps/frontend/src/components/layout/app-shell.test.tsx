@@ -1,11 +1,64 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
-import { SessionProvider } from "@/lib/session";
-import { AppShell } from "./app-shell";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { LicenseStatus } from "@/lib/types";
+
+const unmanagedLicense: LicenseStatus = {
+  blockWrites: false,
+  checkedAt: null,
+  daysUntilExpiration: null,
+  expiresAt: null,
+  licenseKey: null,
+  message: "Controle de licença não configurado.",
+  mode: "unmanaged",
+  offline: false,
+  status: "UNMANAGED",
+  valid: true,
+  warningLevel: "none",
+};
+
+function stubShellFetch(license = unmanagedLicense) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      const body = url.includes("/license/status")
+        ? license
+        : {
+            pendingEntryRequests: 0,
+            pendingReceipts: 0,
+            total: 0,
+          };
+
+      return {
+        json: async () => body,
+        ok: true,
+        status: 200,
+      };
+    }),
+  );
+}
+
+async function importShellFor(systemType = "") {
+  vi.stubEnv("VITE_TYPE_SYSTEM", systemType);
+  vi.resetModules();
+
+  const [{ AppShell }, { SessionProvider }] = await Promise.all([
+    import("./app-shell"),
+    import("@/lib/session"),
+  ]);
+
+  return { AppShell, SessionProvider };
+}
 
 describe("AppShell", () => {
-  it("hides admin-only navigation from operators", () => {
+  beforeEach(() => {
+    stubShellFetch();
+    localStorage.clear();
+  });
+
+  it("hides admin-only navigation from operators", async () => {
+    const { AppShell, SessionProvider } = await importShellFor("");
+
     render(
       <MemoryRouter initialEntries={["/dashboard"]}>
         <SessionProvider
@@ -33,6 +86,9 @@ describe("AppShell", () => {
     expect(screen.getByText("Notas fiscais")).toBeInTheDocument();
     expect(screen.getByText("Relatórios")).toBeInTheDocument();
     expect(screen.getByText("Movimentações")).toBeInTheDocument();
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
   });
 
   it("shows the manager navigation when VITE_TYPE_SYSTEM is manager", async () => {
@@ -150,5 +206,44 @@ describe("AppShell", () => {
 
     vi.unstubAllEnvs();
     vi.resetModules();
+  });
+
+  it("shows a read-only license banner when client writes are blocked", async () => {
+    stubShellFetch({
+      ...unmanagedLicense,
+      blockWrites: true,
+      licenseKey: "ALMO-EXPIRADA",
+      message: "Licença vencida. Entre em contato com o responsável pelo sistema.",
+      mode: "managed",
+      status: "EXPIRED",
+      valid: false,
+      warningLevel: "blocked",
+    });
+    const { AppShell, SessionProvider } = await importShellFor("");
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Admin",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <AppShell>
+            <p>Conteúdo</p>
+          </AppShell>
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Sistema em modo somente leitura")).toBeInTheDocument();
+    expect(
+      screen.getByText("Licença vencida. Entre em contato com o responsável pelo sistema."),
+    ).toBeInTheDocument();
   });
 });

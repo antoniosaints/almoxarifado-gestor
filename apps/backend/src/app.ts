@@ -6,6 +6,10 @@ import { entryRequestRoutes } from "./routes/entry-request-routes.js";
 import { fleetRoutes } from "./routes/fleet-routes.js";
 import { insightRoutes } from "./routes/insight-routes.js";
 import { invoiceRoutes } from "./routes/invoice-routes.js";
+import {
+  licenseRoutes,
+  publicLicenseValidationRoutes,
+} from "./routes/license-routes.js";
 import { managerRoutes } from "./routes/manager-routes.js";
 import { movementRoutes } from "./routes/movement-routes.js";
 import { officeTemplateRoutes } from "./routes/office-template-routes.js";
@@ -29,6 +33,7 @@ import { unitRoutes } from "./routes/unit-routes.js";
 import { userRoutes } from "./routes/user-routes.js";
 import { warehouseCategoryRoutes } from "./routes/warehouse-category-routes.js";
 import { warehouseRoutes } from "./routes/warehouse-routes.js";
+import { enforceLicenseWriteAccess } from "./services/license-service.js";
 import { getLocalUploadRoot } from "./services/upload-service.js";
 
 export const app = express();
@@ -48,7 +53,11 @@ app.get("/health", (_request, response) => {
 app.use("/auth", authRoutes);
 app.use("/settings", publicSettingsRoutes);
 app.use("/site", publicSiteRoutes);
+app.use("/api/validation", publicLicenseValidationRoutes);
+app.use("/validation", publicLicenseValidationRoutes);
 app.use(authenticate);
+app.use("/license", licenseRoutes);
+app.use(enforceLicenseWriteAccess);
 app.use("/uploads", uploadRoutes);
 app.use("/site", siteAdminRoutes);
 app.use("/entry-requests", entryRequestRoutes);

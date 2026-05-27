@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   BarChart3,
   Bell,
   Boxes,
@@ -24,6 +25,7 @@ import {
   Tags,
   UserRound,
   UsersRound,
+  X,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -48,8 +50,22 @@ import {
   systemModeLabel,
 } from "@/lib/system-mode";
 import { useSystemSettings } from "@/lib/system-settings";
-import type { UserRole } from "@/lib/types";
+import type { LicenseStatus, UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const initialLicenseStatus: LicenseStatus = {
+  blockWrites: false,
+  checkedAt: null,
+  daysUntilExpiration: null,
+  expiresAt: null,
+  licenseKey: null,
+  message: "Controle de licença não configurado.",
+  mode: "unmanaged",
+  offline: false,
+  status: "UNMANAGED",
+  valid: true,
+  warningLevel: "none",
+};
 
 const operationItems = [
   { icon: Layers3, label: "Dashboard", to: "/dashboard" },
@@ -200,6 +216,68 @@ function RouteLoadingSlide({ active }: { active: boolean }) {
   );
 }
 
+function licenseBannerTitle(status: LicenseStatus) {
+  if (status.blockWrites) {
+    return "Sistema em modo somente leitura";
+  }
+
+  if (status.warningLevel === "expires_today") {
+    return "Licença vence hoje";
+  }
+
+  if (status.warningLevel === "unvalidated") {
+    return "Licença aguardando validação";
+  }
+
+  return "Licença próxima do vencimento";
+}
+
+function LicenseStatusBanner({
+  dismissible,
+  onDismiss,
+  status,
+}: {
+  dismissible: boolean;
+  onDismiss: () => void;
+  status: LicenseStatus;
+}) {
+  const blocked = status.blockWrites || status.warningLevel === "unvalidated";
+
+  return (
+    <div
+      className={cn(
+        "border-b px-4 py-3 md:px-6",
+        blocked
+          ? "border-destructive/25 bg-destructive/10 text-destructive"
+          : "border-amber-300/60 bg-amber-50 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100",
+      )}
+      role="status"
+    >
+      <div className="mx-auto flex w-full max-w-[90rem] items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">{licenseBannerTitle(status)}</p>
+          <p className="text-sm opacity-90">
+            {status.message}
+            {status.offline ? " Última validação conhecida mantida por falta de conexão." : ""}
+          </p>
+        </div>
+        {dismissible ? (
+          <Button
+            aria-label="Fechar aviso de licença"
+            className="h-8 w-8 shrink-0"
+            onClick={onDismiss}
+            size="icon"
+            variant="ghost"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { clearSession, session } = useSession();
   const { darkMode, setDarkMode, settings } = useSystemSettings();
@@ -209,9 +287,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const role = session?.user.role ?? "OPERATOR";
   const routeKey = `${location.pathname}${location.search}`;
   const notificationsEnabled = !isManagerSystem && !isFleetSystem && !isSiteSystem;
+  const licenseStatusEnabled = !isManagerSystem && !isSiteSystem;
   const notificationSeenKey = `almoxarifado-notifications-seen-${session?.user.id ?? "anon"}`;
   const [seenNotificationTotal, setSeenNotificationTotal] = useState(() =>
     Number(localStorage.getItem(notificationSeenKey) ?? 0),
+  );
+  const [dismissedLicenseWarning, setDismissedLicenseWarning] = useState(() =>
+    localStorage.getItem("license-warning-dismissed") ?? "",
   );
   const title =
     [...navigationItems(role)]
@@ -236,12 +318,33 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, {
     enabled: notificationsEnabled,
   });
+  const licenseStatus = useApiResource<LicenseStatus>(
+    "/license/status",
+    initialLicenseStatus,
+    {
+      enabled: licenseStatusEnabled,
+    },
+  );
   const notificationCount =
     notificationsEnabled &&
     summary.data.total > 0 &&
     summary.data.total !== seenNotificationTotal
       ? summary.data.total
       : 0;
+  const licenseWarningKey = [
+    licenseStatus.data.licenseKey ?? "license",
+    licenseStatus.data.expiresAt ?? "sem-vencimento",
+    licenseStatus.data.warningLevel,
+  ].join(":");
+  const licenseBannerDismissible =
+    licenseStatus.data.warningLevel === "warning" && !licenseStatus.data.blockWrites;
+  const licenseBannerVisible =
+    licenseStatus.data.mode === "managed" &&
+    !licenseStatus.loading &&
+    (licenseStatus.data.blockWrites ||
+      licenseStatus.data.offline ||
+      licenseStatus.data.warningLevel !== "none") &&
+    (!licenseBannerDismissible || dismissedLicenseWarning !== licenseWarningKey);
 
   useEffect(() => {
     setSeenNotificationTotal(Number(localStorage.getItem(notificationSeenKey) ?? 0));
@@ -259,6 +362,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
     localStorage.setItem(notificationSeenKey, String(summary.data.total));
     setSeenNotificationTotal(summary.data.total);
+  }
+
+  function dismissLicenseWarning() {
+    localStorage.setItem("license-warning-dismissed", licenseWarningKey);
+    setDismissedLicenseWarning(licenseWarningKey);
   }
 
   const subtitle = import.meta.env.VITE_NAME_SYSTEM ?? "GEMA - Gestão Municipal de Almoxarifado.";
@@ -371,6 +479,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <RouteLoadingSlide active={routeLoading.active} />
+        {licenseBannerVisible ? (
+          <LicenseStatusBanner
+            dismissible={licenseBannerDismissible}
+            onDismiss={dismissLicenseWarning}
+            status={licenseStatus.data}
+          />
+        ) : null}
         <main className="mx-auto w-full max-w-[90rem] p-4 md:p-6">
           <div className="route-transition-frame" key={routeKey}>
             {children}

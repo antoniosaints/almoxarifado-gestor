@@ -31,6 +31,9 @@ function tinyPngBuffer() {
 
 describe("api", () => {
   beforeEach(async () => {
+    delete process.env.LICENSE_SYSTEM;
+    delete process.env.SECRET_VALIDATION_LICENSE;
+    delete process.env.URL_VALIDATION_LICENSE;
     await resetDatabase(prisma);
     rmSync(path.join(process.cwd(), "uploads", "settings"), {
       force: true,
@@ -1350,6 +1353,119 @@ describe("api", () => {
       cancellationReason: "Contrato encerrado",
       status: "CANCELLED",
     });
+  });
+
+  it("validates manager licenses through the shared validation endpoint secret", async () => {
+    process.env.SECRET_VALIDATION_LICENSE = "secretvalidador";
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const auth = authorizationFor(admin);
+
+    const subscriberResponse = await request(app)
+      .post("/manager/subscribers")
+      .set("Authorization", auth)
+      .send({
+        active: true,
+        city: "Sao Paulo",
+        document: "12345678000191",
+        email: "validacao@example.com",
+        name: "Cliente validacao",
+        phone: "11999990001",
+        state: "SP",
+      });
+    const licenseResponse = await request(app)
+      .post("/manager/licenses")
+      .set("Authorization", auth)
+      .send({
+        expiresAt: "2099-06-15",
+        monthlyValue: 250,
+        seats: 5,
+        startsAt: "2026-05-01",
+        subscriberId: subscriberResponse.body.id,
+        systemKey: "Almoxarifado",
+        type: "MONTHLY",
+      });
+
+    await request(app)
+      .post(`/manager/licenses/${licenseResponse.body.id}/validate`)
+      .set("Authorization", auth)
+      .send({});
+
+    const deniedResponse = await request(app)
+      .post("/validation?secret=segredo-incorreto")
+      .send({ licenseKey: licenseResponse.body.licenseKey });
+
+    expect(deniedResponse.status).toBe(403);
+
+    const response = await request(app)
+      .post("/api/validation?secret=secretvalidador")
+      .send({ licenseKey: licenseResponse.body.licenseKey });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      blockWrites: false,
+      licenseKey: licenseResponse.body.licenseKey,
+      status: "ACTIVE",
+      systemKey: "Almoxarifado",
+      valid: true,
+    });
+    expect(response.body.expiresAt).toEqual(expect.any(String));
+  });
+
+  it("keeps client write operations free when license env vars are not configured", async () => {
+    const { user } = await createBaseFixture(prisma);
+
+    const response = await request(app)
+      .post("/warehouse-categories")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }))
+      .send({
+        description: "Categoria sem controle de licenca",
+        name: "Sem licenca",
+      });
+
+    expect(response.status).toBe(201);
+  });
+
+  it("blocks client write operations after a configured license is expired", async () => {
+    process.env.LICENSE_SYSTEM = "ALMO-EXPIRADA";
+    process.env.URL_VALIDATION_LICENSE = "https://manager.example.com/validation?secret=secret";
+    const { user } = await createBaseFixture(prisma);
+    await prisma.licenseValidationState.create({
+      data: {
+        blockWrites: false,
+        checkedAt: new Date("2026-05-20T12:00:00.000Z"),
+        expiresAt: new Date("2020-01-01T23:59:59.999Z"),
+        licenseKey: "ALMO-EXPIRADA",
+        message: "Licença ativa.",
+        mode: "managed",
+        nextCheckAt: new Date("2099-01-01T00:00:00.000Z"),
+        status: "ACTIVE",
+        valid: true,
+      },
+    });
+
+    const writeResponse = await request(app)
+      .post("/warehouse-categories")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }))
+      .send({
+        description: "Categoria bloqueada",
+        name: "Bloqueada",
+      });
+
+    expect(writeResponse.status).toBe(403);
+    expect(writeResponse.body).toMatchObject({
+      code: "LICENSE_WRITE_BLOCKED",
+      message: "Licença vencida. Entre em contato com o responsável pelo sistema.",
+    });
+
+    const readResponse = await request(app)
+      .get("/warehouse-categories")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
+
+    expect(readResponse.status).toBe(200);
   });
 
   it("serves public site content and protects site admin management", async () => {

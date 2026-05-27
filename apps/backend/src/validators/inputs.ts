@@ -441,3 +441,7 @@ export const managerBillingInput = z.object({
 export const managerLicenseCancelInput = z.object({
   reason: optionalText,
 });
+
+export const licenseValidationInput = z.object({
+  licenseKey: z.string().trim().min(1, "Informe a chave da licença."),
+});

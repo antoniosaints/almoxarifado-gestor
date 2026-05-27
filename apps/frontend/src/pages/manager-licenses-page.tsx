@@ -1,4 +1,4 @@
-import { CheckCircle2, Pencil, Plus, XCircle } from "lucide-react";
+import { CheckCircle2, Pencil, Plus, ShieldCheck, XCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
@@ -208,6 +208,44 @@ export function ManagerLicensesPage() {
           <Plus className="h-4 w-4" />
           Nova licença
         </Button>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 shadow-sm">
+        <div className="flex gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 space-y-3">
+            <div>
+              <h3 className="font-semibold">Configuração do cliente</h3>
+              <p className="text-sm text-muted-foreground">
+                Use a chave da licença no sistema hospedado e aponte para o endpoint
+                público do manager. Sem essas variáveis, o cliente fica livre e sem
+                controle de licença.
+              </p>
+            </div>
+            <div className="grid gap-3 text-sm lg:grid-cols-2">
+              <div>
+                <p className="mb-1 font-medium">Cliente</p>
+                <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs text-foreground">
+{`URL_VALIDATION_LICENSE=https://endpoint.instancia.manager/api/validation?secret=secretexistentenoenvdomanager
+LICENSE_SYSTEM=ALMO-AC1619-A9E7F0`}
+                </pre>
+              </div>
+              <div>
+                <p className="mb-1 font-medium">Manager</p>
+                <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs text-foreground">
+{`SECRET_VALIDATION_LICENSE=secretvalidador`}
+                </pre>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              O cliente valida uma vez ao dia, mantém a última validação conhecida se
+              estiver offline e bloqueia apenas ações de escrita quando a licença vence.
+              Leituras e exportações continuam disponíveis.
+            </p>
+          </div>
+        </div>
       </div>
 
       {message ? <ResourceError message={message} /> : null}
