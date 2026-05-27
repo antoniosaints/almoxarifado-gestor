@@ -11,14 +11,19 @@ import {
   ListOrdered,
   Moon,
   Palette,
+  Pencil,
+  Plus,
   RotateCcw,
   Save,
   Sun,
+  Trash2,
   Upload,
 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -174,22 +179,34 @@ const officeVariables = [
   "{{usuario_logado}}",
 ];
 
-const defaultOfficeTemplateDraft = {
-  active: true,
-  contentHtml: [
-    "<p><strong>OF&Iacute;CIO N&ordm; {{oficio_numero_ano}}</strong></p>",
-    "<p><strong>Assunto:</strong> Solicita&ccedil;&atilde;o de material/equipamento</p>",
-    "<p>Prezados,</p>",
-    "<p>Venho, por meio deste, solicitar a disponibiliza&ccedil;&atilde;o do(s) seguinte(s) item(ns):</p>",
-    "<p>{{itens_solicitados_html}}</p>",
-    "<p>A presente solicita&ccedil;&atilde;o se faz necess&aacute;ria para atender &agrave;s demandas e necessidades deste setor, visando garantir o bom funcionamento das atividades desenvolvidas.</p>",
-    "<p>Certos de contarmos com a colabora&ccedil;&atilde;o de Vossa Senhoria, aguardamos o atendimento desta solicita&ccedil;&atilde;o e renovamos nossos votos de estima e considera&ccedil;&atilde;o.</p>",
-    "<p>Atenciosamente,</p>",
-  ].join(""),
-  description: "Modelo padrao para solicitacao de material por almoxarifado.",
-  name: "Solicitacao de material",
-  subject: "Solicitacao de material/equipamento",
+type OfficeTemplateDraft = {
+  active: boolean;
+  contentHtml: string;
+  description: string;
+  name: string;
+  subject: string;
 };
+
+const defaultOfficeTemplateContentHtml = [
+  "<p><strong>OF&Iacute;CIO N&ordm; {{oficio_numero_ano}}</strong></p>",
+  "<p><strong>Assunto:</strong> Solicita&ccedil;&atilde;o de material/equipamento</p>",
+  "<p>Prezados,</p>",
+  "<p>Venho, por meio deste, solicitar a disponibiliza&ccedil;&atilde;o do(s) seguinte(s) item(ns):</p>",
+  "<p>{{itens_solicitados_html}}</p>",
+  "<p>A presente solicita&ccedil;&atilde;o se faz necess&aacute;ria para atender &agrave;s demandas e necessidades deste setor, visando garantir o bom funcionamento das atividades desenvolvidas.</p>",
+  "<p>Certos de contarmos com a colabora&ccedil;&atilde;o de Vossa Senhoria, aguardamos o atendimento desta solicita&ccedil;&atilde;o e renovamos nossos votos de estima e considera&ccedil;&atilde;o.</p>",
+  "<p>Atenciosamente,</p>",
+].join("");
+
+function createDefaultOfficeTemplateDraft(): OfficeTemplateDraft {
+  return {
+    active: true,
+    contentHtml: defaultOfficeTemplateContentHtml,
+    description: "Modelo padrao para solicitacao de material por almoxarifado.",
+    name: "Solicitacao de material",
+    subject: "Solicitacao de material/equipamento",
+  };
+}
 
 function OfficeTemplatesTab({
   officeLogoUrl,
@@ -204,37 +221,68 @@ function OfficeTemplatesTab({
 }) {
   const templates = useApiResource<OfficeLetterTemplate[]>("/office-templates", []);
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const editorInitialContentRef = useRef(defaultOfficeTemplateContentHtml);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [draft, setDraft] = useState(defaultOfficeTemplateDraft);
+  const [draft, setDraft] = useState<OfficeTemplateDraft>(
+    createDefaultOfficeTemplateDraft,
+  );
+  const [editing, setEditing] = useState(false);
+  const [templateToDelete, setTemplateToDelete] =
+    useState<OfficeLetterTemplate | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(
+    null,
+  );
   const [message, setMessage] = useState<SettingsMessage | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
   const resolvedOfficeLogoUrl = resolveAssetUrl(officeLogoUrl);
 
-  useEffect(() => {
-    if (
-      editorRef.current &&
-      editorRef.current.innerHTML !== draft.contentHtml
-    ) {
-      editorRef.current.innerHTML = draft.contentHtml;
-    }
-  }, [draft.contentHtml]);
+  const attachEditor = useCallback((node: HTMLDivElement | null) => {
+    editorRef.current = node;
 
-  function selectTemplate(template: OfficeLetterTemplate) {
-    setSelectedTemplateId(template.id);
-    setDraft({
+    if (node) {
+      node.innerHTML = editorInitialContentRef.current;
+    }
+  }, []);
+
+  function openEditTemplate(template: OfficeLetterTemplate) {
+    const nextDraft = {
       active: template.active,
       contentHtml: template.contentHtml,
       description: template.description ?? "",
       name: template.name,
       subject: template.subject,
-    });
+    };
+
+    editorInitialContentRef.current = nextDraft.contentHtml;
+    setSelectedTemplateId(template.id);
+    setDraft(nextDraft);
+    setEditing(true);
+    setEditorError(null);
     setMessage(null);
   }
 
-  function newTemplate() {
+  function openNewTemplate() {
+    const nextDraft = createDefaultOfficeTemplateDraft();
+
+    editorInitialContentRef.current = nextDraft.contentHtml;
     setSelectedTemplateId("");
-    setDraft(defaultOfficeTemplateDraft);
+    setDraft(nextDraft);
+    setEditing(true);
+    setEditorError(null);
     setMessage(null);
+  }
+
+  function closeEditor(open: boolean) {
+    if (saving) {
+      return;
+    }
+
+    setEditing(open);
+
+    if (!open) {
+      setEditorError(null);
+    }
   }
 
   function syncEditorContent() {
@@ -245,6 +293,7 @@ function OfficeTemplatesTab({
   }
 
   function setContentHtml(contentHtml: string) {
+    editorInitialContentRef.current = contentHtml;
     setDraft((current) => ({
       ...current,
       contentHtml,
@@ -283,9 +332,26 @@ function OfficeTemplatesTab({
     syncEditorContent();
   }
 
-  async function saveTemplate() {
+  async function saveTemplate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const payload = {
+      ...draft,
+      contentHtml: editorRef.current?.innerHTML ?? draft.contentHtml,
+    };
+
+    if (
+      !payload.name.trim() ||
+      !payload.subject.trim() ||
+      !payload.contentHtml.trim()
+    ) {
+      setEditorError("Informe nome, assunto e conteudo do oficio.");
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
+    setEditorError(null);
 
     try {
       const saved = await api<OfficeLetterTemplate>(
@@ -293,13 +359,43 @@ function OfficeTemplatesTab({
           ? `/office-templates/${selectedTemplateId}`
           : "/office-templates",
         {
-          body: JSON.stringify(draft),
+          body: JSON.stringify(payload),
           method: selectedTemplateId ? "PUT" : "POST",
         },
       );
 
       setSelectedTemplateId(saved.id);
       setMessage({ kind: "success", text: "Modelo de oficio salvo." });
+      setEditing(false);
+      await templates.reload();
+    } catch (caughtError) {
+      setEditorError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Falha ao salvar modelo de oficio.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteTemplate() {
+    if (!templateToDelete) {
+      return;
+    }
+
+    setDeletingTemplateId(templateToDelete.id);
+    setMessage(null);
+
+    try {
+      await api<void>(`/office-templates/${templateToDelete.id}`, {
+        method: "DELETE",
+      });
+      templates.setData((current) =>
+        current.filter((template) => template.id !== templateToDelete.id),
+      );
+      setTemplateToDelete(null);
+      setMessage({ kind: "success", text: "Modelo de oficio excluido." });
       await templates.reload();
     } catch (caughtError) {
       setMessage({
@@ -307,199 +403,378 @@ function OfficeTemplatesTab({
         text:
           caughtError instanceof Error
             ? caughtError.message
-            : "Falha ao salvar modelo de oficio.",
+            : "Falha ao excluir modelo de oficio.",
       });
     } finally {
-      setSaving(false);
+      setDeletingTemplateId(null);
     }
   }
 
-  return (
-    <section className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
-      <aside className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-medium">Modelos</p>
-          <Button onClick={newTemplate} size="sm" type="button" variant="outline">
-            Novo
-          </Button>
-        </div>
-        <div className="space-y-2">
-          {templates.data.map((template) => (
-            <button
-              className={`w-full rounded-md border p-3 text-left text-sm transition hover:bg-muted ${
-                selectedTemplateId === template.id ? "border-primary bg-muted" : ""
-              }`}
-              key={template.id}
-              onClick={() => selectTemplate(template)}
-              type="button"
-            >
-              <span className="block font-medium">{template.name}</span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {template.subject}
-              </span>
-            </button>
-          ))}
-          {!templates.loading && !templates.data.length ? (
-            <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-              Nenhum modelo cadastrado.
-            </div>
-          ) : null}
-        </div>
-      </aside>
+  function templateVariablesLabel(template: OfficeLetterTemplate) {
+    return template.variables.length
+      ? template.variables.map((variable) => `{{${variable}}}`).join(", ")
+      : "-";
+  }
 
-      <div className="space-y-4">
-        {message ? (
-          message.kind === "success" ? (
-            <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
-              <AlertTitle>Pronto</AlertTitle>
-              <AlertDescription className="text-emerald-900">
-                {message.text}
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <ResourceError message={message.text} />
-          )
-        ) : null}
-        <div className="grid gap-4 rounded-md border bg-background p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <ImageUrlField
-            field="officeLogoUrl"
-            label="Logo do cabecalho do oficio"
-            onUpload={onUpload}
-            uploading={uploadingLogo}
-            updateDraft={updateSettingsDraft}
-            value={officeLogoUrl}
-          />
-          <div className="flex items-center gap-3 rounded-md border bg-card p-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
-              {resolvedOfficeLogoUrl ? (
-                <img
-                  alt=""
-                  className="h-full w-full object-contain"
-                  src={resolvedOfficeLogoUrl}
-                />
-              ) : (
-                <Building2 className="h-5 w-5 text-muted-foreground" />
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">Secretaria</p>
-              <p className="truncate text-xs text-muted-foreground">
-                Almoxarifado solicitante
-              </p>
-            </div>
+  return (
+    <section className="space-y-4 rounded-lg border bg-card p-4">
+      <div className="grid gap-4 rounded-md border bg-background p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <ImageUrlField
+          field="officeLogoUrl"
+          label="Logo do cabecalho do oficio"
+          onUpload={onUpload}
+          uploading={uploadingLogo}
+          updateDraft={updateSettingsDraft}
+          value={officeLogoUrl}
+        />
+        <div className="flex items-center gap-3 rounded-md border bg-card p-3">
+          <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
+            {resolvedOfficeLogoUrl ? (
+              <img
+                alt=""
+                className="h-full w-full object-contain"
+                src={resolvedOfficeLogoUrl}
+              />
+            ) : (
+              <Building2 className="h-5 w-5 text-muted-foreground" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">Secretaria</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Almoxarifado solicitante
+            </p>
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField>
-            <Label htmlFor="office-template-name">Nome do modelo</Label>
-            <Input
-              id="office-template-name"
-              onChange={(event) =>
-                setDraft({ ...draft, name: event.target.value })
-              }
-              value={draft.name}
-            />
-          </FormField>
-          <FormField>
-            <Label htmlFor="office-template-subject">Assunto</Label>
-            <Input
-              id="office-template-subject"
-              onChange={(event) =>
-                setDraft({ ...draft, subject: event.target.value })
-              }
-              value={draft.subject}
-            />
-          </FormField>
-        </div>
-        <FormField>
-          <Label htmlFor="office-template-description">Descricao</Label>
-          <Input
-            id="office-template-description"
-            onChange={(event) =>
-              setDraft({ ...draft, description: event.target.value })
-            }
-            value={draft.description}
-          />
-        </FormField>
-        <div className="flex flex-wrap gap-2 rounded-md border bg-background p-2">
-          <Button aria-label="Negrito" onClick={() => formatContent("bold")} size="icon" title="Negrito" type="button" variant="outline">
-            <Bold className="h-4 w-4" />
-          </Button>
-          <Button aria-label="Italico" onClick={() => formatContent("italic")} size="icon" title="Italico" type="button" variant="outline">
-            <Italic className="h-4 w-4" />
-          </Button>
-          <Button aria-label="Lista" onClick={() => formatContent("insertUnorderedList")} size="icon" title="Lista" type="button" variant="outline">
-            <List className="h-4 w-4" />
-          </Button>
-          <Button aria-label="Lista numerada" onClick={() => formatContent("insertOrderedList")} size="icon" title="Lista numerada" type="button" variant="outline">
-            <ListOrdered className="h-4 w-4" />
-          </Button>
-          <Button aria-label="Alinhar a esquerda" onClick={() => formatContent("justifyLeft")} size="icon" title="Alinhar a esquerda" type="button" variant="outline">
-            <AlignLeft className="h-4 w-4" />
-          </Button>
-          <Button onClick={() => setContentHtml(defaultOfficeTemplateDraft.contentHtml)} type="button" variant="outline">
-            Usar modelo padrao
-          </Button>
-        </div>
-        <FormField>
-          <Label htmlFor="office-template-content">Conteudo do oficio</Label>
-          <div
-            aria-label="Conteudo do oficio"
-            aria-multiline="true"
-            className="min-h-48 rounded-md border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            contentEditable
-            id="office-template-content"
-            onInput={syncEditorContent}
-            ref={editorRef}
-            role="textbox"
-            suppressContentEditableWarning
-          />
-        </FormField>
-        <div className="space-y-2 rounded-md border bg-background p-3">
-          <p className="text-xs font-medium uppercase text-muted-foreground">
-            Variaveis
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {officeVariables.map((variable) => (
+      </div>
+
+      {message ? (
+        message.kind === "success" ? (
+          <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
+            <AlertTitle>Pronto</AlertTitle>
+            <AlertDescription className="text-emerald-900">
+              {message.text}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <ResourceError message={message.text} />
+        )
+      ) : null}
+
+      {templates.loading ? (
+        <LoadingLine label="Carregando modelos de oficio..." />
+      ) : templates.error ? (
+        <ResourceError message={templates.error} />
+      ) : (
+        <DataTable
+          columns={[
+            {
+              cell: (template) => (
+                <>
+                  <p className="font-medium">{template.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {template.description || "Sem descricao"}
+                  </p>
+                </>
+              ),
+              header: "Modelo",
+              key: "name",
+            },
+            {
+              cell: (template) => template.subject,
+              header: "Assunto",
+              key: "subject",
+            },
+            {
+              cell: (template) => (
+                <p
+                  className="max-w-xs truncate text-xs text-muted-foreground"
+                  title={templateVariablesLabel(template)}
+                >
+                  {templateVariablesLabel(template)}
+                </p>
+              ),
+              header: "Variaveis",
+              key: "variables",
+            },
+            {
+              cell: (template) => (
+                <Badge variant={template.active ? "success" : "zero"}>
+                  {template.active ? "Ativo" : "Inativo"}
+                </Badge>
+              ),
+              header: "Status",
+              key: "status",
+            },
+            {
+              cell: (template) => (
+                <div className="flex justify-end gap-2">
+                  <Button
+                    aria-label={`Editar ${template.name}`}
+                    onClick={() => openEditTemplate(template)}
+                    size="icon"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    aria-label={`Excluir ${template.name}`}
+                    onClick={() => setTemplateToDelete(template)}
+                    size="icon"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </Button>
+                </div>
+              ),
+              cellClassName: "text-right",
+              header: "Acoes",
+              headerClassName: "text-right",
+              key: "actions",
+            },
+          ]}
+          data={templates.data}
+          emptyMessage="Nenhum modelo cadastrado."
+          getRowId={(template) => template.id}
+          searchPlaceholder="Buscar modelo, assunto ou variavel..."
+          searchText={(template) =>
+            [
+              template.name,
+              template.description,
+              template.subject,
+              template.active ? "ativo" : "inativo",
+              ...template.variables,
+            ].join(" ")
+          }
+          toolbar={
+            <Button onClick={openNewTemplate} type="button">
+              <Plus className="h-4 w-4" />
+              Novo modelo
+            </Button>
+          }
+        />
+      )}
+
+      <Dialog onOpenChange={closeEditor} open={editing}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedTemplateId ? "Editar modelo de oficio" : "Novo modelo de oficio"}
+            </DialogTitle>
+            <DialogDescription>
+              Configure os textos que serao usados na geracao do oficio.
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={saveTemplate}>
+            {editorError ? <ResourceError message={editorError} /> : null}
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField>
+                <Label htmlFor="office-template-name">Nome do modelo</Label>
+                <Input
+                  id="office-template-name"
+                  onChange={(event) =>
+                    setDraft({ ...draft, name: event.target.value })
+                  }
+                  value={draft.name}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="office-template-subject">Assunto</Label>
+                <Input
+                  id="office-template-subject"
+                  onChange={(event) =>
+                    setDraft({ ...draft, subject: event.target.value })
+                  }
+                  value={draft.subject}
+                />
+              </FormField>
+            </div>
+            <FormField>
+              <Label htmlFor="office-template-description">Descricao</Label>
+              <Input
+                id="office-template-description"
+                onChange={(event) =>
+                  setDraft({ ...draft, description: event.target.value })
+                }
+                value={draft.description}
+              />
+            </FormField>
+            <div className="flex flex-wrap gap-2 rounded-md border bg-background p-2">
               <Button
-                key={variable}
-                onClick={() => insertVariable(variable)}
-                size="sm"
+                aria-label="Negrito"
+                onClick={() => formatContent("bold")}
+                size="icon"
+                title="Negrito"
                 type="button"
                 variant="outline"
               >
-                {variable}
+                <Bold className="h-4 w-4" />
               </Button>
-            ))}
+              <Button
+                aria-label="Italico"
+                onClick={() => formatContent("italic")}
+                size="icon"
+                title="Italico"
+                type="button"
+                variant="outline"
+              >
+                <Italic className="h-4 w-4" />
+              </Button>
+              <Button
+                aria-label="Lista"
+                onClick={() => formatContent("insertUnorderedList")}
+                size="icon"
+                title="Lista"
+                type="button"
+                variant="outline"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+              <Button
+                aria-label="Lista numerada"
+                onClick={() => formatContent("insertOrderedList")}
+                size="icon"
+                title="Lista numerada"
+                type="button"
+                variant="outline"
+              >
+                <ListOrdered className="h-4 w-4" />
+              </Button>
+              <Button
+                aria-label="Alinhar a esquerda"
+                onClick={() => formatContent("justifyLeft")}
+                size="icon"
+                title="Alinhar a esquerda"
+                type="button"
+                variant="outline"
+              >
+                <AlignLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={() => setContentHtml(defaultOfficeTemplateContentHtml)}
+                type="button"
+                variant="outline"
+              >
+                Usar modelo padrao
+              </Button>
+            </div>
+            <FormField>
+              <Label htmlFor="office-template-content">Conteudo do oficio</Label>
+              <div
+                aria-label="Conteudo do oficio"
+                aria-multiline="true"
+                className="min-h-48 rounded-md border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                contentEditable
+                id="office-template-content"
+                onInput={syncEditorContent}
+                ref={attachEditor}
+                role="textbox"
+                suppressContentEditableWarning
+              />
+            </FormField>
+            <div className="space-y-2 rounded-md border bg-background p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">
+                Variaveis
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {officeVariables.map((variable) => (
+                  <Button
+                    key={variable}
+                    onClick={() => insertVariable(variable)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {variable}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <Switch
+                checked={draft.active}
+                onCheckedChange={(active) => setDraft({ ...draft, active })}
+              />
+              Modelo ativo
+            </label>
+            <div className="rounded-md border bg-background p-4">
+              <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+                Previa
+              </p>
+              <div
+                className="prose prose-sm max-w-none dark:prose-invert"
+                dangerouslySetInnerHTML={{ __html: draft.contentHtml || "-" }}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                disabled={saving}
+                onClick={() => closeEditor(false)}
+                type="button"
+                variant="outline"
+              >
+                Cancelar
+              </Button>
+              <Button
+                disabled={
+                  saving ||
+                  !draft.name.trim() ||
+                  !draft.subject.trim() ||
+                  !draft.contentHtml.trim()
+                }
+                type="submit"
+              >
+                <Save className="h-4 w-4" />
+                {saving ? "Salvando..." : "Salvar modelo"}
+              </Button>
+            </div>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open && !deletingTemplateId) {
+            setTemplateToDelete(null);
+          }
+        }}
+        open={Boolean(templateToDelete)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir modelo de oficio</DialogTitle>
+            <DialogDescription>
+              O modelo sera removido da lista de modelos disponiveis.
+            </DialogDescription>
+          </DialogHeader>
+          {templateToDelete ? (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <p className="font-medium">{templateToDelete.name}</p>
+              <p className="text-muted-foreground">{templateToDelete.subject}</p>
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button
+              disabled={Boolean(deletingTemplateId)}
+              onClick={() => setTemplateToDelete(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={Boolean(deletingTemplateId)}
+              onClick={deleteTemplate}
+              type="button"
+              variant="destructive"
+            >
+              {deletingTemplateId ? "Excluindo..." : "Excluir"}
+            </Button>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-sm">
-            <Switch
-              checked={draft.active}
-              onCheckedChange={(active) => setDraft({ ...draft, active })}
-            />
-            Modelo ativo
-          </label>
-          <Button
-            disabled={saving || !draft.name || !draft.subject || !draft.contentHtml}
-            onClick={saveTemplate}
-            type="button"
-          >
-            <Save className="h-4 w-4" />
-            {saving ? "Salvando..." : "Salvar modelo"}
-          </Button>
-        </div>
-        <div className="rounded-md border bg-background p-4">
-          <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
-            Previa
-          </p>
-          <div
-            className="prose prose-sm max-w-none dark:prose-invert"
-            dangerouslySetInnerHTML={{ __html: draft.contentHtml || "-" }}
-          />
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

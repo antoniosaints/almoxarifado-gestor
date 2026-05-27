@@ -105,6 +105,7 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
 
     fireEvent.click(screen.getByRole("tab", { name: /oficios/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Novo modelo" }));
     fireEvent.change(screen.getByLabelText("Nome do modelo"), {
       target: { value: "Oficio fornecedor" },
     });
@@ -184,7 +185,9 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
 
     fireEvent.click(screen.getByRole("tab", { name: /oficios/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /modelo existente/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Editar Modelo existente" }),
+    );
 
     const editor = screen.getByLabelText("Conteudo do oficio");
 
@@ -202,5 +205,68 @@ describe("SettingsPage", () => {
         contentHtml: "<p>Texto editado <strong>renderizado</strong></p>",
       });
     });
+  });
+
+  it("deletes office templates from the table action", async () => {
+    let deletedTemplate = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (
+        url.pathname === "/office-templates/template-1" &&
+        init?.method === "DELETE"
+      ) {
+        deletedTemplate = true;
+
+        return new Response(null, { status: 204 });
+      }
+
+      if (url.pathname === "/office-templates") {
+        return new Response(
+          JSON.stringify(
+            deletedTemplate
+              ? []
+              : [
+                  {
+                    active: true,
+                    contentHtml: "<p>OFICIO</p>",
+                    description: "Modelo existente",
+                    id: "template-1",
+                    name: "Modelo existente",
+                    subject: "Solicitacao",
+                    variables: [],
+                  },
+                ],
+          ),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /oficios/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Excluir Modelo existente" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://127.0.0.1:3333/office-templates/template-1",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+    expect(await screen.findByText("Modelo de oficio excluido.")).toBeInTheDocument();
   });
 });
