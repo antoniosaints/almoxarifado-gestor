@@ -22,6 +22,7 @@ import { ReportsPage } from "@/pages/reports-page";
 import { RequestsPage } from "@/pages/requests-page";
 import { SiteAdminPage } from "@/pages/site-admin-page";
 import { SitePublicPage } from "@/pages/site-public-page";
+import { SystemBrandingSettingsPage } from "@/pages/system-branding-settings-page";
 import { UnitsPage } from "@/pages/units-page";
 import { UsersPage } from "@/pages/users-page";
 import { SettingsPage } from "@/pages/settings-page";
@@ -88,6 +89,14 @@ export function App() {
                 }
                 path="/admin/:section"
               />
+              <Route
+                element={
+                  <AdminRoute redirectTo="/">
+                    <SystemBrandingSettingsPage />
+                  </AdminRoute>
+                }
+                path="/settings"
+              />
             </Route>
             <Route element={<Navigate replace to="/" />} path="*" />
           </>
@@ -121,6 +130,14 @@ export function App() {
                   </AdminRoute>
                 }
                 path="/licenses"
+              />
+              <Route
+                element={
+                  <AdminRoute>
+                    <SystemBrandingSettingsPage />
+                  </AdminRoute>
+                }
+                path="/settings"
               />
             </>
           ) : isFleetSystem ? (

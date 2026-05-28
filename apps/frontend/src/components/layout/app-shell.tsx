@@ -93,6 +93,7 @@ const managerItems = [
   { icon: Building2, label: "Assinantes", role: "ADMIN", to: "/subscribers" },
   { icon: CreditCard, label: "Faturamento", role: "ADMIN", to: "/billing" },
   { icon: KeyRound, label: "Licenças", role: "ADMIN", to: "/licenses" },
+  { icon: Settings, label: "Configurações", role: "ADMIN", to: "/settings" },
 ] satisfies Array<{
   icon: typeof Boxes;
   label: string;
@@ -125,6 +126,7 @@ const siteItems = [
   { icon: CreditCard, label: "Planos", role: "ADMIN", to: "/admin/plans" },
   { icon: HelpCircle, label: "FAQ", role: "ADMIN", to: "/admin/faq" },
   { icon: MessageCircle, label: "Contato", role: "ADMIN", to: "/admin/contact" },
+  { icon: Settings, label: "Configurações", role: "ADMIN", to: "/settings" },
 ] satisfies Array<{
   icon: typeof Boxes;
   label: string;
@@ -425,13 +427,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const subtitle = import.meta.env.VITE_NAME_SYSTEM ?? "GEMA - Gestão Municipal de Almoxarifado.";
-  const brandTitle = isManagerSystem
+  const defaultBrandTitle = isManagerSystem
     ? "Gestor de licenças"
     : isSiteSystem
       ? "Admin do site"
     : isFleetSystem
       ? "Controle de frota"
       : settings.loginTitle;
+  const brandTitle = settings.systemName || defaultBrandTitle;
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">

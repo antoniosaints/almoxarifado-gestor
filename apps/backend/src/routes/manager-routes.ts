@@ -7,6 +7,7 @@ import {
   buildManagerLicensePdf,
 } from "../services/manager-pdf-service.js";
 import {
+  cancelOpenMercadoPagoPaymentsForBilling,
   cancelOrRefundMercadoPagoPayment,
   completeMercadoPagoOAuth,
   generateMercadoPagoBillingPayment,
@@ -331,6 +332,7 @@ managerRoutes.post(
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
 
+    await cancelOpenMercadoPagoPaymentsForBilling(prisma, id);
     response.json(await cancelManagerBilling(prisma, id));
   }),
 );

@@ -2,6 +2,7 @@ import { Pencil, Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
+import { SystemBrandingSettings } from "@/components/domain/system-branding-settings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -141,6 +142,11 @@ export function FleetSettingsPage() {
       </div>
 
       {message ? <ResourceError message={message} /> : null}
+
+      <SystemBrandingSettings
+        description="Ajustes gerais compartilhados com a tela de login e o app administrativo."
+        title="Aparencia, marca e login"
+      />
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-lg border bg-card p-4">

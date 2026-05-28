@@ -1,4 +1,5 @@
 import { UserRole } from "@prisma/client";
+import { createHmac } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import request from "supertest";
@@ -1407,10 +1408,15 @@ describe("api", () => {
         systemKey: "Almoxarifado",
       },
     });
+    let paymentCreateHeaders: Record<string, string> | undefined;
+    let paymentCreatePayload: Record<string, unknown> | undefined;
     const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit): Promise<any> => {
       const target = String(url);
 
       if (target.endsWith("/v1/payments") && init?.method === "POST") {
+        paymentCreateHeaders = init.headers as Record<string, string>;
+        paymentCreatePayload = JSON.parse(String(init.body)) as Record<string, unknown>;
+
         return {
           json: async () => ({
             external_reference: `${billing.id}-mp`,
@@ -1462,6 +1468,7 @@ describe("api", () => {
       .send({
         accessToken: "APP_USR-test",
         active: true,
+        webhookSecret: "mp-secret",
       });
 
     expect(gateway.status).toBe(200);
@@ -1481,6 +1488,29 @@ describe("api", () => {
       });
 
     expect(paymentResponse.status).toBe(200);
+    expect(paymentCreateHeaders).toMatchObject({
+      "X-Idempotency-Key": expect.any(String),
+    });
+    expect(paymentCreatePayload).toMatchObject({
+      external_reference: expect.stringContaining(billing.id),
+      metadata: {
+        billing_id: billing.id,
+        license_id: license.id,
+        subscriber_id: subscriber.id,
+      },
+      notification_url: expect.stringContaining("/manager/webhooks/mercado-pago"),
+      payer: {
+        email: "pix@example.com",
+        first_name: "Cliente",
+        identification: {
+          number: "12345678000190",
+          type: "CNPJ",
+        },
+        last_name: "Pix",
+      },
+      payment_method_id: "pix",
+      transaction_amount: 250,
+    });
     expect(paymentResponse.body.payments[0]).toMatchObject({
       method: "PIX",
       providerPaymentId: "123",
@@ -1501,8 +1531,15 @@ describe("api", () => {
       status: 200,
     }));
 
+    const requestId = "mp-request-123";
+    const timestamp = "1760000000";
+    const signature = `ts=${timestamp},v1=${createHmac("sha256", "mp-secret")
+      .update(`id:123;request-id:${requestId};ts:${timestamp};`)
+      .digest("hex")}`;
     const webhook = await request(app)
       .post("/manager/webhooks/mercado-pago?type=payment&data.id=123")
+      .set("x-request-id", requestId)
+      .set("x-signature", signature)
       .send({ data: { id: "123" }, type: "payment" });
 
     expect(webhook.status).toBe(200);
@@ -1530,6 +1567,102 @@ describe("api", () => {
     expect(countPdfPages(billingPdf.body)).toBeGreaterThanOrEqual(1);
     expect(licensePdf.status).toBe(200);
     expect(licensePdf.headers["content-type"]).toContain("application/pdf");
+  });
+
+  it("cancels pending Mercado Pago payments when cancelling manager billings", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const auth = authorizationFor(admin);
+    const subscriber = await prisma.managerSubscriber.create({
+      data: {
+        document: "12345678000190",
+        email: "cancel@example.com",
+        name: "Cliente Cancelamento",
+      },
+    });
+    const license = await prisma.managerLicense.create({
+      data: {
+        licenseKey: "ALMO-CANCEL-001",
+        monthlyValue: 250,
+        startsAt: new Date("2026-05-01T12:00:00.000Z"),
+        subscriberId: subscriber.id,
+        systemKey: "Almoxarifado",
+      },
+    });
+    const billing = await prisma.managerBilling.create({
+      data: {
+        amount: 250,
+        dueDate: new Date("2026-05-20T12:00:00.000Z"),
+        licenseId: license.id,
+        reference: "2026-05",
+        subscriberId: subscriber.id,
+        systemKey: "Almoxarifado",
+      },
+    });
+    const gateway = await prisma.managerPaymentGatewayConfig.create({
+      data: {
+        accessToken: "APP_USR-test",
+        active: true,
+        label: "Mercado Pago",
+        provider: "MERCADO_PAGO",
+      },
+    });
+    const payment = await prisma.managerBillingPayment.create({
+      data: {
+        amount: 250,
+        billingId: billing.id,
+        externalReference: `${billing.id}-cancel`,
+        gatewayConfigId: gateway.id,
+        method: "PIX",
+        provider: "MERCADO_PAGO",
+        providerPaymentId: "321",
+        status: "PENDING",
+      },
+    });
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit): Promise<any> => {
+      const target = String(url);
+
+      if (target.endsWith("/v1/payments/321") && init?.method === "PUT") {
+        return {
+          json: async () => ({
+            external_reference: payment.externalReference,
+            id: 321,
+            status: "cancelled",
+            status_detail: "cancelled_by_collector",
+          }),
+          ok: true,
+          status: 200,
+        };
+      }
+
+      throw new Error(`Unexpected fetch: ${target}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await request(app)
+      .post(`/manager/billings/${billing.id}/cancel`)
+      .set("Authorization", auth)
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe("CANCELLED");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/v1/payments/321"),
+      expect.objectContaining({
+        body: JSON.stringify({ status: "cancelled" }),
+        method: "PUT",
+      }),
+    );
+    await expect(
+      prisma.managerBillingPayment.findUniqueOrThrow({ where: { id: payment.id } }),
+    ).resolves.toMatchObject({
+      cancelledAt: expect.any(Date),
+      status: "CANCELLED",
+    });
   });
 
   it("validates manager licenses through the shared validation endpoint secret", async () => {

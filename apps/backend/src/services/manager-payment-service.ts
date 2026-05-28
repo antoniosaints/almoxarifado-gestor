@@ -719,7 +719,14 @@ export async function cancelOrRefundMercadoPagoPayment(
     const refund = await mercadoPagoRequest<unknown>(
       accessToken,
       `/v1/payments/${payment.providerPaymentId}/refunds`,
-      { body: JSON.stringify({}), method: "POST" },
+      {
+        body: JSON.stringify({}),
+        headers: {
+          "X-Idempotency-Key": `${payment.id}-refund`,
+          "X-Render-In-Process-Refunds": "true",
+        },
+        method: "POST",
+      },
     );
 
     return prisma.managerBillingPayment.update({
@@ -746,4 +753,39 @@ export async function cancelOrRefundMercadoPagoPayment(
   return prisma.managerBillingPayment.findUniqueOrThrow({
     where: { id: payment.id },
   });
+}
+
+export async function cancelOpenMercadoPagoPaymentsForBilling(
+  prisma: PrismaClient,
+  billingId: string,
+) {
+  const payments = await prisma.managerBillingPayment.findMany({
+    where: {
+      billingId,
+      provider,
+      status: ManagerBillingPaymentStatus.PENDING,
+    },
+  });
+  const cancelledPayments = [];
+
+  for (const payment of payments) {
+    if (!payment.providerPaymentId) {
+      cancelledPayments.push(
+        await prisma.managerBillingPayment.update({
+          data: {
+            cancelledAt: new Date(),
+            status: ManagerBillingPaymentStatus.CANCELLED,
+          },
+          where: { id: payment.id },
+        }),
+      );
+      continue;
+    }
+
+    cancelledPayments.push(
+      await cancelOrRefundMercadoPagoPayment(prisma, payment.id),
+    );
+  }
+
+  return cancelledPayments;
 }
