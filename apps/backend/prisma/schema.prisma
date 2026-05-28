@@ -53,6 +53,24 @@ enum ManagerBillingStatus {
   CANCELLED
 }
 
+enum ManagerGatewayProvider {
+  MERCADO_PAGO
+}
+
+enum ManagerBillingPaymentMethod {
+  PIX
+  BOLETO
+}
+
+enum ManagerBillingPaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  REFUNDED
+  EXPIRED
+}
+
 enum FleetVehicleStatus {
   ACTIVE
   INACTIVE
@@ -575,12 +593,67 @@ model ManagerBilling {
   updatedAt    DateTime             @updatedAt
   subscriber   ManagerSubscriber    @relation(fields: [subscriberId], references: [id])
   license      ManagerLicense?      @relation(fields: [licenseId], references: [id], onDelete: SetNull)
+  payments     ManagerBillingPayment[]
 
   @@index([subscriberId])
   @@index([licenseId])
   @@index([systemKey])
   @@index([status])
   @@index([dueDate])
+}
+
+model ManagerPaymentGatewayConfig {
+  id            String                 @id @default(cuid())
+  provider      ManagerGatewayProvider @unique
+  label         String
+  active        Boolean                @default(false)
+  publicKey     String?
+  accessToken   String?
+  clientId      String?
+  clientSecret  String?
+  refreshToken  String?
+  webhookSecret String?
+  accountId     String?
+  liveMode      Boolean                @default(false)
+  connectedAt   DateTime?
+  tokenExpiresAt DateTime?
+  oauthState    String?
+  oauthStateExpiresAt DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  payments      ManagerBillingPayment[]
+}
+
+model ManagerBillingPayment {
+  id                   String                      @id @default(cuid())
+  billingId            String
+  gatewayConfigId      String?
+  provider             ManagerGatewayProvider
+  method               ManagerBillingPaymentMethod
+  status               ManagerBillingPaymentStatus @default(PENDING)
+  providerPaymentId    String?
+  externalReference    String                      @unique
+  amount               Decimal                     @default(0)
+  statusDetail         String?
+  qrCode               String?
+  qrCodeBase64         String?
+  ticketUrl            String?
+  barcode              String?
+  rawPayload           String?
+  expiresAt            DateTime?
+  paidAt               DateTime?
+  cancelledAt          DateTime?
+  refundedAt           DateTime?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  billing              ManagerBilling              @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  gatewayConfig        ManagerPaymentGatewayConfig? @relation(fields: [gatewayConfigId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerPaymentId])
+  @@index([billingId])
+  @@index([gatewayConfigId])
+  @@index([provider])
+  @@index([status])
 }
 
 model LicenseValidationState {

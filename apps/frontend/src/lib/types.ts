@@ -454,6 +454,18 @@ export type ManagerLicenseType = "MONTHLY" | "ANNUAL" | "LIFETIME" | "TRIAL";
 
 export type ManagerBillingStatus = "OPEN" | "PAID" | "OVERDUE" | "CANCELLED";
 
+export type ManagerGatewayProvider = "MERCADO_PAGO";
+
+export type ManagerBillingPaymentMethod = "PIX" | "BOLETO";
+
+export type ManagerBillingPaymentStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELLED"
+  | "REFUNDED"
+  | "EXPIRED";
+
 export type LicenseStatus = {
   blockWrites: boolean;
   checkedAt: string | null;
@@ -526,12 +538,55 @@ export type ManagerBilling = {
   license?: ManagerLicense | null;
   licenseId?: string | null;
   paidAt?: string | null;
+  payments?: ManagerBillingPayment[];
   reference: string;
   status: ManagerBillingStatus;
   subscriber?: ManagerSubscriber;
   subscriberId: string;
   systemKey: string;
   updatedAt: string;
+};
+
+export type ManagerBillingPayment = {
+  amount: number | string;
+  barcode?: string | null;
+  billingId: string;
+  cancelledAt?: string | null;
+  createdAt: string;
+  expiresAt?: string | null;
+  externalReference: string;
+  gatewayConfigId?: string | null;
+  id: string;
+  method: ManagerBillingPaymentMethod;
+  paidAt?: string | null;
+  provider: ManagerGatewayProvider;
+  providerPaymentId?: string | null;
+  qrCode?: string | null;
+  qrCodeBase64?: string | null;
+  refundedAt?: string | null;
+  status: ManagerBillingPaymentStatus;
+  statusDetail?: string | null;
+  ticketUrl?: string | null;
+  updatedAt: string;
+};
+
+export type ManagerGatewayConfig = {
+  accountId?: string | null;
+  active: boolean;
+  accessTokenPreview?: string | null;
+  availableMethods: ManagerBillingPaymentMethod[];
+  clientId?: string | null;
+  clientSecretConfigured: boolean;
+  configured: boolean;
+  connectedAt?: string | null;
+  id: string;
+  label: string;
+  liveMode: boolean;
+  provider: ManagerGatewayProvider;
+  publicKeyPreview?: string | null;
+  redirectUri: string;
+  webhookSecretConfigured: boolean;
+  webhookUrl: string;
 };
 
 export type ManagerDashboard = {

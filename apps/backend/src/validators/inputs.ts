@@ -1,5 +1,7 @@
 import {
+  ManagerBillingPaymentMethod,
   ManagerBillingStatus,
+  ManagerGatewayProvider,
   ManagerLicenseType,
   MovementType,
   UserRole,
@@ -440,6 +442,29 @@ export const managerBillingInput = z.object({
 
 export const managerLicenseCancelInput = z.object({
   reason: optionalText,
+});
+
+export const managerBillingInvoiceInput = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("MANUAL"),
+    paidAt: z.coerce.date().optional().nullable(),
+  }),
+  z.object({
+    gatewayProvider: z
+      .nativeEnum(ManagerGatewayProvider)
+      .default(ManagerGatewayProvider.MERCADO_PAGO),
+    method: z.nativeEnum(ManagerBillingPaymentMethod),
+    mode: z.literal("GATEWAY"),
+  }),
+]);
+
+export const managerGatewayConfigInput = z.object({
+  accessToken: optionalText,
+  active: z.boolean().default(false),
+  clientId: optionalText,
+  clientSecret: optionalText,
+  publicKey: optionalText,
+  webhookSecret: optionalText,
 });
 
 export const licenseValidationInput = z.object({

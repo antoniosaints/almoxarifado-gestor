@@ -10,6 +10,11 @@ import { AppError } from "../lib/errors.js";
 
 const subscriberInclude = {
   billings: {
+    include: {
+      payments: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
     orderBy: { dueDate: "desc" },
   },
   licenses: {
@@ -23,6 +28,9 @@ const licenseInclude = {
 
 const billingInclude = {
   license: true,
+  payments: {
+    orderBy: { createdAt: "desc" },
+  },
   subscriber: true,
 } satisfies Prisma.ManagerBillingInclude;
 
@@ -74,6 +82,42 @@ function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
+}
+
+function addCalendarMonths(date: Date, months: number) {
+  const next = new Date(date);
+  const day = next.getDate();
+
+  next.setDate(1);
+  next.setMonth(next.getMonth() + months);
+  next.setDate(Math.min(day, new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()));
+
+  return next;
+}
+
+function licenseRenewalExpiration(
+  type: ManagerLicenseType,
+  currentExpiration: Date | null,
+  paidAt: Date,
+) {
+  const base =
+    currentExpiration && currentExpiration > paidAt
+      ? currentExpiration
+      : paidAt;
+
+  if (type === "LIFETIME") {
+    return null;
+  }
+
+  if (type === "ANNUAL") {
+    return addCalendarMonths(base, 12);
+  }
+
+  if (type === "TRIAL") {
+    return addDays(base, 15);
+  }
+
+  return addCalendarMonths(base, 1);
 }
 
 function monthKey(date: Date) {
@@ -181,6 +225,37 @@ async function refreshOverdueBillings(prisma: PrismaClient) {
       dueDate: { lt: new Date() },
       status: ManagerBillingStatus.OPEN,
     },
+  });
+}
+
+async function renewLicenseFromBilling(
+  transaction: Prisma.TransactionClient,
+  billing: Prisma.ManagerBillingGetPayload<{ include: { license: true } }>,
+  paidAt: Date,
+) {
+  if (!billing.license) {
+    return;
+  }
+
+  const nextExpiration = licenseRenewalExpiration(
+    billing.license.type,
+    billing.license.expiresAt,
+    paidAt,
+  );
+  const nextStatus =
+    billing.license.status === ManagerLicenseStatus.CANCELLED
+      ? ManagerLicenseStatus.CANCELLED
+      : billing.license.status === ManagerLicenseStatus.LINKED
+        ? ManagerLicenseStatus.LINKED
+        : ManagerLicenseStatus.ACTIVE;
+
+  await transaction.managerLicense.update({
+    data: {
+      expiresAt: nextExpiration,
+      status: nextStatus,
+      validatedAt: paidAt,
+    },
+    where: { id: billing.license.id },
   });
 }
 
@@ -346,7 +421,7 @@ export async function createManagerBilling(
     input.subscriberId,
   );
 
-  return prisma.managerBilling.create({
+  const billing = await prisma.managerBilling.create({
     data: {
       amount: input.amount,
       description: input.description,
@@ -363,6 +438,14 @@ export async function createManagerBilling(
     },
     include: billingInclude,
   });
+
+  if (billing.status === ManagerBillingStatus.PAID) {
+    return settleManagerBillingPaid(prisma, billing.id, billing.paidAt ?? new Date(), {
+      forceRenew: true,
+    });
+  }
+
+  return billing;
 }
 
 export async function updateManagerBilling(
@@ -377,23 +460,91 @@ export async function updateManagerBilling(
     input.subscriberId,
   );
 
-  return prisma.managerBilling.update({
-    data: {
-      amount: input.amount,
-      description: input.description,
-      dueDate: input.dueDate,
-      licenseId: input.licenseId ?? null,
-      paidAt:
-        input.status === ManagerBillingStatus.PAID
-          ? input.paidAt ?? new Date()
-          : input.paidAt ?? null,
-      reference: input.reference,
-      status: input.status,
-      subscriberId: input.subscriberId,
-      systemKey: normalizeSystemKey(license?.systemKey ?? input.systemKey),
-    },
-    include: billingInclude,
-    where: { id },
+  return prisma.$transaction(async (transaction) => {
+    const existing = await transaction.managerBilling.findUnique({
+      include: { license: true },
+      where: { id },
+    });
+
+    if (!existing) {
+      throw new AppError(404, "CobranÃƒÂ§a nÃƒÂ£o encontrada.");
+    }
+
+    const paidAt =
+      input.status === ManagerBillingStatus.PAID
+        ? input.paidAt ?? existing.paidAt ?? new Date()
+        : input.paidAt ?? null;
+    const billing = await transaction.managerBilling.update({
+      data: {
+        amount: input.amount,
+        description: input.description,
+        dueDate: input.dueDate,
+        licenseId: input.licenseId ?? null,
+        paidAt,
+        reference: input.reference,
+        status: input.status,
+        subscriberId: input.subscriberId,
+        systemKey: normalizeSystemKey(license?.systemKey ?? input.systemKey),
+      },
+      include: billingInclude,
+      where: { id },
+    });
+
+    if (
+      input.status === ManagerBillingStatus.PAID &&
+      existing.status !== ManagerBillingStatus.PAID
+    ) {
+      await renewLicenseFromBilling(
+        transaction,
+        {
+          ...billing,
+          license: billing.license,
+        },
+        paidAt ?? new Date(),
+      );
+    }
+
+    return transaction.managerBilling.findUniqueOrThrow({
+      include: billingInclude,
+      where: { id },
+    });
+  });
+}
+
+export async function settleManagerBillingPaid(
+  prisma: PrismaClient,
+  id: string,
+  paidAt = new Date(),
+  options: { forceRenew?: boolean } = {},
+) {
+  return prisma.$transaction(async (transaction) => {
+    const existing = await transaction.managerBilling.findUnique({
+      include: { license: true },
+      where: { id },
+    });
+
+    if (!existing) {
+      throw new AppError(404, "CobranÃƒÂ§a nÃƒÂ£o encontrada.");
+    }
+
+    const alreadyPaid = existing.status === ManagerBillingStatus.PAID;
+
+    await transaction.managerBilling.update({
+      data: {
+        paidAt,
+        status: ManagerBillingStatus.PAID,
+      },
+      where: { id },
+    });
+
+    if (!alreadyPaid || options.forceRenew) {
+      await renewLicenseFromBilling(transaction, existing, paidAt);
+    }
+
+    return transaction.managerBilling.findUniqueOrThrow({
+      include: billingInclude,
+      where: { id },
+    });
   });
 }
 
@@ -401,14 +552,7 @@ export async function markManagerBillingPaid(
   prisma: PrismaClient,
   id: string,
 ) {
-  return prisma.managerBilling.update({
-    data: {
-      paidAt: new Date(),
-      status: ManagerBillingStatus.PAID,
-    },
-    include: billingInclude,
-    where: { id },
-  });
+  return settleManagerBillingPaid(prisma, id);
 }
 
 export async function cancelManagerBilling(prisma: PrismaClient, id: string) {

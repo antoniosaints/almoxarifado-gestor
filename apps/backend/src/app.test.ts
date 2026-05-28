@@ -1373,6 +1373,165 @@ describe("api", () => {
     });
   });
 
+  it("generates Mercado Pago Pix, settles by webhook and exports manager PDFs", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const auth = authorizationFor(admin);
+    const subscriber = await prisma.managerSubscriber.create({
+      data: {
+        document: "12345678000190",
+        email: "pix@example.com",
+        name: "Cliente Pix",
+      },
+    });
+    const license = await prisma.managerLicense.create({
+      data: {
+        expiresAt: new Date("2026-05-15T12:00:00.000Z"),
+        licenseKey: "ALMO-PIX-001",
+        monthlyValue: 250,
+        startsAt: new Date("2026-05-01T12:00:00.000Z"),
+        subscriberId: subscriber.id,
+        systemKey: "Almoxarifado",
+      },
+    });
+    const billing = await prisma.managerBilling.create({
+      data: {
+        amount: 250,
+        dueDate: new Date("2026-05-20T12:00:00.000Z"),
+        licenseId: license.id,
+        reference: "2026-05",
+        subscriberId: subscriber.id,
+        systemKey: "Almoxarifado",
+      },
+    });
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit): Promise<any> => {
+      const target = String(url);
+
+      if (target.endsWith("/v1/payments") && init?.method === "POST") {
+        return {
+          json: async () => ({
+            external_reference: `${billing.id}-mp`,
+            id: 123,
+            point_of_interaction: {
+              transaction_data: {
+                qr_code: "pix-copia-e-cola",
+                qr_code_base64: tinyPngBuffer().toString("base64"),
+                ticket_url: "https://www.mercadopago.com.br/payments/123/ticket",
+              },
+            },
+            status: "pending",
+            status_detail: "pending_waiting_transfer",
+          }),
+          ok: true,
+          status: 201,
+        };
+      }
+
+      if (target.endsWith("/v1/payments/123")) {
+        return {
+          json: async () => ({
+            date_approved: "2026-05-12T12:00:00.000Z",
+            external_reference: `${billing.id}-mp`,
+            id: 123,
+            point_of_interaction: {
+              transaction_data: {
+                qr_code: "pix-copia-e-cola",
+                qr_code_base64: tinyPngBuffer().toString("base64"),
+                ticket_url: "https://www.mercadopago.com.br/payments/123/ticket",
+              },
+            },
+            status: "approved",
+            status_detail: "accredited",
+          }),
+          ok: true,
+          status: 200,
+        };
+      }
+
+      throw new Error(`Unexpected fetch: ${target}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const gateway = await request(app)
+      .put("/manager/gateways/mercado-pago")
+      .set("Authorization", auth)
+      .send({
+        accessToken: "APP_USR-test",
+        active: true,
+      });
+
+    expect(gateway.status).toBe(200);
+    expect(gateway.body).toMatchObject({
+      active: true,
+      configured: true,
+      provider: "MERCADO_PAGO",
+    });
+
+    const paymentResponse = await request(app)
+      .post(`/manager/billings/${billing.id}/faturar`)
+      .set("Authorization", auth)
+      .send({
+        gatewayProvider: "MERCADO_PAGO",
+        method: "PIX",
+        mode: "GATEWAY",
+      });
+
+    expect(paymentResponse.status).toBe(200);
+    expect(paymentResponse.body.payments[0]).toMatchObject({
+      method: "PIX",
+      providerPaymentId: "123",
+      qrCode: "pix-copia-e-cola",
+      status: "PENDING",
+    });
+
+    const createdPayment = paymentResponse.body.payments[0];
+    fetchMock.mockImplementationOnce(async (): Promise<any> => ({
+      json: async () => ({
+        date_approved: "2026-05-12T12:00:00.000Z",
+        external_reference: createdPayment.externalReference,
+        id: 123,
+        status: "approved",
+        status_detail: "accredited",
+      }),
+      ok: true,
+      status: 200,
+    }));
+
+    const webhook = await request(app)
+      .post("/manager/webhooks/mercado-pago?type=payment&data.id=123")
+      .send({ data: { id: "123" }, type: "payment" });
+
+    expect(webhook.status).toBe(200);
+    await expect(
+      prisma.managerBilling.findUniqueOrThrow({ where: { id: billing.id } }),
+    ).resolves.toMatchObject({
+      status: "PAID",
+    });
+    await expect(
+      prisma.managerLicense.findUniqueOrThrow({ where: { id: license.id } }),
+    ).resolves.toMatchObject({
+      expiresAt: new Date("2026-06-15T12:00:00.000Z"),
+      status: "ACTIVE",
+    });
+
+    const billingPdf = await request(app)
+      .get(`/manager/billings/${billing.id}/pdf`)
+      .set("Authorization", auth);
+    const licensePdf = await request(app)
+      .get(`/manager/licenses/${license.id}/pdf`)
+      .set("Authorization", auth);
+
+    expect(billingPdf.status).toBe(200);
+    expect(billingPdf.headers["content-type"]).toContain("application/pdf");
+    expect(countPdfPages(billingPdf.body)).toBeGreaterThanOrEqual(1);
+    expect(licensePdf.status).toBe(200);
+    expect(licensePdf.headers["content-type"]).toContain("application/pdf");
+  });
+
   it("validates manager licenses through the shared validation endpoint secret", async () => {
     process.env.SECRET_VALIDATION_LICENSE = "secretvalidador";
     const { user } = await createBaseFixture(prisma);

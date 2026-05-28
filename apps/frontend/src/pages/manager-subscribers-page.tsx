@@ -1,14 +1,26 @@
 import {
+  Ban,
   CalendarClock,
+  CheckCircle2,
+  Copy,
   CreditCard,
+  Download,
+  ExternalLink,
   Eye,
+  FileText,
   KeyRound,
+  Link2,
   Pencil,
   Plus,
   Power,
-  UsersRound,
+  QrCode,
+  ReceiptText,
+  Settings,
+  ShieldCheck,
+  WalletCards,
+  XCircle,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
@@ -24,10 +36,18 @@ import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MaskedInput } from "@/components/ui/masked-input";
+import { Select } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { api, useApiResource } from "@/lib/api";
-import type { ManagerBilling, ManagerLicense, ManagerSubscriber } from "@/lib/types";
+import { api, apiFile, useApiResource } from "@/lib/api";
+import type {
+  ManagerBilling,
+  ManagerBillingPayment,
+  ManagerBillingPaymentMethod,
+  ManagerGatewayConfig,
+  ManagerLicense,
+  ManagerSubscriber,
+} from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 type SubscriberDraft = {
@@ -40,6 +60,32 @@ type SubscriberDraft = {
   notes: string;
   phone: string;
   state: string;
+};
+
+type BillingDraft = {
+  amount: string;
+  description: string;
+  dueDate: string;
+  licenseId: string;
+  reference: string;
+  subscriberId: string;
+  systemKey: string;
+};
+
+type BillingInvoiceDraft = {
+  billingId: string;
+  method: ManagerBillingPaymentMethod;
+  mode: "GATEWAY" | "MANUAL";
+  paidAt: string;
+};
+
+type GatewayDraft = {
+  accessToken: string;
+  active: boolean;
+  clientId: string;
+  clientSecret: string;
+  publicKey: string;
+  webhookSecret: string;
 };
 
 function emptyDraft(): SubscriberDraft {
@@ -69,6 +115,14 @@ function draftFromSubscriber(subscriber: ManagerSubscriber): SubscriberDraft {
   };
 }
 
+function todayInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function currentReference() {
+  return new Date().toISOString().slice(0, 7);
+}
+
 function licenseStatusLabel(status: ManagerLicense["status"]) {
   const labels = {
     ACTIVE: "Ativa",
@@ -79,6 +133,17 @@ function licenseStatusLabel(status: ManagerLicense["status"]) {
   };
 
   return labels[status];
+}
+
+function licenseTypeLabel(type: ManagerLicense["type"]) {
+  const labels = {
+    ANNUAL: "Anual",
+    LIFETIME: "Vitalicia",
+    MONTHLY: "Mensal",
+    TRIAL: "Teste",
+  };
+
+  return labels[type];
 }
 
 function billingStatusLabel(status: ManagerBilling["status"]) {
@@ -92,12 +157,40 @@ function billingStatusLabel(status: ManagerBilling["status"]) {
   return labels[status];
 }
 
-function statusVariant(status: ManagerLicense["status"] | ManagerBilling["status"]) {
-  if (status === "ACTIVE" || status === "LINKED" || status === "PAID") {
+function paymentStatusLabel(status: ManagerBillingPayment["status"]) {
+  const labels = {
+    APPROVED: "Aprovado",
+    CANCELLED: "Cancelado",
+    EXPIRED: "Expirado",
+    PENDING: "Pendente",
+    REFUNDED: "Estornado",
+    REJECTED: "Rejeitado",
+  };
+
+  return labels[status];
+}
+
+function paymentMethodLabel(method: ManagerBillingPaymentMethod) {
+  return method === "PIX" ? "Pix" : "Boleto";
+}
+
+function statusVariant(
+  status:
+    | ManagerBilling["status"]
+    | ManagerBillingPayment["status"]
+    | ManagerLicense["status"],
+) {
+  if (status === "ACTIVE" || status === "APPROVED" || status === "LINKED" || status === "PAID") {
     return "success" as const;
   }
 
-  if (status === "CANCELLED" || status === "EXPIRED" || status === "OVERDUE") {
+  if (
+    status === "CANCELLED" ||
+    status === "EXPIRED" ||
+    status === "OVERDUE" ||
+    status === "REFUNDED" ||
+    status === "REJECTED"
+  ) {
     return "zero" as const;
   }
 
@@ -112,11 +205,85 @@ function nextExpiration(licenses: ManagerLicense[] = []) {
     )[0];
 }
 
+function latestPayment(billing: ManagerBilling) {
+  return billing.payments?.[0] ?? null;
+}
+
+function billingDraftFromLicense(subscriber: ManagerSubscriber, license: ManagerLicense): BillingDraft {
+  return {
+    amount: String(license.monthlyValue),
+    description: `${license.systemKey} - ${currentReference()}`,
+    dueDate: todayInputValue(),
+    licenseId: license.id,
+    reference: currentReference(),
+    subscriberId: subscriber.id,
+    systemKey: license.systemKey,
+  };
+}
+
+function billingDraftForSubscriber(subscriber: ManagerSubscriber): BillingDraft {
+  const license = subscriber.licenses?.[0];
+
+  return {
+    amount: license ? String(license.monthlyValue) : "0",
+    description: license ? `${license.systemKey} - ${currentReference()}` : "",
+    dueDate: todayInputValue(),
+    licenseId: license?.id ?? "",
+    reference: currentReference(),
+    subscriberId: subscriber.id,
+    systemKey: license?.systemKey ?? "Almoxarifado",
+  };
+}
+
+function gatewayDraftFromConfig(gateway?: ManagerGatewayConfig): GatewayDraft {
+  return {
+    accessToken: "",
+    active: gateway?.active ?? false,
+    clientId: gateway?.clientId ?? "",
+    clientSecret: "",
+    publicKey: "",
+    webhookSecret: "",
+  };
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyText(value: string) {
+  await navigator.clipboard?.writeText(value);
+}
+
 export function ManagerSubscribersPage() {
   const subscribers = useApiResource<ManagerSubscriber[]>("/manager/subscribers", []);
-  const [detailsSubscriber, setDetailsSubscriber] = useState<ManagerSubscriber | null>(null);
+  const gateways = useApiResource<ManagerGatewayConfig[]>("/manager/gateways", []);
+  const [detailsSubscriberId, setDetailsSubscriberId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SubscriberDraft | null>(null);
+  const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
+  const [invoiceDraft, setInvoiceDraft] = useState<BillingInvoiceDraft | null>(null);
+  const [gatewayDraft, setGatewayDraft] = useState<GatewayDraft | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const detailsSubscriber = useMemo(
+    () =>
+      detailsSubscriberId
+        ? subscribers.data.find((subscriber) => subscriber.id === detailsSubscriberId) ?? null
+        : null,
+    [detailsSubscriberId, subscribers.data],
+  );
+  const mercadoPagoGateway = gateways.data.find(
+    (gateway) => gateway.provider === "MERCADO_PAGO",
+  );
+
+  async function reloadManager() {
+    await Promise.all([subscribers.reload(), gateways.reload()]);
+  }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -152,6 +319,171 @@ export function ManagerSubscribersPage() {
     }
   }
 
+  async function saveBilling(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!billingDraft) {
+      return;
+    }
+
+    try {
+      await api<ManagerBilling>("/manager/billings", {
+        body: JSON.stringify({
+          amount: Number(billingDraft.amount),
+          description: billingDraft.description || null,
+          dueDate: billingDraft.dueDate,
+          licenseId: billingDraft.licenseId || null,
+          reference: billingDraft.reference,
+          status: "OPEN",
+          subscriberId: billingDraft.subscriberId,
+          systemKey: billingDraft.systemKey,
+        }),
+        method: "POST",
+      });
+      setBillingDraft(null);
+      setMessage(null);
+      await subscribers.reload();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao gerar cobrança.");
+    }
+  }
+
+  async function invoiceBilling(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!invoiceDraft) {
+      return;
+    }
+
+    try {
+      const payload =
+        invoiceDraft.mode === "MANUAL"
+          ? { mode: "MANUAL", paidAt: invoiceDraft.paidAt || null }
+          : {
+              gatewayProvider: "MERCADO_PAGO",
+              method: invoiceDraft.method,
+              mode: "GATEWAY",
+            };
+
+      await api<ManagerBilling>(`/manager/billings/${invoiceDraft.billingId}/faturar`, {
+        body: JSON.stringify(payload),
+        method: "POST",
+      });
+      setInvoiceDraft(null);
+      setMessage(null);
+      await subscribers.reload();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao faturar.");
+    }
+  }
+
+  async function runLicenseAction(
+    id: string,
+    action: "cancel" | "link" | "validate",
+    body: Record<string, unknown> = {},
+  ) {
+    try {
+      await api<ManagerLicense>(`/manager/licenses/${id}/${action}`, {
+        body: JSON.stringify(body),
+        method: "POST",
+      });
+      await subscribers.reload();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha na licença.");
+    }
+  }
+
+  async function cancelLicense(license: ManagerLicense) {
+    const reason = window.prompt("Motivo do cancelamento", "");
+
+    if (reason === null) {
+      return;
+    }
+
+    await runLicenseAction(license.id, "cancel", { reason });
+  }
+
+  async function cancelBilling(id: string) {
+    try {
+      await api<ManagerBilling>(`/manager/billings/${id}/cancel`, {
+        body: JSON.stringify({}),
+        method: "POST",
+      });
+      await subscribers.reload();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao cancelar.");
+    }
+  }
+
+  async function cancelGatewayPayment(payment: ManagerBillingPayment) {
+    try {
+      setBusyAction(payment.id);
+      await api<ManagerBillingPayment>(`/manager/payments/${payment.id}/cancel`, {
+        body: JSON.stringify({}),
+        method: "POST",
+      });
+      await subscribers.reload();
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error ? caughtError.message : "Falha ao cancelar no gateway.",
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function downloadPdf(path: string, fileName: string) {
+    try {
+      const blob = await apiFile(path);
+      downloadBlob(blob, fileName);
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao exportar PDF.");
+    }
+  }
+
+  async function saveGateway(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!gatewayDraft) {
+      return;
+    }
+
+    try {
+      await api<ManagerGatewayConfig>("/manager/gateways/mercado-pago", {
+        body: JSON.stringify({
+          accessToken: gatewayDraft.accessToken || null,
+          active: gatewayDraft.active,
+          clientId: gatewayDraft.clientId || null,
+          clientSecret: gatewayDraft.clientSecret || null,
+          publicKey: gatewayDraft.publicKey || null,
+          webhookSecret: gatewayDraft.webhookSecret || null,
+        }),
+        method: "PUT",
+      });
+      setGatewayDraft(null);
+      setMessage(null);
+      await gateways.reload();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao salvar gateway.");
+    }
+  }
+
+  async function startGatewayOAuth() {
+    try {
+      const response = await api<{ authorizationUrl: string }>(
+        "/manager/gateways/mercado-pago/oauth/start",
+        {
+          body: JSON.stringify({}),
+          method: "POST",
+        },
+      );
+
+      window.open(response.authorizationUrl, "_blank", "noopener,noreferrer");
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao conectar.");
+    }
+  }
+
   if (subscribers.loading) {
     return <LoadingLine label="Carregando assinantes..." />;
   }
@@ -174,6 +506,7 @@ export function ManagerSubscribersPage() {
       </div>
 
       {message ? <ResourceError message={message} /> : null}
+      {gateways.error ? <ResourceError message={gateways.error} /> : null}
 
       <DataTable
         columns={[
@@ -209,16 +542,19 @@ export function ManagerSubscribersPage() {
             key: "licenses",
           },
           {
-            cell: (subscriber) => subscriber.billings?.length ?? 0,
-            header: "Faturas",
-            key: "billings",
+            cell: (subscriber) =>
+              (subscriber.billings ?? []).filter((billing) =>
+                ["OPEN", "OVERDUE"].includes(billing.status),
+              ).length,
+            header: "Abertas",
+            key: "open-billings",
           },
           {
             cell: (subscriber) => (
               <div className="flex justify-end gap-2">
                 <Button
                   aria-label={`Ver detalhes de ${subscriber.name}`}
-                  onClick={() => setDetailsSubscriber(subscriber)}
+                  onClick={() => setDetailsSubscriberId(subscriber.id)}
                   size="icon"
                   variant="outline"
                 >
@@ -267,34 +603,86 @@ export function ManagerSubscribersPage() {
         }
         toolbar={
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <UsersRound className="h-4 w-4" />
+            <WalletCards className="h-4 w-4" />
             {subscribers.data.length} assinantes
           </div>
         }
       />
 
       <Dialog
-        onOpenChange={(open) => !open && setDetailsSubscriber(null)}
+        onOpenChange={(open) => !open && setDetailsSubscriberId(null)}
         open={Boolean(detailsSubscriber)}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-6xl">
           <DialogHeader>
-            <DialogTitle>Detalhes do assinante</DialogTitle>
-            <DialogDescription>
-              Visão comercial com dados gerais, licenças, cobranças e vencimentos.
-            </DialogDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <DialogTitle>{detailsSubscriber?.name ?? "Detalhes do assinante"}</DialogTitle>
+                <DialogDescription>
+                  Operação comercial com licenças, cobranças, gateway e vencimentos.
+                </DialogDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {detailsSubscriber ? (
+                  <Button
+                    onClick={() => setBillingDraft(billingDraftForSubscriber(detailsSubscriber))}
+                    size="sm"
+                  >
+                    <ReceiptText className="h-4 w-4" />
+                    Gerar cobrança
+                  </Button>
+                ) : null}
+                <Button
+                  onClick={() => setGatewayDraft(gatewayDraftFromConfig(mercadoPagoGateway))}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Settings className="h-4 w-4" />
+                  Gateway
+                </Button>
+              </div>
+            </div>
           </DialogHeader>
+
           {detailsSubscriber ? (
             <Tabs defaultValue="general">
               <TabsList>
                 <TabsTrigger value="general">Geral</TabsTrigger>
                 <TabsTrigger value="licenses">Licenças</TabsTrigger>
                 <TabsTrigger value="billings">Cobranças</TabsTrigger>
+                <TabsTrigger value="gateway">Gateway</TabsTrigger>
                 <TabsTrigger value="expirations">Vencimentos</TabsTrigger>
               </TabsList>
 
-              <TabsContent forceMount value="general">
-                <div className="grid gap-3 md:grid-cols-2">
+              <TabsContent value="general">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">Status</p>
+                    <div className="mt-1">
+                      <Badge variant={detailsSubscriber.active ? "success" : "zero"}>
+                        {detailsSubscriber.active ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">Licenças</p>
+                    <p className="text-xl font-semibold">
+                      {detailsSubscriber.licenses?.length ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">Cobranças abertas</p>
+                    <p className="text-xl font-semibold">
+                      {
+                        (detailsSubscriber.billings ?? []).filter((billing) =>
+                          ["OPEN", "OVERDUE"].includes(billing.status),
+                        ).length
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
                   {[
                     ["Nome", detailsSubscriber.name],
                     ["E-mail", detailsSubscriber.email],
@@ -305,7 +693,7 @@ export function ManagerSubscribersPage() {
                       [detailsSubscriber.city, detailsSubscriber.state].filter(Boolean).join(" / ") ||
                         "-",
                     ],
-                    ["Status", detailsSubscriber.active ? "Ativo" : "Inativo"],
+                    ["Criado em", formatDate(detailsSubscriber.createdAt)],
                   ].map(([label, value]) => (
                     <div className="rounded-md border p-3" key={label}>
                       <p className="text-xs text-muted-foreground">{label}</p>
@@ -321,14 +709,16 @@ export function ManagerSubscribersPage() {
                 ) : null}
               </TabsContent>
 
-              <TabsContent forceMount value="licenses">
+              <TabsContent value="licenses">
                 <div className="space-y-3">
                   {(detailsSubscriber.licenses ?? []).map((license) => (
                     <div className="rounded-md border p-3" key={license.id}>
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="font-mono text-xs">{license.licenseKey}</p>
-                          <p className="text-sm font-medium">{license.systemKey}</p>
+                          <p className="text-sm font-medium">
+                            {license.systemKey} · {licenseTypeLabel(license.type)}
+                          </p>
                         </div>
                         <Badge variant={statusVariant(license.status)}>
                           {licenseStatusLabel(license.status)}
@@ -342,6 +732,57 @@ export function ManagerSubscribersPage() {
                         <span>IP: {license.linkedIp || "-"}</span>
                         <span>Validações: {license.validationCount ?? 0}</span>
                       </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          onClick={() =>
+                            setBillingDraft(billingDraftFromLicense(detailsSubscriber, license))
+                          }
+                          size="sm"
+                        >
+                          <ReceiptText className="h-4 w-4" />
+                          Cobrar
+                        </Button>
+                        <Button
+                          onClick={() =>
+                            void downloadPdf(
+                              `/manager/licenses/${license.id}/pdf`,
+                              `licenca-${license.licenseKey}.pdf`,
+                            )
+                          }
+                          size="sm"
+                          variant="outline"
+                        >
+                          <Download className="h-4 w-4" />
+                          PDF
+                        </Button>
+                        <Button
+                          disabled={license.status === "ACTIVE" || license.status === "LINKED"}
+                          onClick={() => void runLicenseAction(license.id, "validate")}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          Validar
+                        </Button>
+                        <Button
+                          disabled={license.status === "LINKED" || license.status === "CANCELLED"}
+                          onClick={() => void runLicenseAction(license.id, "link")}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <Link2 className="h-4 w-4" />
+                          Vincular
+                        </Button>
+                        <Button
+                          disabled={license.status === "CANCELLED"}
+                          onClick={() => void cancelLicense(license)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          Cancelar
+                        </Button>
+                      </div>
                     </div>
                   ))}
                   {detailsSubscriber.licenses?.length ? null : (
@@ -352,27 +793,125 @@ export function ManagerSubscribersPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent forceMount value="billings">
+              <TabsContent value="billings">
                 <div className="space-y-3">
-                  {(detailsSubscriber.billings ?? []).map((billing) => (
-                    <div
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
-                      key={billing.id}
-                    >
-                      <div>
-                        <p className="font-medium">{billing.reference}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {billing.systemKey} - vencimento {formatDate(billing.dueDate)}
-                        </p>
+                  {(detailsSubscriber.billings ?? []).map((billing) => {
+                    const payment = latestPayment(billing);
+
+                    return (
+                      <div className="rounded-md border p-3" key={billing.id}>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-medium">{billing.reference}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {billing.systemKey} · vencimento {formatDate(billing.dueDate)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <p className="font-semibold">{formatCurrency(Number(billing.amount))}</p>
+                            <Badge variant={statusVariant(billing.status)}>
+                              {billingStatusLabel(billing.status)}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {payment ? (
+                          <div className="mt-3 rounded-md bg-muted p-3 text-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant={statusVariant(payment.status)}>
+                                  {paymentMethodLabel(payment.method)} · {paymentStatusLabel(payment.status)}
+                                </Badge>
+                                {payment.providerPaymentId ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    MP {payment.providerPaymentId}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {payment.qrCode ? (
+                                  <Button
+                                    onClick={() => void copyText(payment.qrCode ?? "")}
+                                    size="sm"
+                                    variant="outline"
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                    Copiar Pix
+                                  </Button>
+                                ) : null}
+                                {payment.ticketUrl ? (
+                                  <Button asChild size="sm" variant="outline">
+                                    <a href={payment.ticketUrl} rel="noreferrer" target="_blank">
+                                      <ExternalLink className="h-4 w-4" />
+                                      Abrir
+                                    </a>
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  disabled={
+                                    busyAction === payment.id ||
+                                    payment.status === "CANCELLED" ||
+                                    payment.status === "REFUNDED"
+                                  }
+                                  onClick={() => void cancelGatewayPayment(payment)}
+                                  size="sm"
+                                  variant="outline"
+                                >
+                                  <Ban className="h-4 w-4" />
+                                  {payment.status === "APPROVED" ? "Estornar" : "Cancelar MP"}
+                                </Button>
+                              </div>
+                            </div>
+                            {payment.qrCode ? (
+                              <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
+                                {payment.qrCode}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            disabled={billing.status === "PAID" || billing.status === "CANCELLED"}
+                            onClick={() =>
+                              setInvoiceDraft({
+                                billingId: billing.id,
+                                method: "PIX",
+                                mode: "GATEWAY",
+                                paidAt: todayInputValue(),
+                              })
+                            }
+                            size="sm"
+                          >
+                            <CreditCard className="h-4 w-4" />
+                            Faturar
+                          </Button>
+                          <Button
+                            onClick={() =>
+                              void downloadPdf(
+                                `/manager/billings/${billing.id}/pdf`,
+                                `cobranca-${billing.reference}.pdf`,
+                              )
+                            }
+                            size="sm"
+                            variant="outline"
+                          >
+                            <FileText className="h-4 w-4" />
+                            PDF
+                          </Button>
+                          <Button
+                            disabled={billing.status === "CANCELLED" || billing.status === "PAID"}
+                            onClick={() => void cancelBilling(billing.id)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <Ban className="h-4 w-4" />
+                            Cancelar
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <p className="font-semibold">{formatCurrency(Number(billing.amount))}</p>
-                        <Badge variant={statusVariant(billing.status)}>
-                          {billingStatusLabel(billing.status)}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {detailsSubscriber.billings?.length ? null : (
                     <p className="rounded-md border p-4 text-sm text-muted-foreground">
                       Nenhuma cobrança cadastrada.
@@ -381,7 +920,62 @@ export function ManagerSubscribersPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent forceMount value="expirations">
+              <TabsContent value="gateway">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-md border p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-primary" />
+                        <p className="font-medium">Mercado Pago</p>
+                      </div>
+                      <Badge
+                        variant={
+                          mercadoPagoGateway?.active && mercadoPagoGateway.configured
+                            ? "success"
+                            : "low"
+                        }
+                      >
+                        {mercadoPagoGateway?.active && mercadoPagoGateway.configured
+                          ? "Ativo"
+                          : "Pendente"}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                      <p>Conta: {mercadoPagoGateway?.accountId ?? "-"}</p>
+                      <p>Token: {mercadoPagoGateway?.accessTokenPreview ?? "-"}</p>
+                      <p>Webhook: {mercadoPagoGateway?.webhookUrl ?? "-"}</p>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => setGatewayDraft(gatewayDraftFromConfig(mercadoPagoGateway))}
+                        size="sm"
+                      >
+                        <Settings className="h-4 w-4" />
+                        Configurar
+                      </Button>
+                      <Button onClick={() => void reloadManager()} size="sm" variant="outline">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Atualizar
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <QrCode className="h-4 w-4 text-primary" />
+                      <p className="font-medium">Métodos disponíveis</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="low">Pix</Badge>
+                      <Badge variant="low">Boleto</Badge>
+                    </div>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      A baixa automática acontece pelo webhook de pagamento aprovado e renova a licença vinculada.
+                    </p>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="expirations">
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="rounded-md border p-3">
                     <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
@@ -512,6 +1106,312 @@ export function ManagerSubscribersPage() {
                 Assinante ativo
               </label>
               <Button type="submit">Salvar assinante</Button>
+            </Form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => !open && setBillingDraft(null)}
+        open={Boolean(billingDraft)}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Gerar cobrança</DialogTitle>
+            <DialogDescription>
+              Lance a cobrança no assinante e fature por baixa manual, Pix ou boleto.
+            </DialogDescription>
+          </DialogHeader>
+          {billingDraft ? (
+            <Form onSubmit={saveBilling}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField>
+                  <Label htmlFor="billing-license">Licença</Label>
+                  <Select
+                    id="billing-license"
+                    onChange={(event) => {
+                      const license = detailsSubscriber?.licenses?.find(
+                        (item) => item.id === event.target.value,
+                      );
+
+                      setBillingDraft({
+                        ...billingDraft,
+                        amount: license ? String(license.monthlyValue) : billingDraft.amount,
+                        licenseId: event.target.value,
+                        systemKey: license?.systemKey ?? billingDraft.systemKey,
+                      });
+                    }}
+                    value={billingDraft.licenseId}
+                  >
+                    <option value="">Sem licença vinculada</option>
+                    {(detailsSubscriber?.licenses ?? []).map((license) => (
+                      <option key={license.id} value={license.id}>
+                        {license.licenseKey} - {license.systemKey}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+                <FormField>
+                  <Label htmlFor="billing-reference">Referência</Label>
+                  <Input
+                    id="billing-reference"
+                    onChange={(event) =>
+                      setBillingDraft({ ...billingDraft, reference: event.target.value })
+                    }
+                    required
+                    value={billingDraft.reference}
+                  />
+                </FormField>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <FormField>
+                  <Label htmlFor="billing-system">Sistema</Label>
+                  <Input
+                    id="billing-system"
+                    onChange={(event) =>
+                      setBillingDraft({ ...billingDraft, systemKey: event.target.value })
+                    }
+                    required
+                    value={billingDraft.systemKey}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="billing-amount">Valor</Label>
+                  <Input
+                    id="billing-amount"
+                    min={0}
+                    onChange={(event) =>
+                      setBillingDraft({ ...billingDraft, amount: event.target.value })
+                    }
+                    required
+                    step="0.01"
+                    type="number"
+                    value={billingDraft.amount}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="billing-due">Vencimento</Label>
+                  <Input
+                    id="billing-due"
+                    onChange={(event) =>
+                      setBillingDraft({ ...billingDraft, dueDate: event.target.value })
+                    }
+                    required
+                    type="date"
+                    value={billingDraft.dueDate}
+                  />
+                </FormField>
+              </div>
+              <FormField>
+                <Label htmlFor="billing-description">Descrição</Label>
+                <Textarea
+                  id="billing-description"
+                  onChange={(event) =>
+                    setBillingDraft({ ...billingDraft, description: event.target.value })
+                  }
+                  value={billingDraft.description}
+                />
+              </FormField>
+              <Button type="submit">Salvar cobrança</Button>
+            </Form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => !open && setInvoiceDraft(null)}
+        open={Boolean(invoiceDraft)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Faturar cobrança</DialogTitle>
+            <DialogDescription>
+              Baixe manualmente ou gere Pix/boleto pelo Mercado Pago.
+            </DialogDescription>
+          </DialogHeader>
+          {invoiceDraft ? (
+            <Form onSubmit={invoiceBilling}>
+              <FormField>
+                <Label htmlFor="invoice-mode">Ação</Label>
+                <Select
+                  id="invoice-mode"
+                  onChange={(event) =>
+                    setInvoiceDraft({
+                      ...invoiceDraft,
+                      mode: event.target.value as BillingInvoiceDraft["mode"],
+                    })
+                  }
+                  value={invoiceDraft.mode}
+                >
+                  <option value="GATEWAY">Gerar no gateway</option>
+                  <option value="MANUAL">Marcar como paga</option>
+                </Select>
+              </FormField>
+
+              {invoiceDraft.mode === "GATEWAY" ? (
+                <>
+                  <div className="rounded-md border p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Mercado Pago</span>
+                      <Badge
+                        variant={
+                          mercadoPagoGateway?.active && mercadoPagoGateway.configured
+                            ? "success"
+                            : "low"
+                        }
+                      >
+                        {mercadoPagoGateway?.active && mercadoPagoGateway.configured
+                          ? "Disponível"
+                          : "Configurar"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <FormField>
+                    <Label htmlFor="invoice-method">Método</Label>
+                    <Select
+                      id="invoice-method"
+                      onChange={(event) =>
+                        setInvoiceDraft({
+                          ...invoiceDraft,
+                          method: event.target.value as ManagerBillingPaymentMethod,
+                        })
+                      }
+                      value={invoiceDraft.method}
+                    >
+                      <option value="PIX">Pix</option>
+                      <option value="BOLETO">Boleto</option>
+                    </Select>
+                  </FormField>
+                </>
+              ) : (
+                <FormField>
+                  <Label htmlFor="invoice-paid-at">Data do pagamento</Label>
+                  <Input
+                    id="invoice-paid-at"
+                    onChange={(event) =>
+                      setInvoiceDraft({ ...invoiceDraft, paidAt: event.target.value })
+                    }
+                    type="date"
+                    value={invoiceDraft.paidAt}
+                  />
+                </FormField>
+              )}
+
+              <Button type="submit">
+                <CreditCard className="h-4 w-4" />
+                Confirmar faturamento
+              </Button>
+            </Form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => !open && setGatewayDraft(null)}
+        open={Boolean(gatewayDraft)}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Mercado Pago</DialogTitle>
+            <DialogDescription>
+              Vincule a conta recebedora para gerar Pix, boleto, baixa automatica e estorno.
+            </DialogDescription>
+          </DialogHeader>
+          {gatewayDraft ? (
+            <Form onSubmit={saveGateway}>
+              <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                <input
+                  checked={gatewayDraft.active}
+                  onChange={(event) =>
+                    setGatewayDraft({ ...gatewayDraft, active: event.target.checked })
+                  }
+                  type="checkbox"
+                />
+                Gateway ativo
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField>
+                  <Label htmlFor="mp-client-id">Client ID</Label>
+                  <Input
+                    id="mp-client-id"
+                    onChange={(event) =>
+                      setGatewayDraft({ ...gatewayDraft, clientId: event.target.value })
+                    }
+                    value={gatewayDraft.clientId}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="mp-client-secret">Client Secret</Label>
+                  <Input
+                    id="mp-client-secret"
+                    onChange={(event) =>
+                      setGatewayDraft({ ...gatewayDraft, clientSecret: event.target.value })
+                    }
+                    placeholder={
+                      mercadoPagoGateway?.clientSecretConfigured
+                        ? "Configurado"
+                        : "Informe para OAuth"
+                    }
+                    type="password"
+                    value={gatewayDraft.clientSecret}
+                  />
+                </FormField>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField>
+                  <Label htmlFor="mp-access-token">Access Token</Label>
+                  <Input
+                    id="mp-access-token"
+                    onChange={(event) =>
+                      setGatewayDraft({ ...gatewayDraft, accessToken: event.target.value })
+                    }
+                    placeholder={mercadoPagoGateway?.accessTokenPreview ?? "APP_USR..."}
+                    type="password"
+                    value={gatewayDraft.accessToken}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="mp-public-key">Public Key</Label>
+                  <Input
+                    id="mp-public-key"
+                    onChange={(event) =>
+                      setGatewayDraft({ ...gatewayDraft, publicKey: event.target.value })
+                    }
+                    placeholder={mercadoPagoGateway?.publicKeyPreview ?? "APP_USR..."}
+                    value={gatewayDraft.publicKey}
+                  />
+                </FormField>
+              </div>
+              <FormField>
+                <Label htmlFor="mp-webhook-secret">Webhook Secret</Label>
+                <Input
+                  id="mp-webhook-secret"
+                  onChange={(event) =>
+                    setGatewayDraft({ ...gatewayDraft, webhookSecret: event.target.value })
+                  }
+                  placeholder={
+                    mercadoPagoGateway?.webhookSecretConfigured ? "Configurado" : "Secret do webhook"
+                  }
+                  type="password"
+                  value={gatewayDraft.webhookSecret}
+                />
+              </FormField>
+              <div className="rounded-md border p-3 text-sm">
+                <p className="font-medium">URLs da integração</p>
+                <p className="mt-2 break-all text-muted-foreground">
+                  Webhook: {mercadoPagoGateway?.webhookUrl ?? "-"}
+                </p>
+                <p className="mt-1 break-all text-muted-foreground">
+                  Redirect OAuth: {mercadoPagoGateway?.redirectUri ?? "-"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit">Salvar gateway</Button>
+                <Button onClick={() => void startGatewayOAuth()} type="button" variant="outline">
+                  <ExternalLink className="h-4 w-4" />
+                  Conectar conta
+                </Button>
+              </div>
             </Form>
           ) : null}
         </DialogContent>

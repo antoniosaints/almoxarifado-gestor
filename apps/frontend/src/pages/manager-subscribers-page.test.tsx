@@ -10,6 +10,7 @@ const subscriber = {
       createdAt: "2026-05-01T00:00:00.000Z",
       dueDate: "2026-05-10T00:00:00.000Z",
       id: "billing-1",
+      payments: [],
       reference: "2026-05",
       status: "OPEN",
       subscriberId: "subscriber-1",
@@ -17,7 +18,7 @@ const subscriber = {
       updatedAt: "2026-05-01T00:00:00.000Z",
     },
   ],
-  city: "São Paulo",
+  city: "Sao Paulo",
   createdAt: "2026-05-01T00:00:00.000Z",
   document: "12.345.678/0001-90",
   email: "cliente@example.com",
@@ -42,7 +43,7 @@ const subscriber = {
     },
   ],
   name: "Cliente Municipal",
-  notes: "Atendimento prioritário.",
+  notes: "Atendimento prioritario.",
   phone: "(11) 99999-0000",
   state: "SP",
   updatedAt: "2026-05-01T00:00:00.000Z",
@@ -52,32 +53,39 @@ describe("ManagerSubscribersPage", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
-        json: async () => [subscriber],
+      vi.fn(async (url: string) => ({
+        json: async () => (url.includes("/manager/gateways") ? [] : [subscriber]),
         ok: true,
         status: 200,
       })),
     );
   });
 
-  it("opens a subscriber details modal with licenses, billings and expiration tabs", async () => {
+  it("opens a subscriber details modal with operational tabs", async () => {
     render(<ManagerSubscribersPage />);
 
     expect(await screen.findByText("Cliente Municipal")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ver detalhes de Cliente Municipal" }));
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Detalhes do assinante")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("heading", { name: "Cliente Municipal" }),
+    ).toBeInTheDocument();
     expect(within(dialog).getByRole("tab", { name: "Geral" })).toBeInTheDocument();
-    expect(within(dialog).getByRole("tab", { name: "Licenças" })).toBeInTheDocument();
-    expect(within(dialog).getByRole("tab", { name: "Cobranças" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("tab", { name: /Licen/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("tab", { name: /Cobran/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole("tab", { name: "Gateway" })).toBeInTheDocument();
     expect(within(dialog).getByRole("tab", { name: "Vencimentos" })).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("tab", { name: "Licenças" }));
+    const licensesTab = within(dialog).getByRole("tab", { name: /Licen/ });
+    fireEvent.mouseDown(licensesTab, { button: 0, ctrlKey: false });
+    fireEvent.click(licensesTab);
     expect(await within(dialog).findByText("ALMO-TESTE-001")).toBeInTheDocument();
     expect(within(dialog).getByText(/almox\.cliente\.gov\.br/)).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("tab", { name: "Cobranças" }));
+    const billingsTab = within(dialog).getByRole("tab", { name: /Cobran/ });
+    fireEvent.mouseDown(billingsTab, { button: 0, ctrlKey: false });
+    fireEvent.click(billingsTab);
     expect(await within(dialog).findByText("2026-05")).toBeInTheDocument();
   });
 });

@@ -10,7 +10,10 @@ import {
   licenseRoutes,
   publicLicenseValidationRoutes,
 } from "./routes/license-routes.js";
-import { managerRoutes } from "./routes/manager-routes.js";
+import {
+  managerPublicRoutes,
+  managerRoutes,
+} from "./routes/manager-routes.js";
 import { movementRoutes } from "./routes/movement-routes.js";
 import { officeTemplateRoutes } from "./routes/office-template-routes.js";
 import { productCategoryRoutes } from "./routes/product-category-routes.js";
@@ -55,6 +58,7 @@ app.use("/settings", publicSettingsRoutes);
 app.use("/site", publicSiteRoutes);
 app.use("/api/validation", publicLicenseValidationRoutes);
 app.use("/validation", publicLicenseValidationRoutes);
+app.use("/manager", managerPublicRoutes);
 app.use(authenticate);
 app.use("/license", licenseRoutes);
 app.use(enforceLicenseWriteAccess);
