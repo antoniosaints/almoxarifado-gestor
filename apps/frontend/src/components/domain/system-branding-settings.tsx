@@ -1,4 +1,14 @@
-import { Building2, FileText, Moon, Save, Sun, Upload } from "lucide-react";
+import {
+  Building2,
+  FileText,
+  Image,
+  Lock,
+  Moon,
+  Palette,
+  Save,
+  Sun,
+  Upload,
+} from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -29,7 +39,12 @@ type SettingsUploadResponse = {
 
 type BrandingTab = "appearance" | "brand" | "login" | "reports";
 
-const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+const acceptedImageTypes = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/svg+xml",
+];
 const maxImageSize = 1024 * 1024;
 const settingsUploadSlots: Partial<Record<keyof SystemSettings, string>> = {
   faviconUrl: "favicon",
@@ -39,7 +54,10 @@ const settingsUploadSlots: Partial<Record<keyof SystemSettings, string>> = {
   reportLogoUrl: "report-logo",
 };
 
-function normalizeColor(color: string, fallback = defaultSystemSettings.primaryColor) {
+function normalizeColor(
+  color: string,
+  fallback = defaultSystemSettings.primaryColor,
+) {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : fallback;
 }
 
@@ -121,21 +139,15 @@ export function SystemBrandingSettings({
   subtitle?: string;
   title?: string;
 }) {
-  const {
-    darkMode,
-    error,
-    loading,
-    saveSettings,
-    setDarkMode,
-    settings,
-  } = useSystemSettings();
+  const { darkMode, error, loading, saveSettings, setDarkMode, settings } =
+    useSystemSettings();
   const [draft, setDraft] = useState<SystemSettings>(settings);
   const [activeTab, setActiveTab] = useState<BrandingTab>(defaultTab);
   const [message, setMessage] = useState<SettingsMessage | null>(null);
   const [saving, setSaving] = useState(false);
-  const [uploadingField, setUploadingField] = useState<keyof SystemSettings | null>(
-    null,
-  );
+  const [uploadingField, setUploadingField] = useState<
+    keyof SystemSettings | null
+  >(null);
   const draftLogoUrl = resolveAssetUrl(draft.logoUrl);
   const draftLoginImageUrl = resolveAssetUrl(draft.loginImageUrl);
   const draftReportLogoUrl = resolveAssetUrl(draft.reportLogoUrl);
@@ -173,7 +185,10 @@ export function SystemBrandingSettings({
       );
 
       updateDraft(field, uploaded.url);
-      setMessage({ kind: "success", text: "Imagem enviada. Salve para confirmar." });
+      setMessage({
+        kind: "success",
+        text: "Imagem enviada. Salve para confirmar.",
+      });
     } catch (caughtError) {
       setMessage({
         kind: "error",
@@ -260,9 +275,15 @@ export function SystemBrandingSettings({
           value={activeTab}
         >
           <TabsList>
-            <TabsTrigger value="appearance">Aparencia</TabsTrigger>
-            <TabsTrigger value="brand">Marca</TabsTrigger>
-            <TabsTrigger value="login">Login</TabsTrigger>
+            <TabsTrigger value="appearance">
+              <Palette className="mr-1 h-4 w-4" /> Aparencia
+            </TabsTrigger>
+            <TabsTrigger value="brand">
+              <Image className="mr-1 h-4 w-4" /> Marca
+            </TabsTrigger>
+            <TabsTrigger value="login">
+              <Lock className="mr-1 h-4 w-4" /> Login
+            </TabsTrigger>
             <TabsTrigger value="reports">
               <FileText className="mr-1 h-4 w-4" />
               Relatórios
@@ -296,7 +317,9 @@ export function SystemBrandingSettings({
                   <Input
                     className="h-10 p-1"
                     id="general-settings-primary-color"
-                    onChange={(event) => updateDraft("primaryColor", event.target.value)}
+                    onChange={(event) =>
+                      updateDraft("primaryColor", event.target.value)
+                    }
                     type="color"
                     value={normalizeColor(draft.primaryColor)}
                   />
@@ -307,7 +330,9 @@ export function SystemBrandingSettings({
                   </Label>
                   <Input
                     id="general-settings-primary-color-text"
-                    onChange={(event) => updateDraft("primaryColor", event.target.value)}
+                    onChange={(event) =>
+                      updateDraft("primaryColor", event.target.value)
+                    }
                     pattern="^#[0-9a-fA-F]{6}$"
                     value={draft.primaryColor}
                   />
@@ -328,10 +353,14 @@ export function SystemBrandingSettings({
             <section className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
               <div className="space-y-4">
                 <FormField>
-                  <Label htmlFor="general-settings-system-name">Nome do sistema</Label>
+                  <Label htmlFor="general-settings-system-name">
+                    Nome do sistema
+                  </Label>
                   <Input
                     id="general-settings-system-name"
-                    onChange={(event) => updateDraft("systemName", event.target.value)}
+                    onChange={(event) =>
+                      updateDraft("systemName", event.target.value)
+                    }
                     required
                     value={draft.systemName}
                   />
@@ -371,10 +400,14 @@ export function SystemBrandingSettings({
             <section className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-2">
               <div className="space-y-4">
                 <FormField>
-                  <Label htmlFor="general-settings-login-title">Titulo do login</Label>
+                  <Label htmlFor="general-settings-login-title">
+                    Titulo do login
+                  </Label>
                   <Input
                     id="general-settings-login-title"
-                    onChange={(event) => updateDraft("loginTitle", event.target.value)}
+                    onChange={(event) =>
+                      updateDraft("loginTitle", event.target.value)
+                    }
                     required
                     value={draft.loginTitle}
                   />
@@ -385,7 +418,9 @@ export function SystemBrandingSettings({
                   </Label>
                   <Input
                     id="general-settings-login-subtitle"
-                    onChange={(event) => updateDraft("loginSubtitle", event.target.value)}
+                    onChange={(event) =>
+                      updateDraft("loginSubtitle", event.target.value)
+                    }
                     required
                     value={draft.loginSubtitle}
                   />
@@ -421,7 +456,9 @@ export function SystemBrandingSettings({
                 )}
                 <div className="space-y-1 p-4">
                   <p className="text-lg font-semibold">{draft.loginTitle}</p>
-                  <p className="text-sm text-muted-foreground">{draft.loginSubtitle}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {draft.loginSubtitle}
+                  </p>
                 </div>
               </div>
             </section>
@@ -466,7 +503,9 @@ export function SystemBrandingSettings({
                   </Label>
                   <Input
                     id="general-settings-report-title"
-                    onChange={(event) => updateDraft("reportTitle", event.target.value)}
+                    onChange={(event) =>
+                      updateDraft("reportTitle", event.target.value)
+                    }
                     required
                     value={draft.reportTitle}
                   />
