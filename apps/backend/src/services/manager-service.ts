@@ -1,4 +1,5 @@
 import {
+  ManagerBillingPaymentStatus,
   ManagerBillingStatus,
   ManagerLicenseStatus,
   type ManagerLicenseType,
@@ -561,6 +562,35 @@ export async function cancelManagerBilling(prisma: PrismaClient, id: string) {
       status: ManagerBillingStatus.CANCELLED,
     },
     include: billingInclude,
+    where: { id },
+  });
+}
+
+export async function deleteManagerBilling(prisma: PrismaClient, id: string) {
+  const billing = await prisma.managerBilling.findUnique({
+    include: { payments: true },
+    where: { id },
+  });
+
+  if (!billing) {
+    throw new AppError(404, "Cobranca nao encontrada.");
+  }
+
+  const hasApprovedPayment = billing.payments.some(
+    (payment) =>
+      payment.status === ManagerBillingPaymentStatus.APPROVED ||
+      Boolean(payment.paidAt),
+  );
+
+  if (
+    billing.status === ManagerBillingStatus.PAID ||
+    Boolean(billing.paidAt) ||
+    hasApprovedPayment
+  ) {
+    throw new AppError(409, "A cobranca paga ou efetivada nao pode ser apagada.");
+  }
+
+  return prisma.managerBilling.delete({
     where: { id },
   });
 }

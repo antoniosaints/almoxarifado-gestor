@@ -1,4 +1,4 @@
-import { Building2, Moon, Save, Sun, Upload } from "lucide-react";
+import { Building2, FileText, Moon, Save, Sun, Upload } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { apiUpload } from "@/lib/api";
 import { resolveAssetUrl } from "@/lib/assets";
 import {
@@ -26,7 +27,7 @@ type SettingsUploadResponse = {
   url: string;
 };
 
-type BrandingTab = "appearance" | "brand" | "login";
+type BrandingTab = "appearance" | "brand" | "login" | "reports";
 
 const acceptedImageTypes = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const maxImageSize = 1024 * 1024;
@@ -35,6 +36,7 @@ const settingsUploadSlots: Partial<Record<keyof SystemSettings, string>> = {
   loginBackgroundUrl: "login-background",
   loginImageUrl: "login-image",
   logoUrl: "brand-logo",
+  reportLogoUrl: "report-logo",
 };
 
 function normalizeColor(color: string, fallback = defaultSystemSettings.primaryColor) {
@@ -136,6 +138,7 @@ export function SystemBrandingSettings({
   );
   const draftLogoUrl = resolveAssetUrl(draft.logoUrl);
   const draftLoginImageUrl = resolveAssetUrl(draft.loginImageUrl);
+  const draftReportLogoUrl = resolveAssetUrl(draft.reportLogoUrl);
   const formId = "system-branding-settings-form";
 
   useEffect(() => {
@@ -193,6 +196,10 @@ export function SystemBrandingSettings({
       const savedSettings = await saveSettings({
         ...draft,
         primaryColor: normalizeColor(draft.primaryColor),
+        reportPrimaryColor: normalizeColor(
+          draft.reportPrimaryColor,
+          defaultSystemSettings.reportPrimaryColor,
+        ),
       });
 
       setDraft(savedSettings);
@@ -256,6 +263,10 @@ export function SystemBrandingSettings({
             <TabsTrigger value="appearance">Aparencia</TabsTrigger>
             <TabsTrigger value="brand">Marca</TabsTrigger>
             <TabsTrigger value="login">Login</TabsTrigger>
+            <TabsTrigger value="reports">
+              <FileText className="mr-1 h-4 w-4" />
+              Relatórios
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="appearance">
@@ -411,6 +422,111 @@ export function SystemBrandingSettings({
                 <div className="space-y-1 p-4">
                   <p className="text-lg font-semibold">{draft.loginTitle}</p>
                   <p className="text-sm text-muted-foreground">{draft.loginSubtitle}</p>
+                </div>
+              </div>
+            </section>
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <section className="grid gap-4 rounded-lg border bg-card p-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-[7rem_minmax(0,1fr)] md:items-end">
+                  <FormField>
+                    <Label htmlFor="general-settings-report-color">Cor</Label>
+                    <Input
+                      className="h-10 p-1"
+                      id="general-settings-report-color"
+                      onChange={(event) =>
+                        updateDraft("reportPrimaryColor", event.target.value)
+                      }
+                      type="color"
+                      value={normalizeColor(
+                        draft.reportPrimaryColor,
+                        defaultSystemSettings.reportPrimaryColor,
+                      )}
+                    />
+                  </FormField>
+                  <FormField>
+                    <Label htmlFor="general-settings-report-color-text">
+                      Cor do relatório
+                    </Label>
+                    <Input
+                      id="general-settings-report-color-text"
+                      onChange={(event) =>
+                        updateDraft("reportPrimaryColor", event.target.value)
+                      }
+                      pattern="^#[0-9a-fA-F]{6}$"
+                      value={draft.reportPrimaryColor}
+                    />
+                  </FormField>
+                </div>
+                <FormField>
+                  <Label htmlFor="general-settings-report-title">
+                    Título do cabeçalho
+                  </Label>
+                  <Input
+                    id="general-settings-report-title"
+                    onChange={(event) => updateDraft("reportTitle", event.target.value)}
+                    required
+                    value={draft.reportTitle}
+                  />
+                </FormField>
+                <ImageUrlField
+                  field="reportLogoUrl"
+                  label="Logo do relatório"
+                  onUpload={(field, file) => void uploadImage(field, file)}
+                  uploading={uploadingField === "reportLogoUrl"}
+                  updateDraft={updateDraft}
+                  value={draft.reportLogoUrl}
+                />
+                <FormField>
+                  <Label htmlFor="general-settings-report-footer">Rodapé</Label>
+                  <Textarea
+                    id="general-settings-report-footer"
+                    onChange={(event) =>
+                      updateDraft("reportFooterText", event.target.value)
+                    }
+                    required
+                    value={draft.reportFooterText}
+                  />
+                </FormField>
+              </div>
+              <div className="overflow-hidden rounded-lg border bg-background">
+                <div
+                  className="h-2"
+                  style={{
+                    backgroundColor: normalizeColor(
+                      draft.reportPrimaryColor,
+                      defaultSystemSettings.reportPrimaryColor,
+                    ),
+                  }}
+                />
+                <div className="space-y-4 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border bg-muted">
+                      {draftReportLogoUrl ? (
+                        <img
+                          alt=""
+                          className="h-full w-full object-cover"
+                          src={draftReportLogoUrl}
+                        />
+                      ) : (
+                        <Building2 className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium uppercase text-muted-foreground">
+                        {draft.reportTitle}
+                      </p>
+                      <p className="font-semibold">Relatório de cobrança</p>
+                      <p className="text-xs text-muted-foreground">
+                        Emitido por gestor do sistema
+                      </p>
+                    </div>
+                  </div>
+                  <div className="border-t pt-3 text-xs text-muted-foreground">
+                    {draft.reportFooterText}
+                  </div>
                 </div>
               </div>
             </section>

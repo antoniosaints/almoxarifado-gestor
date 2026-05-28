@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, Pencil, Plus } from "lucide-react";
+import { Ban, CheckCircle2, Pencil, Plus, QrCode, ReceiptText, Trash2 } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
 import type {
   ManagerBilling,
+  ManagerBillingPaymentMethod,
   ManagerBillingStatus,
   ManagerLicense,
   ManagerSubscriber,
@@ -175,6 +176,36 @@ export function ManagerBillingPage() {
     }
   }
 
+  async function generateGatewayBilling(
+    id: string,
+    method: ManagerBillingPaymentMethod,
+  ) {
+    try {
+      await api<ManagerBilling>(`/manager/billings/${id}/faturar`, {
+        body: JSON.stringify({
+          gatewayProvider: "MERCADO_PAGO",
+          method,
+          mode: "GATEWAY",
+        }),
+        method: "POST",
+      });
+      await billings.reload();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao faturar.");
+    }
+  }
+
+  async function deleteBilling(id: string) {
+    try {
+      await api<void>(`/manager/billings/${id}`, {
+        method: "DELETE",
+      });
+      await billings.reload();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao apagar.");
+    }
+  }
+
   function createDraft() {
     const subscriberId = subscribers.data[0]?.id ?? "";
     const license = licenses.data.find((item) => item.subscriberId === subscriberId);
@@ -288,6 +319,24 @@ export function ManagerBillingPage() {
                   <CheckCircle2 className="h-4 w-4" />
                 </Button>
                 <Button
+                  aria-label={`Gerar Pix para cobrança ${billing.reference}`}
+                  disabled={billing.status === "PAID" || billing.status === "CANCELLED"}
+                  onClick={() => void generateGatewayBilling(billing.id, "PIX")}
+                  size="icon"
+                  variant="outline"
+                >
+                  <QrCode className="h-4 w-4" />
+                </Button>
+                <Button
+                  aria-label={`Gerar boleto para cobrança ${billing.reference}`}
+                  disabled={billing.status === "PAID" || billing.status === "CANCELLED"}
+                  onClick={() => void generateGatewayBilling(billing.id, "BOLETO")}
+                  size="icon"
+                  variant="outline"
+                >
+                  <ReceiptText className="h-4 w-4" />
+                </Button>
+                <Button
                   aria-label={`Cancelar cobrança ${billing.reference}`}
                   disabled={billing.status === "CANCELLED"}
                   onClick={() => void cancelBilling(billing.id)}
@@ -295,6 +344,15 @@ export function ManagerBillingPage() {
                   variant="outline"
                 >
                   <Ban className="h-4 w-4" />
+                </Button>
+                <Button
+                  aria-label={`Apagar cobrança ${billing.reference}`}
+                  disabled={billing.status === "PAID"}
+                  onClick={() => void deleteBilling(billing.id)}
+                  size="icon"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             ),

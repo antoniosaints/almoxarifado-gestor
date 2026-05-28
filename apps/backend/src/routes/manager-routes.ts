@@ -23,6 +23,7 @@ import {
   createManagerLicense,
   createManagerSubscriber,
   deactivateManagerSubscriber,
+  deleteManagerBilling,
   getManagerDashboard,
   linkManagerLicense,
   listManagerBillings,
@@ -334,6 +335,17 @@ managerRoutes.post(
 
     await cancelOpenMercadoPagoPaymentsForBilling(prisma, id);
     response.json(await cancelManagerBilling(prisma, id));
+  }),
+);
+
+managerRoutes.delete(
+  "/billings/:id",
+  asyncHandler(async (request, response) => {
+    const { id } = idParam.parse(request.params);
+
+    await cancelOpenMercadoPagoPaymentsForBilling(prisma, id);
+    await deleteManagerBilling(prisma, id);
+    response.status(204).send();
   }),
 );
 

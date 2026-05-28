@@ -2,11 +2,16 @@ import {
   Ban,
   CalendarClock,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Cog,
   Copy,
   CreditCard,
   Download,
   ExternalLink,
   Eye,
+  File,
   FileText,
   KeyRound,
   Link2,
@@ -17,10 +22,11 @@ import {
   ReceiptText,
   Settings,
   ShieldCheck,
+  Trash2,
   WalletCards,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +45,8 @@ import { MaskedInput } from "@/components/ui/masked-input";
 import { Select } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { api, apiFile, useApiResource } from "@/lib/api";
+import { API_URL, api, apiFile, useApiResource } from "@/lib/api";
+import { getStoredSession } from "@/lib/session";
 import type {
   ManagerBilling,
   ManagerBillingPayment,
@@ -87,6 +94,10 @@ type GatewayDraft = {
   publicKey: string;
   webhookSecret: string;
 };
+
+type SubscriberDetailsTab = "billings" | "expirations" | "gateway" | "general" | "licenses";
+
+const detailPageSize = 4;
 
 function emptyDraft(): SubscriberDraft {
   return {
@@ -209,6 +220,20 @@ function latestPayment(billing: ManagerBilling) {
   return billing.payments?.[0] ?? null;
 }
 
+function canDeleteBilling(billing: ManagerBilling) {
+  const payment = latestPayment(billing);
+
+  return billing.status !== "PAID" && payment?.status !== "APPROVED";
+}
+
+function qrImageSrc(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  return value.startsWith("data:") ? value : `data:image/png;base64,${value}`;
+}
+
 function billingDraftFromLicense(subscriber: ManagerSubscriber, license: ManagerLicense): BillingDraft {
   return {
     amount: String(license.monthlyValue),
@@ -260,14 +285,68 @@ async function copyText(value: string) {
   await navigator.clipboard?.writeText(value);
 }
 
+function DetailPager({
+  currentPage,
+  label,
+  onPageChange,
+  pageCount,
+  total,
+}: {
+  currentPage: number;
+  label: string;
+  onPageChange: (page: number) => void;
+  pageCount: number;
+  total: number;
+}) {
+  if (total <= detailPageSize) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+      <span>
+        Pagina {currentPage + 1} de {pageCount} - {total} {label}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          aria-label={`Pagina anterior de ${label}`}
+          disabled={currentPage === 0}
+          onClick={() => onPageChange(Math.max(0, currentPage - 1))}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Anterior
+        </Button>
+        <Button
+          aria-label={`Proxima pagina de ${label}`}
+          disabled={currentPage >= pageCount - 1}
+          onClick={() => onPageChange(Math.min(pageCount - 1, currentPage + 1))}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Proxima
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function ManagerSubscribersPage() {
   const subscribers = useApiResource<ManagerSubscriber[]>("/manager/subscribers", []);
   const gateways = useApiResource<ManagerGatewayConfig[]>("/manager/gateways", []);
   const [detailsSubscriberId, setDetailsSubscriberId] = useState<string | null>(null);
+  const [detailsTab, setDetailsTab] = useState<SubscriberDetailsTab>("general");
+  const [licensePage, setLicensePage] = useState(0);
+  const [billingPage, setBillingPage] = useState(0);
   const [draft, setDraft] = useState<SubscriberDraft | null>(null);
   const [billingDraft, setBillingDraft] = useState<BillingDraft | null>(null);
   const [invoiceDraft, setInvoiceDraft] = useState<BillingInvoiceDraft | null>(null);
   const [gatewayDraft, setGatewayDraft] = useState<GatewayDraft | null>(null);
+  const [pixPayment, setPixPayment] = useState<ManagerBillingPayment | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const detailsSubscriber = useMemo(
@@ -280,6 +359,67 @@ export function ManagerSubscribersPage() {
   const mercadoPagoGateway = gateways.data.find(
     (gateway) => gateway.provider === "MERCADO_PAGO",
   );
+  const detailsLicenses = detailsSubscriber?.licenses ?? [];
+  const detailsBillings = detailsSubscriber?.billings ?? [];
+  const licensePageCount = Math.max(1, Math.ceil(detailsLicenses.length / detailPageSize));
+  const billingPageCount = Math.max(1, Math.ceil(detailsBillings.length / detailPageSize));
+  const currentLicensePage = Math.min(licensePage, licensePageCount - 1);
+  const currentBillingPage = Math.min(billingPage, billingPageCount - 1);
+  const visibleLicenses = detailsLicenses.slice(
+    currentLicensePage * detailPageSize,
+    currentLicensePage * detailPageSize + detailPageSize,
+  );
+  const visibleBillings = detailsBillings.slice(
+    currentBillingPage * detailPageSize,
+    currentBillingPage * detailPageSize + detailPageSize,
+  );
+
+  useEffect(() => {
+    setLicensePage((page) => Math.min(page, licensePageCount - 1));
+    setBillingPage((page) => Math.min(page, billingPageCount - 1));
+  }, [billingPageCount, licensePageCount]);
+
+  useEffect(() => {
+    if (!detailsSubscriberId || typeof WebSocket === "undefined") {
+      return;
+    }
+
+    const session = getStoredSession();
+
+    if (!session?.token) {
+      return;
+    }
+
+    const url = new URL(API_URL, window.location.origin);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = "/manager/realtime";
+    url.search = "";
+    url.searchParams.set("token", session.token);
+
+    const socket = new WebSocket(url.toString());
+
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(String(event.data)) as {
+          subscriberId?: string;
+          type?: string;
+        };
+
+        if (
+          payload.type === "manager.billing.updated" &&
+          payload.subscriberId === detailsSubscriberId
+        ) {
+          void subscribers.reload();
+        }
+      } catch {
+        // Ignore malformed realtime messages.
+      }
+    };
+
+    return () => {
+      socket.close();
+    };
+  }, [detailsSubscriberId, subscribers.reload]);
 
   async function reloadManager() {
     await Promise.all([subscribers.reload(), gateways.reload()]);
@@ -412,6 +552,17 @@ export function ManagerSubscribersPage() {
       await subscribers.reload();
     } catch (caughtError) {
       setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao cancelar.");
+    }
+  }
+
+  async function deleteBilling(id: string) {
+    try {
+      await api<void>(`/manager/billings/${id}`, {
+        method: "DELETE",
+      });
+      await subscribers.reload();
+    } catch (caughtError) {
+      setMessage(caughtError instanceof Error ? caughtError.message : "Falha ao apagar.");
     }
   }
 
@@ -554,7 +705,12 @@ export function ManagerSubscribersPage() {
               <div className="flex justify-end gap-2">
                 <Button
                   aria-label={`Ver detalhes de ${subscriber.name}`}
-                  onClick={() => setDetailsSubscriberId(subscriber.id)}
+                  onClick={() => {
+                    setDetailsTab("general");
+                    setLicensePage(0);
+                    setBillingPage(0);
+                    setDetailsSubscriberId(subscriber.id);
+                  }}
                   size="icon"
                   variant="outline"
                 >
@@ -610,7 +766,14 @@ export function ManagerSubscribersPage() {
       />
 
       <Dialog
-        onOpenChange={(open) => !open && setDetailsSubscriberId(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailsSubscriberId(null);
+            setDetailsTab("general");
+            setLicensePage(0);
+            setBillingPage(0);
+          }
+        }}
         open={Boolean(detailsSubscriber)}
       >
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-6xl">
@@ -645,13 +808,16 @@ export function ManagerSubscribersPage() {
           </DialogHeader>
 
           {detailsSubscriber ? (
-            <Tabs defaultValue="general">
+            <Tabs
+              onValueChange={(value) => setDetailsTab(value as SubscriberDetailsTab)}
+              value={detailsTab}
+            >
               <TabsList>
-                <TabsTrigger value="general">Geral</TabsTrigger>
-                <TabsTrigger value="licenses">Licenças</TabsTrigger>
-                <TabsTrigger value="billings">Cobranças</TabsTrigger>
-                <TabsTrigger value="gateway">Gateway</TabsTrigger>
-                <TabsTrigger value="expirations">Vencimentos</TabsTrigger>
+                <TabsTrigger value="general"><Cog className="mr-1 h-4 w-4" /> Geral</TabsTrigger>
+                <TabsTrigger value="licenses"><File className="mr-1 h-4 w-4" /> Licenças</TabsTrigger>
+                <TabsTrigger value="billings"><ReceiptText className="mr-1 h-4 w-4" /> Cobranças</TabsTrigger>
+                <TabsTrigger value="gateway"><CreditCard className="mr-1 h-4 w-4" /> Gateway</TabsTrigger>
+                <TabsTrigger value="expirations"><Clock className="mr-1 h-4 w-4" /> Vencimentos</TabsTrigger>
               </TabsList>
 
               <TabsContent value="general">
@@ -711,20 +877,25 @@ export function ManagerSubscribersPage() {
 
               <TabsContent value="licenses">
                 <div className="space-y-3">
-                  {(detailsSubscriber.licenses ?? []).map((license) => (
-                    <div className="rounded-md border p-3" key={license.id}>
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="font-mono text-xs">{license.licenseKey}</p>
+                  {visibleLicenses.map((license) => (
+                    <div className="rounded-md border bg-card p-2.5" key={license.id}>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-medium">
                             {license.systemKey} · {licenseTypeLabel(license.type)}
+                          </p>
+                          <p
+                            className="max-w-full truncate rounded-md border px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
+                            title={license.licenseKey}
+                          >
+                            {license.licenseKey}
                           </p>
                         </div>
                         <Badge variant={statusVariant(license.status)}>
                           {licenseStatusLabel(license.status)}
                         </Badge>
                       </div>
-                      <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
+                      <div className="mt-2 grid gap-x-4 gap-y-1 text-xs text-muted-foreground md:grid-cols-3">
                         <span>Vencimento: {formatDate(license.expiresAt)}</span>
                         <span>Acessos: {license.seats}</span>
                         <span>Valor: {formatCurrency(Number(license.monthlyValue))}</span>
@@ -732,7 +903,7 @@ export function ManagerSubscribersPage() {
                         <span>IP: {license.linkedIp || "-"}</span>
                         <span>Validações: {license.validationCount ?? 0}</span>
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="mt-2 flex flex-wrap gap-2">
                         <Button
                           onClick={() =>
                             setBillingDraft(billingDraftFromLicense(detailsSubscriber, license))
@@ -785,6 +956,13 @@ export function ManagerSubscribersPage() {
                       </div>
                     </div>
                   ))}
+                  <DetailPager
+                    currentPage={currentLicensePage}
+                    label="licencas"
+                    onPageChange={setLicensePage}
+                    pageCount={licensePageCount}
+                    total={detailsLicenses.length}
+                  />
                   {detailsSubscriber.licenses?.length ? null : (
                     <p className="rounded-md border p-4 text-sm text-muted-foreground">
                       Nenhuma licença cadastrada.
@@ -795,20 +973,20 @@ export function ManagerSubscribersPage() {
 
               <TabsContent value="billings">
                 <div className="space-y-3">
-                  {(detailsSubscriber.billings ?? []).map((billing) => {
+                  {visibleBillings.map((billing) => {
                     const payment = latestPayment(billing);
 
                     return (
-                      <div className="rounded-md border p-3" key={billing.id}>
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="font-medium">{billing.reference}</p>
-                            <p className="text-sm text-muted-foreground">
+                      <div className="rounded-md border bg-card p-2.5" key={billing.id}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{billing.reference}</p>
+                            <p className="truncate text-xs text-muted-foreground">
                               {billing.systemKey} · vencimento {formatDate(billing.dueDate)}
                             </p>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <p className="font-semibold">{formatCurrency(Number(billing.amount))}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold">{formatCurrency(Number(billing.amount))}</p>
                             <Badge variant={statusVariant(billing.status)}>
                               {billingStatusLabel(billing.status)}
                             </Badge>
@@ -816,7 +994,7 @@ export function ManagerSubscribersPage() {
                         </div>
 
                         {payment ? (
-                          <div className="mt-3 rounded-md bg-muted p-3 text-sm">
+                          <div className="mt-2 rounded-md bg-muted p-2 text-sm">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant={statusVariant(payment.status)}>
@@ -831,12 +1009,12 @@ export function ManagerSubscribersPage() {
                               <div className="flex flex-wrap gap-2">
                                 {payment.qrCode ? (
                                   <Button
-                                    onClick={() => void copyText(payment.qrCode ?? "")}
+                                    onClick={() => setPixPayment(payment)}
                                     size="sm"
                                     variant="outline"
                                   >
-                                    <Copy className="h-4 w-4" />
-                                    Copiar Pix
+                                    <QrCode className="h-4 w-4" />
+                                    Ver Pix
                                   </Button>
                                 ) : null}
                                 {payment.ticketUrl ? (
@@ -862,15 +1040,10 @@ export function ManagerSubscribersPage() {
                                 </Button>
                               </div>
                             </div>
-                            {payment.qrCode ? (
-                              <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
-                                {payment.qrCode}
-                              </p>
-                            ) : null}
                           </div>
                         ) : null}
 
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="mt-2 flex flex-wrap gap-2">
                           <Button
                             disabled={billing.status === "PAID" || billing.status === "CANCELLED"}
                             onClick={() =>
@@ -908,10 +1081,26 @@ export function ManagerSubscribersPage() {
                             <Ban className="h-4 w-4" />
                             Cancelar
                           </Button>
+                          <Button
+                            disabled={!canDeleteBilling(billing)}
+                            onClick={() => void deleteBilling(billing.id)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Apagar
+                          </Button>
                         </div>
                       </div>
                     );
                   })}
+                  <DetailPager
+                    currentPage={currentBillingPage}
+                    label="cobrancas"
+                    onPageChange={setBillingPage}
+                    pageCount={billingPageCount}
+                    total={detailsBillings.length}
+                  />
                   {detailsSubscriber.billings?.length ? null : (
                     <p className="rounded-md border p-4 text-sm text-muted-foreground">
                       Nenhuma cobrança cadastrada.
@@ -1302,6 +1491,56 @@ export function ManagerSubscribersPage() {
                 Confirmar faturamento
               </Button>
             </Form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        onOpenChange={(open) => !open && setPixPayment(null)}
+        open={Boolean(pixPayment)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Pix da cobrança</DialogTitle>
+            <DialogDescription>
+              Visualize o QR Code e copie o Pix copia e cola sem ocupar espaco no card.
+            </DialogDescription>
+          </DialogHeader>
+          {pixPayment ? (
+            <div className="space-y-4">
+              <div className="grid place-items-center rounded-md border bg-background p-4">
+                {qrImageSrc(pixPayment.qrCodeBase64) ? (
+                  <img
+                    alt="QR Code Pix"
+                    className="h-48 w-48 object-contain"
+                    src={qrImageSrc(pixPayment.qrCodeBase64) ?? undefined}
+                  />
+                ) : (
+                  <div className="grid h-48 w-48 place-items-center rounded-md bg-muted text-muted-foreground">
+                    <QrCode className="h-12 w-12" />
+                  </div>
+                )}
+              </div>
+              <FormField>
+                <Label htmlFor="pix-copy-code">Pix copia e cola</Label>
+                <Textarea
+                  className="max-h-40 font-mono text-xs"
+                  id="pix-copy-code"
+                  readOnly
+                  value={pixPayment.qrCode ?? ""}
+                />
+              </FormField>
+              <div className="flex justify-end gap-2">
+                <Button
+                  disabled={!pixPayment.qrCode}
+                  onClick={() => void copyText(pixPayment.qrCode ?? "")}
+                  type="button"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copiar Pix
+                </Button>
+              </div>
+            </div>
           ) : null}
         </DialogContent>
       </Dialog>

@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { AppError } from "../lib/errors.js";
+import { notifyManagerBillingChanged } from "./manager-realtime-service.js";
 import { settleManagerBillingPaid } from "./manager-service.js";
 
 type GatewayConfigInput = {
@@ -473,6 +474,7 @@ export async function generateMercadoPagoBillingPayment(
     );
 
     await updateLocalPaymentFromPayload(prisma, payment.id, payload);
+    await notifyManagerBillingChanged(prisma, billing.id);
 
     return prisma.managerBilling.findUniqueOrThrow({
       include: {
@@ -609,6 +611,8 @@ export async function syncMercadoPagoPaymentPayload(
       where: { id: updatedPayment.billingId },
     });
   }
+
+  await notifyManagerBillingChanged(prisma, updatedPayment.billingId);
 
   return updatedPayment;
 }

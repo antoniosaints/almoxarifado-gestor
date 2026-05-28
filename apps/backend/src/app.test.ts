@@ -1665,6 +1665,88 @@ describe("api", () => {
     });
   });
 
+  it("deletes manager billings only while they have not been paid or approved", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const auth = authorizationFor(admin);
+    const subscriber = await prisma.managerSubscriber.create({
+      data: {
+        email: "delete-billing@example.com",
+        name: "Cliente Exclusao",
+      },
+    });
+    const openBilling = await prisma.managerBilling.create({
+      data: {
+        amount: 250,
+        dueDate: new Date("2026-05-20T12:00:00.000Z"),
+        reference: "2026-05",
+        subscriberId: subscriber.id,
+        systemKey: "Almoxarifado",
+      },
+    });
+    const paidBilling = await prisma.managerBilling.create({
+      data: {
+        amount: 300,
+        dueDate: new Date("2026-05-20T12:00:00.000Z"),
+        paidAt: new Date("2026-05-10T12:00:00.000Z"),
+        reference: "2026-06",
+        status: "PAID",
+        subscriberId: subscriber.id,
+        systemKey: "Almoxarifado",
+      },
+    });
+    const approvedPaymentBilling = await prisma.managerBilling.create({
+      data: {
+        amount: 320,
+        dueDate: new Date("2026-05-20T12:00:00.000Z"),
+        reference: "2026-07",
+        subscriberId: subscriber.id,
+        systemKey: "Almoxarifado",
+      },
+    });
+    await prisma.managerBillingPayment.create({
+      data: {
+        amount: 320,
+        billingId: approvedPaymentBilling.id,
+        externalReference: `${approvedPaymentBilling.id}-approved`,
+        method: "PIX",
+        paidAt: new Date("2026-05-11T12:00:00.000Z"),
+        provider: "MERCADO_PAGO",
+        providerPaymentId: "approved-123",
+        status: "APPROVED",
+      },
+    });
+
+    const deleted = await request(app)
+      .delete(`/manager/billings/${openBilling.id}`)
+      .set("Authorization", auth);
+
+    expect(deleted.status).toBe(204);
+    await expect(
+      prisma.managerBilling.findUnique({ where: { id: openBilling.id } }),
+    ).resolves.toBeNull();
+
+    const rejected = await request(app)
+      .delete(`/manager/billings/${paidBilling.id}`)
+      .set("Authorization", auth);
+
+    expect(rejected.status).toBe(409);
+    expect(rejected.body.message).toMatch(/paga/i);
+    await expect(
+      prisma.managerBilling.findUnique({ where: { id: paidBilling.id } }),
+    ).resolves.toMatchObject({ status: "PAID" });
+
+    const approvedPaymentRejected = await request(app)
+      .delete(`/manager/billings/${approvedPaymentBilling.id}`)
+      .set("Authorization", auth);
+
+    expect(approvedPaymentRejected.status).toBe(409);
+    expect(approvedPaymentRejected.body.message).toMatch(/efetivado|paga/i);
+  });
+
   it("validates manager licenses through the shared validation endpoint secret", async () => {
     process.env.SECRET_VALIDATION_LICENSE = "secretvalidador";
     const { user } = await createBaseFixture(prisma);
