@@ -26,7 +26,14 @@ import {
   Underline,
   Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from "react";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -190,6 +197,10 @@ type OfficeTemplateDraft = {
   active: boolean;
   contentHtml: string;
   description: string;
+  footerText: string;
+  headerAlignment: "LEFT" | "CENTER" | "RIGHT";
+  headerImageUrl: string;
+  headerText: string;
   name: string;
   subject: string;
 };
@@ -208,6 +219,21 @@ function createOfficeDocumentHtml(contentHtml: string) {
   return `<article ${officeDocumentAttribute} class="office-letter-document" style="min-height:297mm;width:210mm;margin:0 auto;padding:18mm 20mm;background:#fff;color:#111827;font-family:'Times New Roman',serif;font-size:12pt;line-height:1.45;">${contentHtml}</article>`;
 }
 
+function extractOfficeDocumentBodyHtml(contentHtml: string) {
+  if (!isCompleteOfficeDocument(contentHtml)) {
+    return contentHtml;
+  }
+
+  const container = document.createElement("div");
+
+  container.innerHTML = contentHtml;
+
+  return (
+    container.querySelector("[data-office-letter-document]")?.innerHTML ??
+    contentHtml
+  );
+}
+
 const defaultOfficeTemplateBodyHtml = [
   "<p><strong>OF&Iacute;CIO N&ordm; {{oficio_numero_ano}}</strong></p>",
   "<p><strong>Assunto:</strong> Solicita&ccedil;&atilde;o de material/equipamento</p>",
@@ -219,15 +245,45 @@ const defaultOfficeTemplateBodyHtml = [
   "<p>Atenciosamente,</p>",
 ].join("");
 
-const defaultOfficeTemplateContentHtml = createOfficeDocumentHtml(
-  defaultOfficeTemplateBodyHtml,
-);
+const defaultOfficeTemplateContentHtml = defaultOfficeTemplateBodyHtml;
+
+function officeTemplatePreviewHtml(draft: OfficeTemplateDraft) {
+  const alignment = draft.headerAlignment === "CENTER"
+    ? "center"
+    : draft.headerAlignment === "RIGHT"
+      ? "right"
+      : "left";
+  const headerImageHtml = draft.headerImageUrl.trim()
+    ? `<div style="margin:0 0 8px 0;"><img src="${draft.headerImageUrl}" alt="" style="max-height:64px;max-width:160px;width:auto;height:auto;" /></div>`
+    : "";
+  const headerTextHtml = draft.headerText.trim()
+    ? `<div>${draft.headerText
+        .split(/\r?\n/)
+        .map((line) => `<p style="margin:0;">${line || "&nbsp;"}</p>`)
+        .join("")}</div>`
+    : "";
+  const headerHtml =
+    headerImageHtml || headerTextHtml
+      ? `<header style="margin:0 0 16px 0;text-align:${alignment};">${headerImageHtml}${headerTextHtml}</header>`
+      : "";
+  const footerHtml = draft.footerText.trim()
+    ? `<footer style="margin:24px 0 0 0;text-align:center;color:#64748b;font-size:12px;">${draft.footerText}</footer>`
+    : "";
+
+  return createOfficeDocumentHtml(
+    `${headerHtml}<main>${draft.contentHtml || "-"}</main>${footerHtml}`,
+  );
+}
 
 function createDefaultOfficeTemplateDraft(): OfficeTemplateDraft {
   return {
     active: true,
     contentHtml: defaultOfficeTemplateContentHtml,
     description: "Modelo padrão para solicitação de material por almoxarifado.",
+    footerText: "",
+    headerAlignment: "LEFT",
+    headerImageUrl: "",
+    headerText: "{{secretaria_nome}}\n{{almoxarifado_nome}}",
     name: "Solicitação de material",
     subject: "Solicitação de material/equipamento",
   };
@@ -237,6 +293,7 @@ function OfficeTemplatesTab() {
   const templates = useApiResource<OfficeLetterTemplate[]>("/office-templates", []);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const editorInitialContentRef = useRef(defaultOfficeTemplateContentHtml);
+  const editorSelectionRef = useRef<Range | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [draft, setDraft] = useState<OfficeTemplateDraft>(
     createDefaultOfficeTemplateDraft,
@@ -246,6 +303,7 @@ function OfficeTemplatesTab() {
     useState<OfficeLetterTemplate | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingDocumentImage, setUploadingDocumentImage] = useState(false);
+  const [uploadingHeaderImage, setUploadingHeaderImage] = useState(false);
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(
     null,
   );
@@ -265,13 +323,18 @@ function OfficeTemplatesTab() {
   function openEditTemplate(template: OfficeLetterTemplate) {
     const nextDraft = {
       active: template.active,
-      contentHtml: template.contentHtml,
+      contentHtml: extractOfficeDocumentBodyHtml(template.contentHtml),
       description: template.description ?? "",
+      footerText: template.footerText ?? "",
+      headerAlignment: template.headerAlignment ?? "LEFT",
+      headerImageUrl: template.headerImageUrl ?? "",
+      headerText: template.headerText ?? "",
       name: template.name,
       subject: template.subject,
     };
 
     editorInitialContentRef.current = nextDraft.contentHtml;
+    editorSelectionRef.current = null;
     setSelectedTemplateId(template.id);
     setDraft(nextDraft);
     setEditing(true);
@@ -283,6 +346,7 @@ function OfficeTemplatesTab() {
     const nextDraft = createDefaultOfficeTemplateDraft();
 
     editorInitialContentRef.current = nextDraft.contentHtml;
+    editorSelectionRef.current = null;
     setSelectedTemplateId("");
     setDraft(nextDraft);
     setEditing(true);
@@ -302,7 +366,53 @@ function OfficeTemplatesTab() {
     }
   }
 
+  function rememberEditorSelection() {
+    const editor = editorRef.current;
+    const selection = document.getSelection();
+
+    if (!editor || !selection?.rangeCount) {
+      return;
+    }
+
+    const anchorNode = selection.anchorNode;
+    const focusNode = selection.focusNode;
+
+    if (
+      anchorNode &&
+      focusNode &&
+      editor.contains(anchorNode) &&
+      editor.contains(focusNode)
+    ) {
+      editorSelectionRef.current = selection.getRangeAt(0).cloneRange();
+    }
+  }
+
+  function restoreEditorSelection() {
+    const editor = editorRef.current;
+    const range = editorSelectionRef.current;
+
+    if (!editor || !range || !editor.contains(range.commonAncestorContainer)) {
+      return;
+    }
+
+    const selection = document.getSelection();
+
+    if (!selection) {
+      return;
+    }
+
+    editor.focus();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function preserveEditorToolbarMouseDown(event: MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    restoreEditorSelection();
+  }
+
   function syncEditorContent() {
+    rememberEditorSelection();
     setDraft((current) => ({
       ...current,
       contentHtml: editorRef.current?.innerHTML ?? "",
@@ -337,6 +447,7 @@ function OfficeTemplatesTab() {
     value?: string,
   ) {
     editorRef.current?.focus();
+    restoreEditorSelection();
 
     if (typeof document.execCommand === "function") {
       if (value === undefined) {
@@ -361,6 +472,7 @@ function OfficeTemplatesTab() {
     }
 
     editor.focus();
+    restoreEditorSelection();
 
     if (typeof document.execCommand === "function") {
       document.execCommand("insertHTML", false, html);
@@ -404,14 +516,46 @@ function OfficeTemplatesTab() {
     }
   }
 
+  async function uploadHeaderImage(file?: File) {
+    if (!file) {
+      return;
+    }
+
+    if (!acceptedImageTypes.includes(file.type) || file.size > maxImageSize) {
+      setEditorError("Envie uma imagem PNG, JPG, WEBP ou SVG de atÃƒÂ© 1 MB.");
+      return;
+    }
+
+    setUploadingHeaderImage(true);
+    setEditorError(null);
+
+    try {
+      const uploaded = await apiUpload<{ url: string }>(
+        "/uploads/office-template-images",
+        file,
+      );
+
+      setDraft((current) => ({
+        ...current,
+        headerImageUrl: resolveAssetUrl(uploaded.url),
+      }));
+    } catch (caughtError) {
+      setEditorError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao enviar imagem do cabeÃƒÂ§alho.",
+      );
+    } finally {
+      setUploadingHeaderImage(false);
+    }
+  }
+
   async function saveTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const payload = {
       ...draft,
-      contentHtml: createOfficeDocumentHtml(
-        editorRef.current?.innerHTML ?? draft.contentHtml,
-      ),
+      contentHtml: editorRef.current?.innerHTML ?? draft.contentHtml,
     };
 
     if (
@@ -497,6 +641,10 @@ function OfficeTemplatesTab() {
           active,
           contentHtml: template.contentHtml,
           description: template.description ?? "",
+          footerText: template.footerText ?? "",
+          headerAlignment: template.headerAlignment ?? "LEFT",
+          headerImageUrl: template.headerImageUrl ?? "",
+          headerText: template.headerText ?? "",
           name: template.name,
           subject: template.subject,
         }),
@@ -644,6 +792,8 @@ function OfficeTemplatesTab() {
               template.name,
               template.description,
               template.subject,
+              template.headerText,
+              template.footerText,
               template.active ? "ativo" : "inativo",
               ...template.variables,
             ].join(" ")
@@ -701,10 +851,96 @@ function OfficeTemplatesTab() {
                 value={draft.description}
               />
             </FormField>
+            <section className="grid gap-4 rounded-md border bg-background p-3 md:grid-cols-[minmax(0,1fr)_13rem]">
+              <div className="space-y-4">
+                <FormField>
+                  <Label htmlFor="office-template-header-image">
+                    Imagem do cabeçalho
+                  </Label>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <Input
+                      id="office-template-header-image"
+                      onChange={(event) =>
+                        setDraft({ ...draft, headerImageUrl: event.target.value })
+                      }
+                      placeholder="/uploads/..."
+                      value={draft.headerImageUrl}
+                    />
+                    <Button asChild type="button" variant="outline">
+                      <Label
+                        className={`cursor-pointer ${uploadingHeaderImage ? "pointer-events-none opacity-60" : ""}`}
+                        htmlFor="office-template-header-image-upload"
+                      >
+                        <Upload className="h-4 w-4" />
+                        {uploadingHeaderImage ? "Enviando..." : "Upload"}
+                      </Label>
+                    </Button>
+                  </div>
+                  <Input
+                    accept={acceptedImageTypes.join(",")}
+                    aria-label="Arquivo do cabeçalho"
+                    className="hidden"
+                    id="office-template-header-image-upload"
+                    onChange={(event) => {
+                      void uploadHeaderImage(event.currentTarget.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                    type="file"
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="office-template-header-text">
+                    Texto do cabeçalho
+                  </Label>
+                  <Textarea
+                    id="office-template-header-text"
+                    onChange={(event) =>
+                      setDraft({ ...draft, headerText: event.target.value })
+                    }
+                    rows={3}
+                    value={draft.headerText}
+                  />
+                </FormField>
+              </div>
+              <div className="space-y-4">
+                <FormField>
+                  <Label htmlFor="office-template-header-alignment">
+                    Posição do cabeçalho
+                  </Label>
+                  <Select
+                    id="office-template-header-alignment"
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        headerAlignment: event.target
+                          .value as OfficeTemplateDraft["headerAlignment"],
+                      })
+                    }
+                    value={draft.headerAlignment}
+                  >
+                    <option value="LEFT">Esquerda</option>
+                    <option value="CENTER">Centralizado</option>
+                    <option value="RIGHT">Direita</option>
+                  </Select>
+                </FormField>
+                <FormField>
+                  <Label htmlFor="office-template-footer-text">Rodapé simples</Label>
+                  <Textarea
+                    id="office-template-footer-text"
+                    onChange={(event) =>
+                      setDraft({ ...draft, footerText: event.target.value })
+                    }
+                    rows={4}
+                    value={draft.footerText}
+                  />
+                </FormField>
+              </div>
+            </section>
             <div className="flex flex-wrap gap-2 rounded-md border bg-background p-2">
               <Button
                 aria-label="Negrito"
                 onClick={() => formatContent("bold")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Negrito"
                 type="button"
@@ -715,6 +951,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Itálico"
                 onClick={() => formatContent("italic")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Itálico"
                 type="button"
@@ -725,6 +962,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Sublinhar"
                 onClick={() => formatContent("underline")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Sublinhar"
                 type="button"
@@ -735,6 +973,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Titulo"
                 onClick={() => formatContent("formatBlock", "h2")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Titulo"
                 type="button"
@@ -745,6 +984,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Marcadores"
                 onClick={() => formatContent("insertUnorderedList")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Marcadores"
                 type="button"
@@ -755,6 +995,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Lista numerada"
                 onClick={() => formatContent("insertOrderedList")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Lista numerada"
                 type="button"
@@ -765,6 +1006,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Alinhar à esquerda"
                 onClick={() => formatContent("justifyLeft")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Alinhar à esquerda"
                 type="button"
@@ -775,6 +1017,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Alinhar ao centro"
                 onClick={() => formatContent("justifyCenter")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Alinhar ao centro"
                 type="button"
@@ -785,6 +1028,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Alinhar a direita"
                 onClick={() => formatContent("justifyRight")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Alinhar a direita"
                 type="button"
@@ -795,6 +1039,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Justificar texto"
                 onClick={() => formatContent("justifyFull")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Justificar texto"
                 type="button"
@@ -809,6 +1054,7 @@ function OfficeTemplatesTab() {
                     '<table style="border-collapse:collapse;width:100%;"><tbody><tr><td style="border:1px solid #111827;padding:6px;"> </td><td style="border:1px solid #111827;padding:6px;"> </td></tr><tr><td style="border:1px solid #111827;padding:6px;"> </td><td style="border:1px solid #111827;padding:6px;"> </td></tr></tbody></table>',
                   )
                 }
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Tabela"
                 type="button"
@@ -819,6 +1065,7 @@ function OfficeTemplatesTab() {
               <Button
                 aria-label="Linha horizontal"
                 onClick={() => formatContent("insertHorizontalRule")}
+                onMouseDown={preserveEditorToolbarMouseDown}
                 size="icon"
                 title="Linha horizontal"
                 type="button"
@@ -835,6 +1082,7 @@ function OfficeTemplatesTab() {
                 <Label
                   className={`cursor-pointer ${uploadingDocumentImage ? "pointer-events-none opacity-60" : ""}`}
                   htmlFor="office-template-document-image"
+                  onMouseDown={rememberEditorSelection}
                 >
                   <Image className="h-4 w-4" />
                   {uploadingDocumentImage ? "Enviando..." : "Imagem"}
@@ -867,7 +1115,11 @@ function OfficeTemplatesTab() {
                 className="min-h-48 rounded-md border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 contentEditable
                 id="office-template-content"
+                onBlur={rememberEditorSelection}
+                onFocus={rememberEditorSelection}
                 onInput={syncEditorContent}
+                onKeyUp={rememberEditorSelection}
+                onMouseUp={rememberEditorSelection}
                 ref={attachEditor}
                 role="textbox"
                 suppressContentEditableWarning
@@ -882,6 +1134,7 @@ function OfficeTemplatesTab() {
                   <Button
                     key={variable}
                     onClick={() => insertVariable(variable)}
+                    onMouseDown={preserveEditorToolbarMouseDown}
                     size="sm"
                     type="button"
                     variant="outline"
@@ -904,7 +1157,7 @@ function OfficeTemplatesTab() {
               </p>
               <div
                 className="prose prose-sm max-w-none dark:prose-invert"
-                dangerouslySetInnerHTML={{ __html: draft.contentHtml || "-" }}
+                dangerouslySetInnerHTML={{ __html: officeTemplatePreviewHtml(draft) }}
               />
             </div>
             <div className="flex justify-end gap-2">

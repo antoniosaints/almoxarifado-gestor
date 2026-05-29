@@ -18,8 +18,10 @@
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "html-to-pdfmake": "^2.5.33",
+    "jsdom": "^26.1.0",
     "pdfkit": "^0.18.0",
-    "playwright": "^1.60.0",
+    "pdfmake": "^0.3.9",
     "zod": "^3.25.28"
   },
   "devDependencies": {

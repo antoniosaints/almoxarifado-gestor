@@ -10,20 +10,12 @@ import { prisma } from "./lib/prisma.js";
 import { hashPassword } from "./services/auth-service.js";
 import { createBaseFixture, resetDatabase } from "./test/database.js";
 
-const playwrightMock = vi.hoisted(() => {
-  const setContent = vi.fn();
-  const pdf = vi.fn(async () => Buffer.from("%PDF mocked"));
-  const close = vi.fn();
-  const newPage = vi.fn(async () => ({ pdf, setContent }));
-  const launch = vi.fn(async () => ({ close, newPage }));
+const htmlToPdfmakeMock = vi.hoisted(() => ({
+  convert: vi.fn((_html: string) => [{ text: "oficio" }]),
+}));
 
-  return { close, launch, newPage, pdf, setContent };
-});
-
-vi.mock("playwright", () => ({
-  chromium: {
-    launch: playwrightMock.launch,
-  },
+vi.mock("html-to-pdfmake", () => ({
+  default: htmlToPdfmakeMock.convert,
 }));
 
 function authorizationFor(user: {
@@ -52,11 +44,7 @@ describe("api", () => {
     delete process.env.LICENSE_SYSTEM;
     delete process.env.SECRET_VALIDATION_LICENSE;
     delete process.env.URL_VALIDATION_LICENSE;
-    playwrightMock.close.mockClear();
-    playwrightMock.launch.mockClear();
-    playwrightMock.newPage.mockClear();
-    playwrightMock.pdf.mockClear();
-    playwrightMock.setContent.mockClear();
+    htmlToPdfmakeMock.convert.mockClear();
     await resetDatabase(prisma);
     rmSync(path.join(process.cwd(), "uploads", "settings"), {
       force: true,
@@ -1255,14 +1243,86 @@ describe("api", () => {
     expect(office.headers["content-type"]).toContain("application/pdf");
     expect(office.headers["content-disposition"]).toContain("oficio-001-2026.pdf");
     expect(office.body.toString("latin1")).toContain("%PDF");
-    expect(playwrightMock.setContent).toHaveBeenCalledTimes(1);
+    expect(htmlToPdfmakeMock.convert).toHaveBeenCalledTimes(1);
 
-    const renderedHtml = String(playwrightMock.setContent.mock.calls[0]?.[0] ?? "");
+    const renderedHtml = String(
+      htmlToPdfmakeMock.convert.mock.calls[0]?.[0] ?? "",
+    );
 
     expect(renderedHtml).toContain("OF&Iacute;CIO");
     expect(renderedHtml).not.toContain("/uploads/settings/office-logo");
     expect(renderedHtml).not.toContain("Almoxarifado da Saude");
     expect(renderedHtml).not.toContain("Teste");
+  });
+
+  it("inlines office template upload images before exporting the PDF", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    const auth = authorizationFor(admin);
+
+    const imageUpload = await request(app)
+      .post("/uploads/office-template-images")
+      .set("Authorization", auth)
+      .set("Content-Type", "image/png")
+      .send(tinyPngBuffer());
+
+    expect(imageUpload.status).toBe(201);
+
+    const template = await request(app)
+      .post("/office-templates")
+      .set("Authorization", auth)
+      .send({
+        contentHtml: [
+          '<article data-office-letter-document="true">',
+          `<img src="${imageUpload.body.url}" alt="" style="width:120px;height:auto;" />`,
+          "<p>OFICIO {{oficio_numero_ano}}</p>",
+          "</article>",
+        ].join(""),
+        name: "Cabecalho com imagem",
+        subject: "Solicitacao",
+      });
+
+    expect(template.status).toBe(201);
+
+    const createdRequest = await request(app)
+      .post("/entry-requests")
+      .set("Authorization", auth)
+      .send({
+        movementDate: "2026-05-23T12:00:00.000Z",
+        productId: product.id,
+        quantity: 4,
+        warehouseId: warehouse.id,
+      });
+
+    const office = await request(app)
+      .get(`/entry-requests/${createdRequest.body.id}/office-letter/pdf`)
+      .set("Authorization", auth);
+
+    expect(office.status).toBe(200);
+    expect(office.body.toString("latin1")).toContain("%PDF");
+
+    const renderedHtml = String(
+      htmlToPdfmakeMock.convert.mock.calls.at(-1)?.[0] ?? "",
+    );
+
+    expect(renderedHtml).toContain("data:image/png;base64,");
+    expect(renderedHtml).not.toContain("/uploads/office-template-images/");
   });
 
   it("uploads one settings asset per slot and stores only the public URL", async () => {

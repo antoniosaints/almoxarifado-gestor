@@ -421,15 +421,19 @@ model Supplier {
 }
 
 model OfficeLetterTemplate {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  subject     String
-  contentHtml String
-  variables   String   @default("[]")
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  subject         String
+  headerImageUrl  String?
+  headerText      String?
+  headerAlignment String   @default("LEFT")
+  contentHtml     String
+  footerText      String?
+  variables       String   @default("[]")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([active])
   @@index([name])

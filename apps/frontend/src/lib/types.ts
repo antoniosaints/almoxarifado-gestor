@@ -367,6 +367,10 @@ export type OfficeLetterTemplate = {
   active: boolean;
   contentHtml: string;
   description?: string | null;
+  footerText?: string | null;
+  headerAlignment: "LEFT" | "CENTER" | "RIGHT";
+  headerImageUrl?: string | null;
+  headerText?: string | null;
   id: string;
   name: string;
   subject: string;
