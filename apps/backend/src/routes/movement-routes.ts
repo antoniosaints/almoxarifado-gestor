@@ -56,6 +56,7 @@ movementRoutes.get(
             },
           },
           responsibleUser: true,
+          sourceUnit: true,
           sourceWarehouse: true,
           warehouse: true,
         },
@@ -123,6 +124,7 @@ movementRoutes.delete(
         invoice: true,
         product: true,
         sourceWarehouse: true,
+        sourceUnit: true,
         warehouse: true,
       },
     });
@@ -152,6 +154,16 @@ movementRoutes.delete(
               name: movement.product.name,
             },
             quantity: movement.quantity,
+            conversionFactor: movement.conversionFactor,
+            sourceQuantity: movement.sourceQuantity,
+            sourceUnit: movement.sourceUnit
+              ? {
+                  abbreviation: movement.sourceUnit.abbreviation,
+                  id: movement.sourceUnit.id,
+                  name: movement.sourceUnit.name,
+                }
+              : null,
+            sourceUnitPrice: movement.sourceUnitPrice,
             sourceWarehouse: movement.sourceWarehouse
               ? {
                   id: movement.sourceWarehouse.id,

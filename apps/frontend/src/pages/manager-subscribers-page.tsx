@@ -31,6 +31,7 @@ import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Dialog,
   DialogContent,
@@ -1366,15 +1367,12 @@ export function ManagerSubscribersPage() {
                 </FormField>
                 <FormField>
                   <Label htmlFor="billing-amount">Valor</Label>
-                  <Input
+                  <CurrencyInput
                     id="billing-amount"
-                    min={0}
-                    onChange={(event) =>
-                      setBillingDraft({ ...billingDraft, amount: event.target.value })
+                    onValueChange={(amount) =>
+                      setBillingDraft({ ...billingDraft, amount })
                     }
                     required
-                    step="0.01"
-                    type="number"
                     value={billingDraft.amount}
                   />
                 </FormField>

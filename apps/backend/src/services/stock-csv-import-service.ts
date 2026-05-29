@@ -6,6 +6,10 @@ import {
   invoiceSnapshotFromDocument,
   resolveSupplierByDocument,
 } from "./supplier-service.js";
+import {
+  convertKnownProductQuantity,
+  productConversionsInclude,
+} from "./unit-conversion-service.js";
 
 type PrismaWriter = PrismaClient | Prisma.TransactionClient;
 
@@ -56,6 +60,11 @@ type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
     category: true;
     unit: true;
+    unitConversions: {
+      include: {
+        fromUnit: true;
+      };
+    };
   };
 }>;
 
@@ -237,7 +246,7 @@ function parseCsv(csv: string) {
         issueDate: parseDate(value(headerMap.issueDate)),
         observation: optionalText(value(headerMap.observation)),
         productName: value(headerMap.productName).trim(),
-        quantity: Number.parseInt(value(headerMap.quantity).trim(), 10),
+        quantity: parseCurrency(value(headerMap.quantity)),
         rowNumber: index + 2,
         unit: value(headerMap.unit)
           .trim()
@@ -250,7 +259,7 @@ function parseCsv(csv: string) {
       (row): ParsedCsvRow => ({
         ...row,
         totalValue:
-          Number.isInteger(row.quantity) && Number.isFinite(row.unitPrice)
+          Number.isFinite(row.quantity) && Number.isFinite(row.unitPrice)
             ? roundCurrency(row.quantity * row.unitPrice)
             : Number.NaN,
       }),
@@ -282,6 +291,73 @@ function summarizeProduct(product?: ProductWithRelations | null) {
     : null;
 }
 
+function findMatchingUnit(
+  units: Array<{ abbreviation: string; id: string; name: string }>,
+  unitLabel: string,
+) {
+  return (
+    units.find(
+      (unit) =>
+        normalize(unit.abbreviation) === normalize(unitLabel) ||
+        normalize(unit.name) === normalize(unitLabel),
+    ) ?? null
+  );
+}
+
+function importConversionMessage(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : "Não foi possível converter a unidade.";
+
+  if (message === "Configure a conversão desta unidade no produto antes de movimentar.") {
+    return "Configure a conversão desta unidade no produto antes de importar.";
+  }
+
+  return message;
+}
+
+function convertedPreview(
+  product: ProductWithRelations | null | undefined,
+  unit: { id: string } | null,
+  row: ParsedCsvRow,
+  errors: string[],
+) {
+  if (!product) {
+    return {
+      convertedQuantity: null,
+      convertedUnitPrice: null,
+    };
+  }
+
+  if (!unit) {
+    errors.push("Cadastre a unidade de medida antes de importar.");
+
+    return {
+      convertedQuantity: null,
+      convertedUnitPrice: null,
+    };
+  }
+
+  try {
+    const converted = convertKnownProductQuantity(product, {
+      quantity: row.quantity,
+      unitId: unit.id,
+      unitPrice: row.unitPrice,
+    });
+
+    return {
+      convertedQuantity: converted.baseQuantity,
+      convertedUnitPrice: converted.baseUnitPrice,
+    };
+  } catch (error) {
+    errors.push(importConversionMessage(error));
+
+    return {
+      convertedQuantity: null,
+      convertedUnitPrice: null,
+    };
+  }
+}
+
 function validateRow(row: ParsedCsvRow) {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -308,8 +384,8 @@ function validateRow(row: ParsedCsvRow) {
     errors.push("Informe a unidade de medida.");
   }
 
-  if (!Number.isInteger(row.quantity) || row.quantity <= 0) {
-    errors.push("Informe uma quantidade inteira maior que zero.");
+  if (!Number.isFinite(row.quantity) || row.quantity <= 0) {
+    errors.push("Informe uma quantidade maior que zero.");
   }
 
   if (!Number.isFinite(row.unitPrice) || row.unitPrice < 0) {
@@ -329,6 +405,7 @@ async function loadPreviewContext(prisma: PrismaClient) {
       include: {
         category: true,
         unit: true,
+        ...productConversionsInclude,
       },
       orderBy: { code: "asc" },
     }),
@@ -356,12 +433,13 @@ export async function previewWarehouseCsvImport(
     rows: rows.map((row, index) => {
       const { errors, warnings } = validateRow(row);
       const suggestedProduct = findMatchingProduct(products, row);
-      const suggestedUnit =
-        units.find(
-          (unit) =>
-            normalize(unit.abbreviation) === normalize(row.unit) ||
-            normalize(unit.name) === normalize(row.unit),
-        ) ?? null;
+      const suggestedUnit = findMatchingUnit(units, row.unit);
+      const converted = convertedPreview(
+        suggestedProduct,
+        suggestedUnit,
+        row,
+        errors,
+      );
       const invoiceContext = row.invoiceNumber
         ? invoiceContexts.get(invoiceKeyFor(row))
         : null;
@@ -384,6 +462,8 @@ export async function previewWarehouseCsvImport(
         canImport: errors.length === 0,
         cnpj: row.cnpj,
         companyName: row.companyName,
+        convertedQuantity: converted.convertedQuantity,
+        convertedUnitPrice: converted.convertedUnitPrice,
         errors,
         index,
         invoiceNumber: row.invoiceNumber,
@@ -467,6 +547,7 @@ async function resolveProduct(
       include: {
         category: true,
         unit: true,
+        ...productConversionsInclude,
       },
     });
 
@@ -481,6 +562,7 @@ async function resolveProduct(
     include: {
       category: true,
       unit: true,
+      ...productConversionsInclude,
     },
   });
   const matchedProduct = findMatchingProduct(products, row);
@@ -518,8 +600,25 @@ async function resolveProduct(
     include: {
       category: true,
       unit: true,
+      ...productConversionsInclude,
     },
   });
+}
+
+async function findUnitByLabel(
+  transaction: Prisma.TransactionClient,
+  label: string,
+) {
+  const units = await transaction.unitOfMeasure.findMany();
+  const normalizedUnit = normalize(label);
+
+  return (
+    units.find(
+      (unit) =>
+        normalize(unit.abbreviation) === normalizedUnit ||
+        normalize(unit.name) === normalizedUnit,
+    ) ?? null
+  );
 }
 
 function invoiceKeyFor(row: ParsedCsvRow) {
@@ -773,9 +872,14 @@ export async function importWarehouseCsv(
         action,
         input.categoryId,
       );
+      const rowUnit = await findUnitByLabel(transaction, row.unit);
       const invoiceContext = row.invoiceNumber
         ? invoices.get(invoiceKeyFor(row)) ?? null
         : null;
+
+      if (!rowUnit) {
+        throw new AppError(400, "Cadastre a unidade de medida antes de importar.");
+      }
 
       if (
         invoiceContext?.invoice.movements.some(
@@ -795,6 +899,7 @@ export async function importWarehouseCsv(
         observation: row.observation,
         productId: product.id,
         quantity: row.quantity,
+        unitId: rowUnit.id,
         unitPrice: row.unitPrice,
         userId: input.userId,
         warehouseId: input.warehouseId,

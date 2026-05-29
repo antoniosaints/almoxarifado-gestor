@@ -5,6 +5,7 @@ import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
 import { warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import { passwordMatches } from "../services/auth-service.js";
+import { productConversionsInclude } from "../services/unit-conversion-service.js";
 import {
   idParam,
   minimumStockInput,
@@ -18,6 +19,7 @@ const stockInclude = {
     include: {
       category: true,
       unit: true,
+      ...productConversionsInclude,
     },
   },
   warehouse: {

@@ -568,6 +568,19 @@ function movementTypeLabel(type: string) {
     .replace(/(^|\s)\S/g, (value) => value.toLocaleUpperCase("pt-BR"));
 }
 
+function movementSourceQuantityLabel(movement: {
+  sourceQuantity?: unknown;
+  sourceUnit?: { abbreviation: string } | null;
+}) {
+  if (movement.sourceQuantity === null || movement.sourceQuantity === undefined || !movement.sourceUnit) {
+    return null;
+  }
+
+  return `${Number(movement.sourceQuantity).toLocaleString("pt-BR", {
+    maximumFractionDigits: 6,
+  })} ${movement.sourceUnit.abbreviation}`;
+}
+
 function sendPdf(response: Response, fileName: string, buffer: Buffer) {
   response.setHeader("Content-Type", "application/pdf");
   response.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -606,6 +619,7 @@ reportRoutes.get(
           },
         },
         sourceWarehouse: true,
+        sourceUnit: true,
         warehouse: true,
       },
       orderBy: { movementDate: "desc" },
@@ -630,8 +644,9 @@ reportRoutes.get(
           movements.map((movement) => {
             const unitPrice =
               movement.unitPrice === null || movement.unitPrice === undefined
-                ? 0
+                ? null
                 : Number(movement.unitPrice);
+            const sourceQuantity = movementSourceQuantityLabel(movement);
 
             return [
               formatDate(movement.movementDate),
@@ -644,8 +659,12 @@ reportRoutes.get(
                 movement.invoice?.number ??
                 "-"
               }`,
-              `${movement.quantity} ${movement.product.unit.abbreviation}`,
-              unitPrice ? formatCurrency(unitPrice * movement.quantity) : "-",
+              sourceQuantity
+                ? `${movement.quantity} ${movement.product.unit.abbreviation} (${sourceQuantity})`
+                : `${movement.quantity} ${movement.product.unit.abbreviation}`,
+              unitPrice === null || Number.isNaN(unitPrice)
+                ? "-"
+                : formatCurrency(unitPrice * movement.quantity),
             ];
           }),
           settings.reportPrimaryColor,
@@ -681,6 +700,7 @@ reportRoutes.get(
         },
         responsibleUser: true,
         sourceWarehouse: true,
+        sourceUnit: true,
         warehouse: true,
       },
     });
@@ -691,9 +711,9 @@ reportRoutes.get(
 
     const unitPrice =
       movement.unitPrice === null || movement.unitPrice === undefined
-        ? 0
+        ? null
         : Number(movement.unitPrice);
-    const totalValue = unitPrice * movement.quantity;
+    const totalValue = unitPrice === null ? null : unitPrice * movement.quantity;
     const buffer = await buildPdf(
       "Auditoria de movimentacao",
       "Registro detalhado da operacao de estoque.",
@@ -716,8 +736,19 @@ reportRoutes.get(
         writeFieldRows(document, [
           ["Produto", `${movement.product.code} - ${movement.product.name}`],
           ["Quantidade", `${movement.quantity} ${movement.product.unit.abbreviation}`],
-          ["Valor unitario", unitPrice ? formatCurrency(unitPrice) : "-"],
-          ["Valor total", unitPrice ? formatCurrency(totalValue) : "-"],
+          ["Quantidade informada", movementSourceQuantityLabel(movement) ?? "-"],
+          [
+            "Valor unitario",
+            unitPrice === null || Number.isNaN(unitPrice)
+              ? "-"
+              : formatCurrency(unitPrice),
+          ],
+          [
+            "Valor total",
+            totalValue === null || Number.isNaN(totalValue)
+              ? "-"
+              : formatCurrency(totalValue),
+          ],
           ["Observacao", movement.observation ?? "-"],
         ]);
 
@@ -822,6 +853,7 @@ reportRoutes.get(
               },
             },
             responsibleUser: true,
+            sourceUnit: true,
             warehouse: true,
           },
           orderBy: { movementDate: "desc" },
@@ -906,16 +938,23 @@ reportRoutes.get(
             invoice.movements.map((movement) => {
               const unitPrice =
                 movement.unitPrice === null || movement.unitPrice === undefined
-                  ? 0
+                  ? null
                   : Number(movement.unitPrice);
+              const sourceQuantity = movementSourceQuantityLabel(movement);
 
               return [
                 formatDate(movement.movementDate),
                 movement.warehouse.name,
                 `${movement.product.code} - ${movement.product.name}`,
-                `${movement.quantity} ${movement.product.unit.abbreviation}`,
-                unitPrice ? formatCurrency(unitPrice) : "-",
-                unitPrice ? formatCurrency(unitPrice * movement.quantity) : "-",
+                sourceQuantity
+                  ? `${movement.quantity} ${movement.product.unit.abbreviation} (${sourceQuantity})`
+                  : `${movement.quantity} ${movement.product.unit.abbreviation}`,
+                unitPrice === null || Number.isNaN(unitPrice)
+                  ? "-"
+                  : formatCurrency(unitPrice),
+                unitPrice === null || Number.isNaN(unitPrice)
+                  ? "-"
+                  : formatCurrency(unitPrice * movement.quantity),
                 movement.responsibleUser?.name ?? "-",
               ];
             }),

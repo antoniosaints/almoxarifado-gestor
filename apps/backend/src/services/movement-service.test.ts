@@ -108,6 +108,255 @@ describe("movement service", () => {
     expect(Number(stock.totalValue)).toBeCloseTo(349.95, 2);
   });
 
+  it("records a free stock entry with zero average and total value", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        name: "Almoxarifado Central",
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+      },
+    });
+
+    const { movement } = await createEntry(prisma, {
+      warehouseId: warehouse.id,
+      productId: product.id,
+      quantity: 8,
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      unitPrice: 0,
+      userId: user.id,
+      observation: "Doacao",
+    });
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          warehouseId: warehouse.id,
+          productId: product.id,
+        },
+      },
+    });
+
+    expect(Number(movement.unitPrice)).toBe(0);
+    expect(stock.currentQuantity).toBe(8);
+    expect(Number(stock.unitPriceAverage)).toBe(0);
+    expect(Number(stock.totalValue)).toBe(0);
+  });
+
+  it("uses zero cost entries in the weighted average for donations", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        name: "Almoxarifado Central",
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+      },
+    });
+
+    await createEntry(prisma, {
+      warehouseId: warehouse.id,
+      productId: product.id,
+      quantity: 10,
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      unitPrice: 20,
+      userId: user.id,
+    });
+
+    await createEntry(prisma, {
+      warehouseId: warehouse.id,
+      productId: product.id,
+      quantity: 10,
+      movementDate: new Date("2026-05-23T12:00:00.000Z"),
+      unitPrice: 0,
+      userId: user.id,
+      observation: "Doacao",
+    });
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          warehouseId: warehouse.id,
+          productId: product.id,
+        },
+      },
+    });
+
+    expect(stock.currentQuantity).toBe(20);
+    expect(Number(stock.unitPriceAverage)).toBe(10);
+    expect(Number(stock.totalValue)).toBe(200);
+  });
+
+  it("converts entry quantity and unit price to the product base unit", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const box = await prisma.unitOfMeasure.create({
+      data: {
+        abbreviation: "CX",
+        name: "Caixa",
+      },
+    });
+    await prisma.unitConversion.create({
+      data: {
+        factorToBase: 10,
+        fromUnitId: box.id,
+        productId: product.id,
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+
+    const { movement } = await createEntry(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 2,
+      unitId: box.id,
+      unitPrice: 250,
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+      },
+    });
+
+    expect(stock.currentQuantity).toBe(20);
+    expect(Number(stock.unitPriceAverage)).toBe(25);
+    expect(Number(stock.totalValue)).toBe(500);
+    expect(movement.quantity).toBe(20);
+    expect(Number(movement.unitPrice)).toBe(25);
+    expect(Number(movement.sourceQuantity)).toBe(2);
+    expect(movement.sourceUnitId).toBe(box.id);
+    expect(Number(movement.conversionFactor)).toBe(10);
+    expect(Number(movement.sourceUnitPrice)).toBe(250);
+  });
+
+  it("converts output quantities while keeping the average price stable", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const box = await prisma.unitOfMeasure.create({
+      data: {
+        abbreviation: "CX",
+        name: "Caixa",
+      },
+    });
+    await prisma.unitConversion.create({
+      data: {
+        factorToBase: 10,
+        fromUnitId: box.id,
+        productId: product.id,
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Saude",
+      },
+    });
+    await createEntry(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 20,
+      unitPrice: 25,
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    const { movement } = await createOutput(prisma, {
+      destinationNote: "Unidade basica",
+      movementDate: new Date("2026-05-23T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 1,
+      unitId: box.id,
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+      },
+    });
+
+    expect(stock.currentQuantity).toBe(10);
+    expect(Number(stock.unitPriceAverage)).toBe(25);
+    expect(Number(stock.totalValue)).toBe(250);
+    expect(movement.quantity).toBe(10);
+    expect(Number(movement.sourceQuantity)).toBe(1);
+    expect(movement.sourceUnitId).toBe(box.id);
+  });
+
+  it("rejects converted quantities that do not produce an integer base quantity", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const box = await prisma.unitOfMeasure.create({
+      data: {
+        abbreviation: "CX",
+        name: "Caixa",
+      },
+    });
+    await prisma.unitConversion.create({
+      data: {
+        factorToBase: 2.5,
+        fromUnitId: box.id,
+        productId: product.id,
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+
+    await expect(
+      createEntry(prisma, {
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 1,
+        unitId: box.id,
+        userId: user.id,
+        warehouseId: warehouse.id,
+      }),
+    ).rejects.toThrow("A conversão precisa resultar em uma quantidade inteira na unidade base.");
+  });
+
+  it("rejects movements when the selected unit has no product conversion", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const box = await prisma.unitOfMeasure.create({
+      data: {
+        abbreviation: "CX",
+        name: "Caixa",
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+
+    await expect(
+      createEntry(prisma, {
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 1,
+        unitId: box.id,
+        userId: user.id,
+        warehouseId: warehouse.id,
+      }),
+    ).rejects.toThrow("Configure a conversão desta unidade no produto antes de movimentar.");
+  });
+
   it("keeps minimum quantity and average price when adding entries to existing stock", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const warehouse = await prisma.warehouse.create({

@@ -243,6 +243,8 @@ describe("RequestsPage", () => {
               ? {
                   contentHtml:
                     "<p>Venho solicitar:</p><p>Papel A4 - 4 PCT.</p>",
+                  documentHtml:
+                    '<article data-office-letter-document="true"><h1>Documento fiel do ofÃ­cio</h1><p>Papel A4 - 4 PCT.</p></article>',
                   header: {
                     logoUrl: "/uploads/settings/office-logo.png?v=1",
                     subtitle: "Almoxarifado da Saude",
@@ -304,9 +306,7 @@ describe("RequestsPage", () => {
       name: "Ofício da solicitação",
     });
 
-    expect(within(dialog).getByText("Saude")).toBeInTheDocument();
-    expect(within(dialog).getByText("Almoxarifado da Saude")).toBeInTheDocument();
-    expect(within(dialog).getByText("OFICIO Nº 001/2026")).toBeInTheDocument();
+    expect(within(dialog).getByText("Documento fiel do ofÃ­cio")).toBeInTheDocument();
     expect(within(dialog).getByText("Papel A4 - 4 PCT.")).toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Exportar PDF" }));

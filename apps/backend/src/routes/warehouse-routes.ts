@@ -7,6 +7,7 @@ import {
   importWarehouseCsv,
   previewWarehouseCsvImport,
 } from "../services/stock-csv-import-service.js";
+import { productConversionsInclude } from "../services/unit-conversion-service.js";
 import { createWarehouse, updateWarehouse } from "../services/warehouse-service.js";
 import {
   idParam,
@@ -26,6 +27,7 @@ const warehouseInclude = {
         include: {
           category: true,
           unit: true,
+          ...productConversionsInclude,
         },
       },
     },
@@ -87,6 +89,7 @@ warehouseRoutes.get(
             include: {
               category: true,
               unit: true,
+              ...productConversionsInclude,
             },
           },
           warehouse: {
@@ -153,9 +156,11 @@ warehouseRoutes.get(
             product: {
               include: {
                 unit: true,
+                ...productConversionsInclude,
               },
             },
             responsibleUser: true,
+            sourceUnit: true,
             sourceWarehouse: true,
           },
           orderBy: { movementDate: "desc" },

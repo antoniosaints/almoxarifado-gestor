@@ -11,6 +11,7 @@ import {
   getEntryRequestOfficeLetter,
   rejectEntryRequest,
 } from "../services/entry-request-service.js";
+import { productConversionsInclude } from "../services/unit-conversion-service.js";
 import {
   entryRequestApprovalInput,
   entryRequestInput,
@@ -25,8 +26,10 @@ const entryRequestInclude = {
       product: {
         include: {
           unit: true,
+          ...productConversionsInclude,
         },
       },
+      sourceUnit: true,
     },
     orderBy: {
       createdAt: "asc",
@@ -35,8 +38,10 @@ const entryRequestInclude = {
   product: {
     include: {
       unit: true,
+      ...productConversionsInclude,
     },
   },
+  sourceUnit: true,
   requestedBy: {
     select: {
       email: true,
@@ -85,6 +90,7 @@ entryRequestRoutes.get(
         include: {
           category: true,
           unit: true,
+          ...productConversionsInclude,
         },
         orderBy: { code: "asc" },
       }),

@@ -28,7 +28,14 @@ import {
 } from "@/components/ui/table";
 import { api, apiFile, useApiResource } from "@/lib/api";
 import { getStoredSession } from "@/lib/session";
-import type { Invoice, Product, ProductCategory, Supplier, Warehouse } from "@/lib/types";
+import type {
+  Invoice,
+  Product,
+  ProductCategory,
+  Supplier,
+  UnitOfMeasure,
+  Warehouse,
+} from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { onlyDigits } from "@/lib/masks";
 import { MovementsTable } from "./movements-page";
@@ -55,10 +62,15 @@ type InvoiceXmlPreview = {
   };
   items: Array<{
     code: string;
+    canImport?: boolean;
+    convertedQuantity?: number | null;
+    convertedUnitPrice?: number | null;
+    errors?: string[];
     index: number;
     name: string;
     quantity: number;
     suggestedProduct?: Pick<Product, "code" | "id" | "name" | "unit"> | null;
+    suggestedUnit?: UnitOfMeasure | null;
     totalValue: number;
     unit: string;
     unitPrice: number;
@@ -333,6 +345,9 @@ function InvoiceXmlImportDialog({
       value: product.id,
     })),
   ];
+  const canSubmit = preview
+    ? preview.items.every((item) => item.canImport !== false)
+    : false;
 
   function openDialog() {
     setWarehouseId(warehouses[0]?.id ?? "");
@@ -592,10 +607,27 @@ function InvoiceXmlImportDialog({
                                 ) : (
                                   <Badge variant="outline">Novo</Badge>
                                 )}
+                                {(item.errors ?? []).map((error) => (
+                                  <Badge key={error} variant="zero">
+                                    {error}
+                                  </Badge>
+                                ))}
                               </div>
                             </TableCell>
                             <TableCell className="text-right">
-                              {item.quantity} {item.unit}
+                              <div className="space-y-1">
+                                <p>
+                                  {item.quantity} {item.unit}
+                                </p>
+                                {item.convertedQuantity &&
+                                item.suggestedProduct &&
+                                item.suggestedUnit?.id !== item.suggestedProduct.unit.id ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {item.convertedQuantity}{" "}
+                                    {item.suggestedProduct.unit.abbreviation}
+                                  </p>
+                                ) : null}
+                              </div>
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="space-y-1">
@@ -603,6 +635,13 @@ function InvoiceXmlImportDialog({
                                 <p className="text-xs text-muted-foreground">
                                   {formatCurrency(item.unitPrice)}
                                 </p>
+                                {item.convertedUnitPrice &&
+                                item.suggestedProduct &&
+                                item.suggestedUnit?.id !== item.suggestedProduct.unit.id ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    Base: {formatCurrency(item.convertedUnitPrice)}
+                                  </p>
+                                ) : null}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -632,7 +671,7 @@ function InvoiceXmlImportDialog({
                 !warehouseId ||
                 !categoryId ||
                 !xml ||
-                !preview ||
+                !canSubmit ||
                 previewLoading ||
                 saving
               }

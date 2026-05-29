@@ -4,6 +4,7 @@ import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Dialog,
   DialogContent,
@@ -511,12 +512,9 @@ export function FleetVehiclesPage() {
                 </FormField>
                 <FormField>
                   <Label htmlFor="fleet-acquisition-value">Valor</Label>
-                  <Input
+                  <CurrencyInput
                     id="fleet-acquisition-value"
-                    min={0}
-                    onChange={(event) => setDraft({ ...draft, acquisitionValue: event.target.value })}
-                    step="0.01"
-                    type="number"
+                    onValueChange={(acquisitionValue) => setDraft({ ...draft, acquisitionValue })}
                     value={draft.acquisitionValue}
                   />
                 </FormField>

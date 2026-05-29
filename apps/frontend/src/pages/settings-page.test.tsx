@@ -4,6 +4,7 @@ import { SettingsPage } from "./settings-page";
 
 describe("SettingsPage", () => {
   afterEach(() => {
+    Reflect.deleteProperty(document, "execCommand");
     vi.unstubAllGlobals();
   });
 
@@ -129,6 +130,56 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("offers complete document formatting controls in the office editor", async () => {
+    const execCommand = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/office-templates") {
+        return new Response(JSON.stringify([]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /of.cios/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Novo modelo" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Justificar texto" }));
+    fireEvent.click(screen.getByRole("button", { name: "Alinhar ao centro" }));
+    fireEvent.click(screen.getByRole("button", { name: "Alinhar a direita" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marcadores" }));
+    fireEvent.click(screen.getByRole("button", { name: "Titulo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tabela" }));
+    fireEvent.click(screen.getByRole("button", { name: "Linha horizontal" }));
+
+    expect(execCommand).toHaveBeenCalledWith("justifyFull");
+    expect(execCommand).toHaveBeenCalledWith("justifyCenter");
+    expect(execCommand).toHaveBeenCalledWith("justifyRight");
+    expect(execCommand).toHaveBeenCalledWith("insertUnorderedList");
+    expect(execCommand).toHaveBeenCalledWith("formatBlock", false, "h2");
+    expect(execCommand).toHaveBeenCalledWith(
+      "insertHTML",
+      false,
+      expect.stringContaining("<table"),
+    );
+    expect(execCommand).toHaveBeenCalledWith("insertHorizontalRule");
+  });
+
   it("renders office template html directly in the editor while editing", async () => {
     let templatePayload: unknown;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -202,9 +253,108 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(templatePayload).toMatchObject({
-        contentHtml: "<p>Texto editado <strong>renderizado</strong></p>",
+        contentHtml: expect.stringContaining(
+          "<p>Texto editado <strong>renderizado</strong></p>",
+        ),
       });
     });
+    expect((templatePayload as { contentHtml: string }).contentHtml).toContain(
+      'data-office-letter-document="true"',
+    );
+  });
+
+  it("uploads images into the office template document", async () => {
+    let templatePayload: unknown;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (
+        url.pathname === "/uploads/office-template-images" &&
+        init?.method === "POST"
+      ) {
+        expect(init.body).toBeInstanceOf(File);
+        expect(init.headers).toMatchObject({ "Content-Type": "image/png" });
+
+        return new Response(
+          JSON.stringify({
+            driver: "local",
+            key: "office-template-images/office-template-image-abc123def456.png",
+            url: "/uploads/office-template-images/office-template-image-abc123def456.png?v=1",
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 201,
+          },
+        );
+      }
+
+      if (url.pathname === "/office-templates" && (init?.method ?? "GET") === "POST") {
+        templatePayload = JSON.parse(String(init?.body));
+
+        return new Response(
+          JSON.stringify({
+            ...(templatePayload as object),
+            id: "template-1",
+            variables: [],
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 201,
+          },
+        );
+      }
+
+      if (url.pathname === "/office-templates") {
+        return new Response(JSON.stringify([]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /of.cios/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Novo modelo" }));
+    fireEvent.change(screen.getByLabelText("Nome do modelo"), {
+      target: { value: "CabeÃ§alho completo" },
+    });
+    fireEvent.change(screen.getByLabelText("Assunto"), {
+      target: { value: "SolicitaÃ§Ã£o" },
+    });
+
+    const file = new File(["imagem"], "cabecalho.png", { type: "image/png" });
+
+    fireEvent.change(screen.getByLabelText("Imagem do documento"), {
+      target: { files: [file] },
+    });
+
+    const editor = screen.getByLabelText(/Conte.do do of.cio/i);
+
+    await waitFor(() => {
+      expect(editor.querySelector("img")).toHaveAttribute(
+        "src",
+        "http://127.0.0.1:3333/uploads/office-template-images/office-template-image-abc123def456.png?v=1",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Salvar modelo" }));
+
+    await waitFor(() => {
+      expect(templatePayload).toMatchObject({
+        contentHtml: expect.stringContaining('data-office-letter-document="true"'),
+      });
+    });
+    expect((templatePayload as { contentHtml: string }).contentHtml).toContain(
+      "<img",
+    );
   });
 
   it("toggles the active office template directly from the table", async () => {

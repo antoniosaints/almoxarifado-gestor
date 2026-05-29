@@ -4,6 +4,10 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import { AppError } from "../lib/errors.js";
+import {
+  convertQuantityToBase,
+  quantityConversionAuditData,
+} from "./unit-conversion-service.js";
 
 type TransferRequestInput = {
   createdById: string;
@@ -13,6 +17,7 @@ type TransferRequestInput = {
   productId: string;
   quantity: number;
   sourceWarehouseId: string;
+  unitId?: string | null;
 };
 
 type ReceiveTransferInput = {
@@ -26,7 +31,7 @@ function assertTransferInput(input: {
   quantity: number;
   sourceWarehouseId: string;
 }) {
-  if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
     throw new AppError(400, "Informe uma quantidade maior que zero.");
   }
 
@@ -41,37 +46,53 @@ export async function createTransferRequest(
 ) {
   assertTransferInput(input);
 
-  const [source, destination, stock] = await Promise.all([
-    prisma.warehouse.findUnique({
-      where: { id: input.sourceWarehouseId },
-    }),
-    prisma.warehouse.findUnique({
-      where: { id: input.destinationWarehouseId },
-    }),
-    prisma.stock.findUnique({
-      where: {
-        warehouseId_productId: {
-          productId: input.productId,
-          warehouseId: input.sourceWarehouseId,
+  return prisma.$transaction(async (transaction) => {
+    const converted = await convertQuantityToBase(transaction, {
+      productId: input.productId,
+      quantity: input.quantity,
+      unitId: input.unitId,
+    });
+    const [source, destination, stock] = await Promise.all([
+      transaction.warehouse.findUnique({
+        where: { id: input.sourceWarehouseId },
+      }),
+      transaction.warehouse.findUnique({
+        where: { id: input.destinationWarehouseId },
+      }),
+      transaction.stock.findUnique({
+        where: {
+          warehouseId_productId: {
+            productId: input.productId,
+            warehouseId: input.sourceWarehouseId,
+          },
         },
+      }),
+    ]);
+
+    if (!source || !destination) {
+      throw new AppError(404, "Almoxarifado não encontrado.");
+    }
+
+    if (!source.isGeneral) {
+      throw new AppError(403, "Apenas o almoxarifado geral pode transferir produtos.");
+    }
+
+    if (!stock || stock.currentQuantity < converted.baseQuantity) {
+      throw new AppError(409, "Quantidade insuficiente em estoque.");
+    }
+
+    return transaction.transferRequest.create({
+      data: {
+        createdById: input.createdById,
+        destinationWarehouseId: input.destinationWarehouseId,
+        movementDate: input.movementDate,
+        observation: input.observation,
+        productId: input.productId,
+        quantity: converted.baseQuantity,
+        sourceWarehouseId: input.sourceWarehouseId,
+        ...quantityConversionAuditData(converted),
       },
-    }),
-  ]);
-
-  if (!source || !destination) {
-    throw new AppError(404, "Almoxarifado não encontrado.");
-  }
-
-  if (!source.isGeneral) {
-    throw new AppError(403, "Apenas o almoxarifado geral pode transferir produtos.");
-  }
-
-  if (!stock || stock.currentQuantity < input.quantity) {
-    throw new AppError(409, "Quantidade insuficiente em estoque.");
-  }
-
-  return prisma.transferRequest.create({
-    data: input,
+    });
   });
 }
 
@@ -132,6 +153,11 @@ export async function receiveTransferRequest(
         warehouseId: request.destinationWarehouseId,
       },
     });
+    const sourceAudit = {
+      conversionFactor: request.conversionFactor,
+      sourceQuantity: request.sourceQuantity,
+      sourceUnitId: request.sourceUnitId,
+    };
 
     const sourceMovement = await transaction.stockMovement.create({
       data: {
@@ -145,6 +171,7 @@ export async function receiveTransferRequest(
         stockId: updatedSourceStock.id,
         type: MovementType.TRANSFERENCIA_SAIDA,
         warehouseId: request.sourceWarehouseId,
+        ...sourceAudit,
       },
     });
     const destinationMovement = await transaction.stockMovement.create({
@@ -159,6 +186,7 @@ export async function receiveTransferRequest(
         stockId: destinationStock.id,
         type: MovementType.TRANSFERENCIA_ENTRADA,
         warehouseId: request.destinationWarehouseId,
+        ...sourceAudit,
       },
     });
 

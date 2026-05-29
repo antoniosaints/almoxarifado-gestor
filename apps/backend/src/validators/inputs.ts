@@ -56,6 +56,14 @@ export const productInput = z.object({
   unitId: z.string().min(1, "Escolha uma unidade de medida."),
 });
 
+export const unitConversionInput = z.object({
+  active: z.boolean().default(true),
+  factorToBase: z.coerce
+    .number()
+    .positive("Informe um fator de conversão maior que zero."),
+  fromUnitId: z.string().min(1, "Escolha a unidade convertida."),
+});
+
 export const unitInput = z.object({
   abbreviation: z.string().trim().min(1, "Informe a sigla.").max(10),
   name: z.string().trim().min(2, "Informe o nome da unidade."),
@@ -282,7 +290,8 @@ const movementBase = z.object({
   movementDate: z.coerce.date(),
   observation: optionalText,
   productId: z.string().min(1, "Escolha um produto."),
-  quantity: z.coerce.number().int().positive("Informe uma quantidade maior que zero."),
+  quantity: z.coerce.number().positive("Informe uma quantidade maior que zero."),
+  unitId: z.string().min(1).optional().nullable(),
 });
 
 export const entryInput = movementBase.extend({
@@ -302,7 +311,8 @@ export const entryInput = movementBase.extend({
 
 const entryRequestItemInput = z.object({
   productId: z.string().min(1, "Escolha um produto."),
-  quantity: z.coerce.number().int().positive("Informe uma quantidade maior que zero."),
+  quantity: z.coerce.number().positive("Informe uma quantidade maior que zero."),
+  unitId: z.string().min(1).optional().nullable(),
 });
 
 export const entryRequestInput = z
@@ -313,9 +323,9 @@ export const entryRequestInput = z
     productId: z.string().min(1, "Escolha um produto.").optional(),
     quantity: z.coerce
       .number()
-      .int()
       .positive("Informe uma quantidade maior que zero.")
       .optional(),
+    unitId: z.string().min(1).optional().nullable(),
     warehouseId: z.string().min(1, "Escolha um almoxarifado."),
   })
   .superRefine((value, context) => {
@@ -347,6 +357,7 @@ export const entryRequestInput = z
             {
               productId: value.productId ?? "",
               quantity: value.quantity ?? 0,
+              unitId: value.unitId ?? null,
             },
           ];
     const primaryItem = items[0];

@@ -6,6 +6,10 @@ import {
   invoiceSnapshotFromDocument,
   resolveSupplierByDocument,
 } from "./supplier-service.js";
+import {
+  convertKnownProductQuantity,
+  productConversionsInclude,
+} from "./unit-conversion-service.js";
 
 type InvoiceXmlImportInput = {
   categoryId?: string | null;
@@ -54,6 +58,11 @@ type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
     category: true;
     unit: true;
+    unitConversions: {
+      include: {
+        fromUnit: true;
+      };
+    };
   };
 }>;
 
@@ -223,6 +232,82 @@ function summarizeProduct(product?: ProductWithRelations | null) {
     : null;
 }
 
+function findMatchingUnit(
+  units: Array<{ abbreviation: string; id: string; name: string }>,
+  unitLabel: string,
+) {
+  return (
+    units.find(
+      (unit) =>
+        normalize(unit.abbreviation) === normalize(unitLabel) ||
+        normalize(unit.name) === normalize(unitLabel),
+    ) ?? null
+  );
+}
+
+function importConversionMessage(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : "Não foi possível converter a unidade.";
+
+  if (message === "Configure a conversão desta unidade no produto antes de movimentar.") {
+    return "Configure a conversão desta unidade no produto antes de importar.";
+  }
+
+  return message;
+}
+
+function conversionPreview(
+  product: ProductWithRelations | null | undefined,
+  unit: { id: string } | null,
+  item: ParsedXmlItem,
+) {
+  const errors: string[] = [];
+
+  if (!product) {
+    return {
+      canImport: true,
+      convertedQuantity: null,
+      convertedUnitPrice: null,
+      errors,
+    };
+  }
+
+  if (!unit) {
+    errors.push("Cadastre a unidade de medida antes de importar.");
+
+    return {
+      canImport: false,
+      convertedQuantity: null,
+      convertedUnitPrice: null,
+      errors,
+    };
+  }
+
+  try {
+    const converted = convertKnownProductQuantity(product, {
+      quantity: item.quantity,
+      unitId: unit.id,
+      unitPrice: item.unitPrice,
+    });
+
+    return {
+      canImport: true,
+      convertedQuantity: converted.baseQuantity,
+      convertedUnitPrice: converted.baseUnitPrice,
+      errors,
+    };
+  } catch (error) {
+    errors.push(importConversionMessage(error));
+
+    return {
+      canImport: false,
+      convertedQuantity: null,
+      convertedUnitPrice: null,
+      errors,
+    };
+  }
+}
+
 async function ensureCategory(
   transaction: Prisma.TransactionClient,
   categoryId?: string | null,
@@ -278,6 +363,7 @@ async function findOrCreateProduct(
     include: {
       category: true,
       unit: true,
+      ...productConversionsInclude,
     },
   });
   const product = mappedProductId
@@ -296,11 +382,11 @@ async function findOrCreateProduct(
         categoryId: product.categoryId || categoryId,
         description: product.description || `Importado da nota fiscal.`,
         name: product.name || item.name,
-        unitId,
       },
       include: {
         category: true,
         unit: true,
+        ...productConversionsInclude,
       },
     });
   }
@@ -322,6 +408,7 @@ async function findOrCreateProduct(
     include: {
       category: true,
       unit: true,
+      ...productConversionsInclude,
     },
   });
 }
@@ -331,13 +418,19 @@ export async function previewInvoiceXml(
   input: InvoiceXmlPreviewInput,
 ) {
   const parsed = parseInvoiceXml(input.xml);
-  const products = await prisma.product.findMany({
-    include: {
-      category: true,
-      unit: true,
-    },
-    orderBy: { code: "asc" },
-  });
+  const [products, units] = await Promise.all([
+    prisma.product.findMany({
+      include: {
+        category: true,
+        unit: true,
+        ...productConversionsInclude,
+      },
+      orderBy: { code: "asc" },
+    }),
+    prisma.unitOfMeasure.findMany({
+      orderBy: { abbreviation: "asc" },
+    }),
+  ]);
 
   return {
     invoice: {
@@ -359,11 +452,18 @@ export async function previewInvoiceXml(
     },
     items: parsed.items.map((item, index) => {
       const suggestedProduct = findMatchingProduct(products, item);
+      const suggestedUnit = findMatchingUnit(units, item.unit);
+      const conversion = conversionPreview(suggestedProduct, suggestedUnit, item);
 
       return {
         ...item,
+        canImport: conversion.canImport,
+        convertedQuantity: conversion.convertedQuantity,
+        convertedUnitPrice: conversion.convertedUnitPrice,
+        errors: conversion.errors,
         index,
         suggestedProduct: summarizeProduct(suggestedProduct),
+        suggestedUnit,
         totalValue: roundCurrency(item.quantity * item.unitPrice),
       };
     }),
@@ -472,6 +572,7 @@ export async function importInvoiceXml(
         observation: `Importado da nota fiscal ${parsed.number}.`,
         productId: product.id,
         quantity: item.quantity,
+        unitId: unit.id,
         unitPrice: item.unitPrice,
         userId: input.userId,
         warehouseId: input.warehouseId,
@@ -495,6 +596,7 @@ export async function importInvoiceXml(
                   unit: true,
                 },
               },
+              sourceUnit: true,
               warehouse: true,
             },
           },

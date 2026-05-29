@@ -1,4 +1,4 @@
-import { Boxes, FileDown, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { Boxes, FileDown, Pencil, Plus, Ruler, Trash2, Upload } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { DataTable } from "@/components/domain/data-table";
 import {
@@ -36,6 +36,7 @@ import type {
   ProductCategory,
   ProductCsvPreview,
   Stock,
+  UnitConversion,
   UnitOfMeasure,
 } from "@/lib/types";
 
@@ -52,6 +53,13 @@ type ProductDraft = {
   unitId: string;
 };
 
+type ProductConversionDraft = {
+  active: boolean;
+  factorToBase: string;
+  id?: string;
+  fromUnitId: string;
+};
+
 function emptyDraft(categoryId = "", unitId = ""): ProductDraft {
   return {
     active: true,
@@ -61,6 +69,12 @@ function emptyDraft(categoryId = "", unitId = ""): ProductDraft {
     name: "",
     unitId,
   };
+}
+
+function conversionFactorLabel(value: number | string) {
+  return Number(value).toLocaleString("pt-BR", {
+    maximumFractionDigits: 6,
+  });
 }
 
 export function ProductStocksDialog({
@@ -127,6 +141,275 @@ export function ProductStocksDialog({
               ].join(" ")
             }
           />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+export function ProductConversionsDialog({
+  onChanged,
+  product,
+  units,
+}: {
+  onChanged: () => Promise<void>;
+  product: Product;
+  units: UnitOfMeasure[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<ProductConversionDraft | null>(null);
+  const [conversions, setConversions] = useState<UnitConversion[]>(
+    product.unitConversions ?? [],
+  );
+  const [message, setMessage] = useState<string | null>(null);
+  const conversionOptions = units
+    .filter(
+      (unit) =>
+        unit.id !== product.unitId &&
+        (draft?.id ||
+          !conversions.some(
+            (conversion) => conversion.fromUnitId === unit.id && conversion.active,
+          ) ||
+          draft?.fromUnitId === unit.id),
+    )
+    .map((unit) => ({
+      label: `${unit.name} / ${unit.abbreviation}`,
+      value: unit.id,
+    }));
+
+  function newDraft() {
+    setMessage(null);
+    setDraft({
+      active: true,
+      factorToBase: "",
+      fromUnitId: conversionOptions[0]?.value ?? "",
+    });
+  }
+
+  function editDraft(conversion: UnitConversion) {
+    setMessage(null);
+    setDraft({
+      active: conversion.active,
+      factorToBase: String(conversion.factorToBase),
+      fromUnitId: conversion.fromUnitId,
+      id: conversion.id,
+    });
+  }
+
+  async function saveConversion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!draft) {
+      return;
+    }
+
+    setMessage(null);
+
+    try {
+      const saved = await api<UnitConversion>(
+        draft.id
+          ? `/products/${product.id}/unit-conversions/${draft.id}`
+          : `/products/${product.id}/unit-conversions`,
+        {
+          body: JSON.stringify({
+            active: draft.active,
+            factorToBase: draft.factorToBase,
+            fromUnitId: draft.fromUnitId,
+          }),
+          method: draft.id ? "PUT" : "POST",
+        },
+      );
+
+      setConversions((current) =>
+        draft.id
+          ? current.map((conversion) =>
+              conversion.id === saved.id ? saved : conversion,
+            )
+          : [...current, saved],
+      );
+      setDraft(null);
+      await onChanged();
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao salvar conversão.",
+      );
+    }
+  }
+
+  async function removeConversion(conversion: UnitConversion) {
+    setMessage(null);
+
+    try {
+      await api<void>(
+        `/products/${product.id}/unit-conversions/${conversion.id}`,
+        { method: "DELETE" },
+      );
+      setConversions((current) =>
+        current.filter((currentConversion) => currentConversion.id !== conversion.id),
+      );
+      if (draft?.id === conversion.id) {
+        setDraft(null);
+      }
+      await onChanged();
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao remover conversão.",
+      );
+    }
+  }
+
+  return (
+    <>
+      <Button
+        aria-label={`Configurar conversões de ${product.name}`}
+        onClick={() => {
+          setConversions(product.unitConversions ?? []);
+          setDraft(null);
+          setMessage(null);
+          setOpen(true);
+        }}
+        size="icon"
+        variant="outline"
+      >
+        <Ruler className="h-4 w-4" />
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Conversões de {product.name}</DialogTitle>
+            <DialogDescription>
+              Configure unidades alternativas para registrar o saldo em{" "}
+              {product.unit.abbreviation}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {message ? <ResourceError message={message} /> : null}
+            <div className="flex justify-end">
+              <Button onClick={newDraft} type="button" variant="outline">
+                <Plus className="h-4 w-4" />
+                Nova conversão
+              </Button>
+            </div>
+            <DataTable
+              columns={[
+                {
+                  cell: (conversion) =>
+                    `1 ${conversion.fromUnit.abbreviation} = ${conversionFactorLabel(
+                      conversion.factorToBase,
+                    )} ${product.unit.abbreviation}`,
+                  cellClassName: "font-medium",
+                  header: "Conversão",
+                  key: "conversion",
+                },
+                {
+                  cell: (conversion) => (
+                    <Badge variant={conversion.active ? "success" : "zero"}>
+                      {conversion.active ? "Ativa" : "Inativa"}
+                    </Badge>
+                  ),
+                  header: "Status",
+                  key: "status",
+                },
+                {
+                  cell: (conversion) => (
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        aria-label={`Editar conversão ${conversion.fromUnit.abbreviation}`}
+                        onClick={() => editDraft(conversion)}
+                        size="icon"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        aria-label={`Remover conversão ${conversion.fromUnit.abbreviation}`}
+                        onClick={() => void removeConversion(conversion)}
+                        size="icon"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ),
+                  cellClassName: "text-right",
+                  header: "Ações",
+                  headerClassName: "text-right",
+                  key: "actions",
+                },
+              ]}
+              data={conversions}
+              emptyMessage="Nenhuma conversão cadastrada."
+              getRowId={(conversion) => conversion.id}
+              initialPageSize={5}
+              searchPlaceholder="Buscar conversão..."
+              searchText={(conversion) =>
+                [
+                  conversion.fromUnit.name,
+                  conversion.fromUnit.abbreviation,
+                  conversion.factorToBase,
+                  product.unit.abbreviation,
+                ].join(" ")
+              }
+            />
+            {draft ? (
+              <Form onSubmit={saveConversion}>
+                <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                  <FormField>
+                    <Label htmlFor="product-conversion-unit">
+                      Unidade de entrada ou saída
+                    </Label>
+                    <SearchSelect
+                      ariaLabel="Unidade de entrada ou saída"
+                      id="product-conversion-unit"
+                      onValueChange={(fromUnitId) =>
+                        setDraft({ ...draft, fromUnitId })
+                      }
+                      options={conversionOptions}
+                      placeholder="Selecione"
+                      value={draft.fromUnitId}
+                    />
+                  </FormField>
+                  <FormField>
+                    <Label htmlFor="product-conversion-factor">Equivale a</Label>
+                    <Input
+                      id="product-conversion-factor"
+                      min="0.000001"
+                      onChange={(event) =>
+                        setDraft({ ...draft, factorToBase: event.target.value })
+                      }
+                      required
+                      step="any"
+                      type="number"
+                      value={draft.factorToBase}
+                    />
+                  </FormField>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  1 unidade escolhida será registrada como o fator informado em{" "}
+                  {product.unit.abbreviation}.
+                </p>
+                <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                  <input
+                    checked={draft.active}
+                    onChange={(event) =>
+                      setDraft({ ...draft, active: event.target.checked })
+                    }
+                    type="checkbox"
+                  />
+                  Conversão ativa
+                </label>
+                <Button disabled={!draft.fromUnitId} type="submit">
+                  Salvar conversão
+                </Button>
+              </Form>
+            ) : null}
+          </div>
         </DialogContent>
       </Dialog>
     </>
@@ -471,6 +754,11 @@ export function ProductsPage() {
             cell: (product) => (
               <div className="flex justify-end gap-2">
                 <ProductStocksDialog product={product} stocks={stocks.data} />
+                <ProductConversionsDialog
+                  onChanged={products.reload}
+                  product={product}
+                  units={units.data}
+                />
                 <Button
                   aria-label={`Editar ${product.name}`}
                   onClick={() =>

@@ -1,7 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Product, Stock } from "@/lib/types";
-import { ProductStocksDialog, readCsvFile } from "./products-page";
+import {
+  ProductConversionsDialog,
+  ProductStocksDialog,
+  readCsvFile,
+} from "./products-page";
 
 const product: Product = {
   active: true,
@@ -53,6 +57,12 @@ const stock: Stock = {
   warehouseId: "central",
 };
 
+const boxUnit = {
+  abbreviation: "CX",
+  id: "box",
+  name: "Caixa",
+};
+
 describe("ProductStocksDialog", () => {
   it("shows warehouse stocks for the selected product", () => {
     render(<ProductStocksDialog product={product} stocks={[stock]} />);
@@ -62,6 +72,67 @@ describe("ProductStocksDialog", () => {
     expect(screen.getByText("Estoques de Papel A4")).toBeInTheDocument();
     expect(screen.getByText("Almoxarifado Central")).toBeInTheDocument();
     expect(screen.getByText("12 PCT")).toBeInTheDocument();
+  });
+});
+
+describe("ProductConversionsDialog", () => {
+  it("creates product unit conversions from the product page", async () => {
+    const onChanged = vi.fn();
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          active: true,
+          factorToBase: 10,
+          fromUnit: boxUnit,
+          fromUnitId: boxUnit.id,
+          id: "paper-box",
+          productId: product.id,
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ProductConversionsDialog
+        onChanged={onChanged}
+        product={{
+          ...product,
+          unit: {
+            abbreviation: "RSM",
+            id: "ream",
+            name: "Resma",
+          },
+          unitConversions: [],
+          unitId: "ream",
+        }}
+        units={[product.unit, boxUnit]}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Configurar conversões de Papel A4"));
+    fireEvent.click(screen.getByRole("button", { name: "Nova conversão" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unidade de entrada ou saída" }));
+    fireEvent.click(screen.getByText("Caixa / CX"));
+    fireEvent.change(screen.getByLabelText("Equivale a"), {
+      target: { value: "10" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar conversão" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/products/paper/unit-conversions"),
+      expect.objectContaining({
+        body: JSON.stringify({
+          active: true,
+          factorToBase: "10",
+          fromUnitId: "box",
+        }),
+        method: "POST",
+      }),
+    );
   });
 });
 

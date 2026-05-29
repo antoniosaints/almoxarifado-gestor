@@ -261,6 +261,116 @@ describe("stock CSV import service", () => {
     });
   });
 
+  it("imports CSV rows using product unit conversions", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const box = await prisma.unitOfMeasure.create({
+      data: {
+        abbreviation: "CX",
+        name: "Caixa",
+      },
+    });
+    await prisma.unitConversion.create({
+      data: {
+        factorToBase: 10,
+        fromUnitId: box.id,
+        productId: product.id,
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const csv = [
+      csvHeader,
+      "Papel A4;CX;1,5;250,00;Compra mensal;NF-45;12345678000190;Fornecedor Municipal;25/05/2026",
+    ].join("\n");
+
+    const preview = await previewWarehouseCsvImport(prisma, {
+      csv,
+      warehouseId: warehouse.id,
+    });
+
+    expect(preview.rows[0]).toMatchObject({
+      canImport: true,
+      convertedQuantity: 15,
+      convertedUnitPrice: 25,
+      unit: "CX",
+      warnings: [],
+    });
+
+    const result = await importWarehouseCsv(prisma, {
+      csv,
+      rows: [{ action: "IMPORT", productId: product.id, rowIndex: 0 }],
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    expect(result).toMatchObject({
+      importedRows: 1,
+      skippedRows: 0,
+    });
+    await expect(
+      prisma.stock.findUnique({
+        where: {
+          warehouseId_productId: {
+            productId: product.id,
+            warehouseId: warehouse.id,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      currentQuantity: 15,
+    });
+    const movement = await prisma.stockMovement.findFirstOrThrow({
+      where: {
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+
+    expect(movement.quantity).toBe(15);
+    expect(Number(movement.sourceQuantity)).toBe(1.5);
+    expect(movement.sourceUnitId).toBe(box.id);
+  });
+
+  it("blocks CSV rows with a product unit that has no conversion", async () => {
+    const { product, warehouseCategory } = await createBaseFixture(prisma);
+    await prisma.unitOfMeasure.create({
+      data: {
+        abbreviation: "CX",
+        name: "Caixa",
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const csv = [
+      csvHeader,
+      "Papel A4;CX;2;250,00;Compra mensal;NF-46;12345678000190;Fornecedor Municipal;25/05/2026",
+    ].join("\n");
+
+    const preview = await previewWarehouseCsvImport(prisma, {
+      csv,
+      warehouseId: warehouse.id,
+    });
+
+    expect(preview.rows[0]).toMatchObject({
+      canImport: false,
+      suggestedProduct: {
+        id: product.id,
+      },
+      unit: "CX",
+    });
+    expect(preview.rows[0].errors).toContain(
+      "Configure a conversão desta unidade no produto antes de importar.",
+    );
+  });
+
   it("skips already imported invoice rows and imports only new stock rows", async () => {
     const { productCategory, user, warehouseCategory } =
       await createBaseFixture(prisma);

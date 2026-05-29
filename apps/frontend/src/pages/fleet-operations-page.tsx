@@ -4,6 +4,7 @@ import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Dialog,
   DialogContent,
@@ -470,7 +471,7 @@ export function FleetOperationsPage() {
                   </div>
                   <div className="grid gap-4 sm:grid-cols-4">
                     <FormField><Label htmlFor="fleet-op-quantity">Litros</Label><Input id="fleet-op-quantity" min={0} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} required step="0.01" type="number" value={draft.quantity} /></FormField>
-                    <FormField><Label htmlFor="fleet-op-unit">Valor/l</Label><Input id="fleet-op-unit" min={0} onChange={(event) => setDraft({ ...draft, unitPrice: event.target.value })} required step="0.01" type="number" value={draft.unitPrice} /></FormField>
+                    <FormField><Label htmlFor="fleet-op-unit">Valor/l</Label><CurrencyInput id="fleet-op-unit" onValueChange={(unitPrice) => setDraft({ ...draft, unitPrice })} required value={draft.unitPrice} /></FormField>
                     <FormField><Label htmlFor="fleet-op-fuel-odometer">Odômetro</Label><Input id="fleet-op-fuel-odometer" min={0} onChange={(event) => setDraft({ ...draft, odometer: event.target.value })} type="number" value={draft.odometer} /></FormField>
                     <FormField><Label htmlFor="fleet-op-fuel-hourmeter">Horímetro</Label><Input id="fleet-op-fuel-hourmeter" min={0} onChange={(event) => setDraft({ ...draft, hourmeter: event.target.value })} step="0.1" type="number" value={draft.hourmeter} /></FormField>
                   </div>
@@ -487,8 +488,8 @@ export function FleetOperationsPage() {
                   </div>
                   <FormField><Label htmlFor="fleet-op-problem">Descrição</Label><Textarea id="fleet-op-problem" onChange={(event) => setDraft({ ...draft, problemDescription: event.target.value })} required value={draft.problemDescription} /></FormField>
                   <div className="grid gap-4 sm:grid-cols-3">
-                    <FormField><Label htmlFor="fleet-op-labor">Mão de obra</Label><Input id="fleet-op-labor" min={0} onChange={(event) => setDraft({ ...draft, laborCost: event.target.value })} step="0.01" type="number" value={draft.laborCost} /></FormField>
-                    <FormField><Label htmlFor="fleet-op-parts-cost">Peças</Label><Input id="fleet-op-parts-cost" min={0} onChange={(event) => setDraft({ ...draft, partsCost: event.target.value })} step="0.01" type="number" value={draft.partsCost} /></FormField>
+                    <FormField><Label htmlFor="fleet-op-labor">Mão de obra</Label><CurrencyInput id="fleet-op-labor" onValueChange={(laborCost) => setDraft({ ...draft, laborCost })} value={draft.laborCost} /></FormField>
+                    <FormField><Label htmlFor="fleet-op-parts-cost">Peças</Label><CurrencyInput id="fleet-op-parts-cost" onValueChange={(partsCost) => setDraft({ ...draft, partsCost })} value={draft.partsCost} /></FormField>
                     <FormField><Label htmlFor="fleet-op-supplier-maint">Fornecedor</Label><Input id="fleet-op-supplier-maint" onChange={(event) => setDraft({ ...draft, supplier: event.target.value })} value={draft.supplier} /></FormField>
                   </div>
                   <FormField><Label htmlFor="fleet-op-services">Serviços executados</Label><Textarea id="fleet-op-services" onChange={(event) => setDraft({ ...draft, performedServices: event.target.value })} value={draft.performedServices} /></FormField>

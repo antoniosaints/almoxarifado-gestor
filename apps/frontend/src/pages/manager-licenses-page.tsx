@@ -4,6 +4,7 @@ import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Dialog,
   DialogContent,
@@ -436,14 +437,11 @@ LICENSE_SYSTEM=ALMO-AC1619-A9E7F0`}
                 </FormField>
                 <FormField>
                   <Label htmlFor="license-value">Valor mensal</Label>
-                  <Input
+                  <CurrencyInput
                     id="license-value"
-                    min={0}
-                    onChange={(event) =>
-                      setDraft({ ...draft, monthlyValue: event.target.value })
+                    onValueChange={(monthlyValue) =>
+                      setDraft({ ...draft, monthlyValue })
                     }
-                    step="0.01"
-                    type="number"
                     value={draft.monthlyValue}
                   />
                 </FormField>

@@ -47,6 +47,7 @@ invoiceRoutes.get(
               },
               responsibleUser: true,
               sourceWarehouse: true,
+              sourceUnit: true,
               warehouse: true,
             },
             orderBy: { movementDate: "desc" },

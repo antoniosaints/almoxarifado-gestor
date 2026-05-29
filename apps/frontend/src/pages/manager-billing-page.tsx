@@ -4,6 +4,7 @@ import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Dialog,
   DialogContent,
@@ -454,13 +455,10 @@ export function ManagerBillingPage() {
               <div className="grid gap-4 sm:grid-cols-3">
                 <FormField>
                   <Label htmlFor="billing-amount">Valor</Label>
-                  <Input
+                  <CurrencyInput
                     id="billing-amount"
-                    min={0}
-                    onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
+                    onValueChange={(amount) => setDraft({ ...draft, amount })}
                     required
-                    step="0.01"
-                    type="number"
                     value={draft.amount}
                   />
                 </FormField>

@@ -40,6 +40,8 @@ de uma prefeitura.
 
 - Node.js compativel com Vite 6.
 - `pnpm` instalado.
+- Chromium do Playwright instalado no ambiente do backend para exportar oficios
+  em PDF com fidelidade ao HTML do editor.
 
 ## Configuracao local
 
@@ -47,6 +49,12 @@ de uma prefeitura.
 
    ```bash
    pnpm setup
+   ```
+
+   Se o ambiente ainda nao tiver o navegador do Playwright, instale o Chromium:
+
+   ```bash
+   pnpm --filter @almoxarifado/backend exec playwright install chromium
    ```
 
 2. Configure o backend:
