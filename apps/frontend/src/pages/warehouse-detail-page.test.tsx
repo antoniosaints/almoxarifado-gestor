@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/lib/session";
@@ -46,11 +46,25 @@ const warehouseWithStock: Warehouse = {
         minimumQuantity: 0,
         name: "Papel A4",
         unit: {
-          abbreviation: "PCT",
-          id: "pack",
-          name: "Pacote",
+          abbreviation: "RSM",
+          id: "ream",
+          name: "Resma",
         },
-        unitId: "pack",
+        unitConversions: [
+          {
+            active: true,
+            factorToBase: 10,
+            fromUnit: {
+              abbreviation: "CX",
+              id: "box",
+              name: "Caixa",
+            },
+            fromUnitId: "box",
+            id: "paper-box",
+            productId: "paper",
+          },
+        ],
+        unitId: "ream",
       },
       productId: "paper",
       totalValue: 186.64,
@@ -347,6 +361,44 @@ describe("WarehouseTabs", () => {
     expect(screen.queryByText("0000003 - Detergente")).not.toBeInTheDocument();
   });
 
+  it("shows the converted base quantity in movement forms", () => {
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openStockTab();
+    fireEvent.click(screen.getByLabelText("Entrada no estoque"));
+    fireEvent.click(screen.getByRole("button", { name: "Unidade" }));
+    fireEvent.click(screen.getByText("Caixa / CX"));
+    fireEvent.change(screen.getByLabelText("Quantidade"), {
+      target: { value: "2" },
+    });
+
+    expect(screen.getByText("2 CX serão registradas como 20 RSM.")).toBeInTheDocument();
+  });
+
   it("reads Windows-1252 stock CSV files before sending the preview request", async () => {
     let previewPayload: { csv: string } | null = null;
     const csvBytes = new Uint8Array([
@@ -381,7 +433,7 @@ describe("WarehouseTabs", () => {
                   errors: [],
                   index: 0,
                   invoiceNumber: "NF-50",
-                  productName: "Açucar",
+          productName: "Açucar",
                   quantity: 1,
                   rowNumber: 2,
                   suggestedProduct: null,
@@ -441,7 +493,7 @@ describe("WarehouseTabs", () => {
     });
 
     await waitFor(() => {
-      expect(previewPayload?.csv).toContain("Açucar");
+    expect(previewPayload?.csv).toContain("Açucar");
     });
   });
 
@@ -635,6 +687,83 @@ describe("WarehouseTabs", () => {
     fireEvent.click(screen.getByLabelText("Ver movimentações de Papel A4"));
     expect(screen.getByRole("link", { name: "Abrir nota NF-1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Exportar PDF" })).toBeInTheDocument();
+  });
+
+  it("allows a free stock entry without requiring a unit price", async () => {
+    let movementPayload: unknown;
+    const onMovementSaved = vi.fn(async () => undefined);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input));
+
+        if (url.pathname === "/movements/entry" && init?.method === "POST") {
+          movementPayload = JSON.parse(String(init.body));
+
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json" },
+            status: 201,
+          });
+        }
+
+        return new Response(JSON.stringify([]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={onMovementSaved}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openStockTab();
+    fireEvent.click(screen.getByLabelText("Entrada no estoque"));
+
+    const dialog = screen.getByRole("dialog", { name: "Entrada no estoque" });
+
+    expect(within(dialog).getByText("R$")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByLabelText(/Entrada gratuita\/doa/i));
+
+    const unitPriceInput = within(dialog).getByLabelText(/Valor unit.rio/i);
+
+    expect(unitPriceInput).toBeDisabled();
+    expect(unitPriceInput).not.toBeRequired();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Registrar" }));
+
+    await waitFor(() => {
+      expect(movementPayload).toMatchObject({
+        productId: "paper",
+        unitPrice: 0,
+        warehouseId: "health",
+      });
+    });
+    expect(onMovementSaved).toHaveBeenCalled();
   });
 
   it("offers a filtered movement export from the history tab", () => {

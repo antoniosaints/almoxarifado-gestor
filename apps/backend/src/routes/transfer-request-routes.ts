@@ -4,6 +4,7 @@ import { asyncHandler, currentUser } from "../lib/http.js";
 import { assertWarehouseAccess, warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import { receiveTransferRequest } from "../services/transfer-request-service.js";
+import { productConversionsInclude } from "../services/unit-conversion-service.js";
 import { idParam } from "../validators/inputs.js";
 
 export const transferRequestRoutes = Router();
@@ -24,6 +25,7 @@ const transferRequestInclude = {
   product: {
     include: {
       unit: true,
+      ...productConversionsInclude,
     },
   },
   receivedBy: {
@@ -38,6 +40,7 @@ const transferRequestInclude = {
       category: true,
     },
   },
+  sourceUnit: true,
 } as const;
 
 transferRequestRoutes.get(

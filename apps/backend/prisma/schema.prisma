@@ -170,12 +170,17 @@ model ProductCategory {
 }
 
 model UnitOfMeasure {
-  id           String    @id @default(cuid())
-  name         String    @unique
-  abbreviation String    @unique
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  products     Product[]
+  id                      String             @id @default(cuid())
+  name                    String             @unique
+  abbreviation            String             @unique
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  products                Product[]
+  unitConversionsFrom     UnitConversion[]   @relation("UnitConversionFromUnit")
+  sourceMovements         StockMovement[]    @relation("StockMovementSourceUnit")
+  sourceEntryRequests     EntryRequest[]     @relation("EntryRequestSourceUnit")
+  sourceEntryRequestItems EntryRequestItem[] @relation("EntryRequestItemSourceUnit")
+  sourceTransferRequests  TransferRequest[]  @relation("TransferRequestSourceUnit")
 }
 
 model Product {
@@ -196,6 +201,22 @@ model Product {
   entryRequests    EntryRequest[]
   entryRequestItems EntryRequestItem[]
   transferRequests TransferRequest[]
+  unitConversions  UnitConversion[]
+}
+
+model UnitConversion {
+  id           String        @id @default(cuid())
+  productId    String
+  fromUnitId   String
+  factorToBase Decimal
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  product      Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  fromUnit     UnitOfMeasure @relation("UnitConversionFromUnit", fields: [fromUnitId], references: [id])
+
+  @@unique([productId, fromUnitId])
+  @@index([fromUnitId])
 }
 
 model UserWarehouse {
@@ -236,6 +257,10 @@ model StockMovement {
   destinationWarehouseId String?
   quantity               Int
   unitPrice              Decimal?
+  sourceQuantity         Decimal?
+  sourceUnitId           String?
+  conversionFactor       Decimal?
+  sourceUnitPrice        Decimal?
   destinationNote        String?
   observation            String?
   invoiceId              String?
@@ -251,8 +276,10 @@ model StockMovement {
   responsibleUser        User         @relation(fields: [responsibleUserId], references: [id])
   invoice                Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   stock                  Stock?       @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  sourceUnit             UnitOfMeasure? @relation("StockMovementSourceUnit", fields: [sourceUnitId], references: [id], onDelete: SetNull)
 
   @@index([stockId])
+  @@index([sourceUnitId])
 }
 
 model EntryRequest {
@@ -260,6 +287,9 @@ model EntryRequest {
   warehouseId      String
   productId        String
   quantity         Int
+  sourceQuantity   Decimal?
+  sourceUnitId     String?
+  conversionFactor Decimal?
   observation      String?
   movementDate     DateTime
   status           RequestStatus @default(PENDING)
@@ -274,23 +304,30 @@ model EntryRequest {
   product          Product       @relation(fields: [productId], references: [id])
   requestedBy      User          @relation("EntryRequester", fields: [requestedById], references: [id])
   reviewedBy       User?         @relation("EntryReviewer", fields: [reviewedById], references: [id])
+  sourceUnit        UnitOfMeasure? @relation("EntryRequestSourceUnit", fields: [sourceUnitId], references: [id], onDelete: SetNull)
   items            EntryRequestItem[]
 
   @@unique([warehouseId, officeYear, officeNumber])
+  @@index([sourceUnitId])
 }
 
 model EntryRequestItem {
-  id        String       @id @default(cuid())
-  requestId String
-  productId String
-  quantity  Int
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  request   EntryRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  product   Product      @relation(fields: [productId], references: [id])
+  id               String       @id @default(cuid())
+  requestId        String
+  productId        String
+  quantity         Int
+  sourceQuantity   Decimal?
+  sourceUnitId     String?
+  conversionFactor Decimal?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  request          EntryRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  product          Product      @relation(fields: [productId], references: [id])
+  sourceUnit       UnitOfMeasure? @relation("EntryRequestItemSourceUnit", fields: [sourceUnitId], references: [id], onDelete: SetNull)
 
   @@index([requestId])
   @@index([productId])
+  @@index([sourceUnitId])
 }
 
 model TransferRequest {
@@ -299,6 +336,9 @@ model TransferRequest {
   destinationWarehouseId String
   productId              String
   quantity               Int
+  sourceQuantity         Decimal?
+  sourceUnitId           String?
+  conversionFactor       Decimal?
   observation            String?
   movementDate           DateTime
   status                 TransferRequestStatus @default(PENDING_RECEIPT)
@@ -312,6 +352,9 @@ model TransferRequest {
   product                Product               @relation(fields: [productId], references: [id])
   createdBy              User                  @relation("TransferCreator", fields: [createdById], references: [id])
   receivedBy             User?                 @relation("TransferReceiver", fields: [receivedById], references: [id])
+  sourceUnit             UnitOfMeasure?        @relation("TransferRequestSourceUnit", fields: [sourceUnitId], references: [id], onDelete: SetNull)
+
+  @@index([sourceUnitId])
 }
 
 model Invoice {

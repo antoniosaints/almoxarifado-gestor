@@ -18,6 +18,7 @@ export async function resetDatabase(prisma: PrismaClient) {
   await prisma.invoice.deleteMany();
   await prisma.supplier.deleteMany();
   await prisma.stock.deleteMany();
+  await prisma.unitConversion.deleteMany();
   await prisma.userWarehouse.deleteMany();
   await prisma.product.deleteMany();
   await prisma.unitOfMeasure.deleteMany();

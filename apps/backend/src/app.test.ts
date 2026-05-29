@@ -10,6 +10,22 @@ import { prisma } from "./lib/prisma.js";
 import { hashPassword } from "./services/auth-service.js";
 import { createBaseFixture, resetDatabase } from "./test/database.js";
 
+const playwrightMock = vi.hoisted(() => {
+  const setContent = vi.fn();
+  const pdf = vi.fn(async () => Buffer.from("%PDF mocked"));
+  const close = vi.fn();
+  const newPage = vi.fn(async () => ({ pdf, setContent }));
+  const launch = vi.fn(async () => ({ close, newPage }));
+
+  return { close, launch, newPage, pdf, setContent };
+});
+
+vi.mock("playwright", () => ({
+  chromium: {
+    launch: playwrightMock.launch,
+  },
+}));
+
 function authorizationFor(user: {
   id: string;
   name: string;
@@ -36,8 +52,17 @@ describe("api", () => {
     delete process.env.LICENSE_SYSTEM;
     delete process.env.SECRET_VALIDATION_LICENSE;
     delete process.env.URL_VALIDATION_LICENSE;
+    playwrightMock.close.mockClear();
+    playwrightMock.launch.mockClear();
+    playwrightMock.newPage.mockClear();
+    playwrightMock.pdf.mockClear();
+    playwrightMock.setContent.mockClear();
     await resetDatabase(prisma);
     rmSync(path.join(process.cwd(), "uploads", "settings"), {
+      force: true,
+      recursive: true,
+    });
+    rmSync(path.join(process.cwd(), "uploads", "office-template-images"), {
       force: true,
       recursive: true,
     });
@@ -46,6 +71,10 @@ describe("api", () => {
   afterAll(async () => {
     await resetDatabase(prisma);
     rmSync(path.join(process.cwd(), "uploads", "settings"), {
+      force: true,
+      recursive: true,
+    });
+    rmSync(path.join(process.cwd(), "uploads", "office-template-images"), {
       force: true,
       recursive: true,
     });
@@ -1045,6 +1074,31 @@ describe("api", () => {
     });
   });
 
+  it("uploads office template images for detailed headers and body content", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: UserRole.ADMIN },
+    });
+
+    const upload = await request(app)
+      .post("/uploads/office-template-images")
+      .set("Authorization", authorizationFor(admin))
+      .set("Content-Type", "image/png")
+      .send(tinyPngBuffer());
+
+    expect(upload.status).toBe(201);
+    expect(upload.body).toMatchObject({
+      driver: "local",
+      url: expect.stringMatching(
+        /^\/uploads\/office-template-images\/office-template-image-[a-f0-9]{12}\.png\?v=\d+$/,
+      ),
+    });
+    expect(existsSync(path.join(process.cwd(), upload.body.url.split("?")[0]))).toBe(
+      true,
+    );
+  });
+
   it("renders an office letter for a non-general entry request", async () => {
     const { product, productCategory, unit, user, warehouseCategory } =
       await createBaseFixture(prisma);
@@ -1148,9 +1202,15 @@ describe("api", () => {
     expect(office.body.contentHtml).toContain("OFICIO Nº 001/2026");
     expect(office.body.contentHtml).toContain("Papel A4 - 4 UN;");
     expect(office.body.contentHtml).toContain("Caneta azul - 2 UN.");
+    expect(office.body.documentHtml).toContain('data-office-letter-document="true"');
+    expect(office.body.documentHtml).toContain("OFICIO Nº 001/2026");
+    expect(office.body.documentHtml).toContain("Papel A4 - 4 UN;");
+    expect(office.body.documentHtml).not.toContain("/uploads/settings/office-logo");
+    expect(office.body.documentHtml).not.toContain("Almoxarifado da Saude");
+    expect(office.body.documentHtml).not.toContain("Teste");
   });
 
-  it("exports an office letter PDF with the configured header logo", async () => {
+  it("exports an office letter PDF from the saved document html only", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({
       where: { id: user.id },
@@ -1195,7 +1255,14 @@ describe("api", () => {
     expect(office.headers["content-type"]).toContain("application/pdf");
     expect(office.headers["content-disposition"]).toContain("oficio-001-2026.pdf");
     expect(office.body.toString("latin1")).toContain("%PDF");
-    expect(office.body.toString("latin1")).toContain("/Subtype /Image");
+    expect(playwrightMock.setContent).toHaveBeenCalledTimes(1);
+
+    const renderedHtml = String(playwrightMock.setContent.mock.calls[0]?.[0] ?? "");
+
+    expect(renderedHtml).toContain("OF&Iacute;CIO");
+    expect(renderedHtml).not.toContain("/uploads/settings/office-logo");
+    expect(renderedHtml).not.toContain("Almoxarifado da Saude");
+    expect(renderedHtml).not.toContain("Teste");
   });
 
   it("uploads one settings asset per slot and stores only the public URL", async () => {
@@ -2309,12 +2376,18 @@ describe("api", () => {
         name: "Almoxarifado Central",
       },
     });
+    const boxUnit = await prisma.unitOfMeasure.create({
+      data: {
+        abbreviation: "CX",
+        name: "Caixa",
+      },
+    });
     const mappedProduct = await prisma.product.create({
       data: {
         categoryId: productCategory.id,
         code: "0000002",
         name: "Clips 26mm",
-        unitId: unit.id,
+        unitId: boxUnit.id,
       },
     });
     const xml = `
@@ -2346,7 +2419,7 @@ describe("api", () => {
               <prod>
                 <cProd>PAP-EXT</cProd>
                 <xProd>Papel A4</xProd>
-                <uCom>PCT</uCom>
+                <uCom>UN</uCom>
                 <qCom>2.0000</qCom>
                 <vUnCom>25.50</vUnCom>
                 <vProd>51.00</vProd>
@@ -2461,7 +2534,7 @@ describe("api", () => {
     ).resolves.toBeNull();
     await expect(
       prisma.unitOfMeasure.findUnique({ where: { abbreviation: "CX" } }),
-    ).resolves.toMatchObject({ name: "CX" });
+    ).resolves.toMatchObject({ name: "Caixa" });
   });
 
   it("returns admin insights for KPI dashboard", async () => {

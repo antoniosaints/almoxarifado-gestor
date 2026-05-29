@@ -44,6 +44,20 @@ function movementTotalValue(movement: Movement) {
   return unitPrice === null ? null : unitPrice * movement.quantity;
 }
 
+function movementBaseQuantityLabel(movement: Movement) {
+  return `${movement.quantity} ${movement.product.unit.abbreviation}`;
+}
+
+function movementSourceQuantityLabel(movement: Movement) {
+  if (!movement.sourceQuantity || !movement.sourceUnit) {
+    return null;
+  }
+
+  return `${Number(movement.sourceQuantity).toLocaleString("pt-BR", {
+    maximumFractionDigits: 6,
+  })} ${movement.sourceUnit.abbreviation}`;
+}
+
 function movementAuditFileName(movement: Movement) {
   return `movimentacao-${movement.id}.pdf`;
 }
@@ -138,7 +152,11 @@ function MovementDetailsDialog({
               />
               <DetailItem
                 label="Quantidade"
-                value={`${movement.quantity} ${movement.product.unit.abbreviation}`}
+                value={movementBaseQuantityLabel(movement)}
+              />
+              <DetailItem
+                label="Quantidade informada"
+                value={movementSourceQuantityLabel(movement) ?? "-"}
               />
               <DetailItem
                 label="Valor unitário"
@@ -228,8 +246,20 @@ export function MovementsTable({
           key: "source-destination",
         },
         {
-          cell: (movement) =>
-            `${movement.quantity} ${movement.product.unit.abbreviation}`,
+          cell: (movement) => {
+            const sourceQuantity = movementSourceQuantityLabel(movement);
+
+            return (
+              <div>
+                <p>{movementBaseQuantityLabel(movement)}</p>
+                {sourceQuantity ? (
+                  <p className="text-xs text-muted-foreground">
+                    Informado: {sourceQuantity}
+                  </p>
+                ) : null}
+              </div>
+            );
+          },
           header: "Quantidade",
           key: "quantity",
         },
@@ -335,6 +365,8 @@ export function MovementsTable({
           movement.destinationNote,
           movement.observation,
           movement.quantity,
+          movement.sourceQuantity,
+          movement.sourceUnit?.abbreviation,
         ].join(" ")
       }
     />

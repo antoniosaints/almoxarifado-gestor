@@ -1,5 +1,11 @@
 import { MovementType, Prisma, type PrismaClient } from "@prisma/client";
 import { AppError } from "../lib/errors.js";
+import {
+  conversionAuditData,
+  convertQuantityToBase,
+  roundCurrency,
+  toNumber,
+} from "./unit-conversion-service.js";
 
 type PrismaWriter = PrismaClient | Prisma.TransactionClient;
 
@@ -8,6 +14,7 @@ type BaseMovementInput = {
   observation?: string | null;
   productId: string;
   quantity: number;
+  unitId?: string | null;
   userId: string;
 };
 
@@ -23,24 +30,6 @@ export type OutputInput = BaseMovementInput & {
   warehouseId: string;
 };
 
-function assertPositiveQuantity(quantity: number) {
-  if (!Number.isInteger(quantity) || quantity <= 0) {
-    throw new AppError(400, "Informe uma quantidade maior que zero.");
-  }
-}
-
-function toNumber(value: unknown) {
-  if (value === null || value === undefined) {
-    return 0;
-  }
-
-  return Number(value);
-}
-
-function roundCurrency(value: number) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
 function writeTransaction<T>(
   prisma: PrismaWriter,
   operation: (transaction: Prisma.TransactionClient) => Promise<T>,
@@ -53,9 +42,13 @@ function writeTransaction<T>(
 }
 
 export async function createEntry(prisma: PrismaWriter, input: EntryInput) {
-  assertPositiveQuantity(input.quantity);
-
   return writeTransaction(prisma, async (transaction) => {
+    const converted = await convertQuantityToBase(transaction, {
+      productId: input.productId,
+      quantity: input.quantity,
+      unitId: input.unitId,
+      unitPrice: input.unitPrice,
+    });
     const existingStock = await transaction.stock.findUnique({
       where: {
         warehouseId_productId: {
@@ -65,17 +58,18 @@ export async function createEntry(prisma: PrismaWriter, input: EntryInput) {
       },
     });
     const entryUnitPrice =
-      input.unitPrice === null || input.unitPrice === undefined
+      converted.baseUnitPrice === null || converted.baseUnitPrice === undefined
         ? 0
-        : roundCurrency(input.unitPrice);
+        : roundCurrency(converted.baseUnitPrice);
     const stock = existingStock
       ? await transaction.stock.update({
           where: { id: existingStock.id },
           data: (() => {
-            const nextQuantity = existingStock.currentQuantity + input.quantity;
+            const nextQuantity =
+              existingStock.currentQuantity + converted.baseQuantity;
             const nextAverage = roundCurrency(
               (existingStock.currentQuantity * toNumber(existingStock.unitPriceAverage) +
-                input.quantity * entryUnitPrice) /
+                converted.baseQuantity * entryUnitPrice) /
                 nextQuantity,
             );
 
@@ -89,11 +83,11 @@ export async function createEntry(prisma: PrismaWriter, input: EntryInput) {
         })
       : await transaction.stock.create({
           data: {
-            currentQuantity: input.quantity,
+            currentQuantity: converted.baseQuantity,
             lastMovementAt: input.movementDate,
             minimumQuantity: input.minimumQuantity ?? 0,
             productId: input.productId,
-            totalValue: roundCurrency(input.quantity * entryUnitPrice),
+            totalValue: roundCurrency(converted.baseQuantity * entryUnitPrice),
             unitPriceAverage: entryUnitPrice,
             warehouseId: input.warehouseId,
           },
@@ -105,12 +99,13 @@ export async function createEntry(prisma: PrismaWriter, input: EntryInput) {
         observation: input.observation,
         invoiceId: input.invoiceId,
         productId: input.productId,
-        quantity: input.quantity,
+        quantity: converted.baseQuantity,
         responsibleUserId: input.userId,
         stockId: stock.id,
         type: MovementType.ENTRADA,
-        unitPrice: input.unitPrice,
+        unitPrice: converted.baseUnitPrice,
         warehouseId: input.warehouseId,
+        ...conversionAuditData(converted),
       },
     });
 
@@ -119,9 +114,12 @@ export async function createEntry(prisma: PrismaWriter, input: EntryInput) {
 }
 
 export async function createOutput(prisma: PrismaWriter, input: OutputInput) {
-  assertPositiveQuantity(input.quantity);
-
   return writeTransaction(prisma, async (transaction) => {
+    const converted = await convertQuantityToBase(transaction, {
+      productId: input.productId,
+      quantity: input.quantity,
+      unitId: input.unitId,
+    });
     const stock = await transaction.stock.findUnique({
       where: {
         warehouseId_productId: {
@@ -131,17 +129,18 @@ export async function createOutput(prisma: PrismaWriter, input: OutputInput) {
       },
     });
 
-    if (!stock || stock.currentQuantity < input.quantity) {
+    if (!stock || stock.currentQuantity < converted.baseQuantity) {
       throw new AppError(409, "Quantidade insuficiente em estoque.");
     }
 
     const updatedStock = await transaction.stock.update({
       where: { id: stock.id },
       data: {
-        currentQuantity: stock.currentQuantity - input.quantity,
+        currentQuantity: stock.currentQuantity - converted.baseQuantity,
         lastMovementAt: input.movementDate,
         totalValue: roundCurrency(
-          (stock.currentQuantity - input.quantity) * toNumber(stock.unitPriceAverage),
+          (stock.currentQuantity - converted.baseQuantity) *
+            toNumber(stock.unitPriceAverage),
         ),
       },
     });
@@ -152,11 +151,12 @@ export async function createOutput(prisma: PrismaWriter, input: OutputInput) {
         movementDate: input.movementDate,
         observation: input.observation,
         productId: input.productId,
-        quantity: input.quantity,
+        quantity: converted.baseQuantity,
         responsibleUserId: input.userId,
         stockId: stock.id,
         type: MovementType.SAIDA,
         warehouseId: input.warehouseId,
+        ...conversionAuditData(converted),
       },
     });
 

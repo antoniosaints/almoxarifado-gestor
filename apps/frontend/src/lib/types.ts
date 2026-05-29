@@ -18,6 +18,15 @@ export type UnitOfMeasure = {
   name: string;
 };
 
+export type UnitConversion = {
+  active: boolean;
+  factorToBase: number | string;
+  fromUnit: UnitOfMeasure;
+  fromUnitId: string;
+  id: string;
+  productId: string;
+};
+
 export type Product = {
   active: boolean;
   category: ProductCategory;
@@ -28,6 +37,7 @@ export type Product = {
   minimumQuantity: number;
   name: string;
   unit: UnitOfMeasure;
+  unitConversions?: UnitConversion[];
   unitId: string;
 };
 
@@ -262,9 +272,13 @@ export type EntryRequest = {
   observation?: string | null;
   product: Pick<Product, "code" | "id" | "name" | "unit">;
   quantity: number;
+  conversionFactor?: number | string | null;
   requestedBy: Pick<User, "email" | "id" | "name">;
   reviewedAt?: string | null;
   reviewedBy?: Pick<User, "email" | "id" | "name"> | null;
+  sourceQuantity?: number | string | null;
+  sourceUnit?: UnitOfMeasure | null;
+  sourceUnitId?: string | null;
   status: RequestStatus;
   warehouse: Pick<Warehouse, "category" | "id" | "isGeneral" | "name">;
 };
@@ -274,10 +288,15 @@ export type EntryRequestItem = {
   product: Pick<Product, "code" | "id" | "name" | "unit">;
   productId: string;
   quantity: number;
+  conversionFactor?: number | string | null;
+  sourceQuantity?: number | string | null;
+  sourceUnit?: UnitOfMeasure | null;
+  sourceUnitId?: string | null;
 };
 
 export type OfficeLetter = {
   contentHtml: string;
+  documentHtml: string;
   header: {
     logoUrl?: string | null;
     subtitle: string;
@@ -308,8 +327,12 @@ export type TransferRequest = {
   observation?: string | null;
   product: Pick<Product, "code" | "id" | "name" | "unit">;
   quantity: number;
+  conversionFactor?: number | string | null;
   receivedAt?: string | null;
   receivedBy?: Pick<User, "email" | "id" | "name"> | null;
+  sourceQuantity?: number | string | null;
+  sourceUnit?: UnitOfMeasure | null;
+  sourceUnitId?: string | null;
   sourceWarehouse: Pick<Warehouse, "category" | "id" | "name">;
   status: TransferRequestStatus;
 };
@@ -327,6 +350,11 @@ export type Movement = {
   productId: string;
   quantity: number;
   responsibleUser?: User;
+  conversionFactor?: number | string | null;
+  sourceQuantity?: number | string | null;
+  sourceUnit?: UnitOfMeasure | null;
+  sourceUnitId?: string | null;
+  sourceUnitPrice?: number | string | null;
   sourceWarehouse?: Pick<Warehouse, "id" | "name"> | null;
   type: MovementType;
   unitPrice?: number | string | null;
@@ -413,6 +441,8 @@ export type WarehouseCsvPreviewRow = {
   rowNumber: number;
   suggestedProduct?: Pick<Product, "code" | "id" | "name" | "unit"> | null;
   suggestedUnit?: UnitOfMeasure | null;
+  convertedQuantity?: number | null;
+  convertedUnitPrice?: number | null;
   totalValue: number;
   unit: string;
   unitPrice: number;

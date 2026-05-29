@@ -30,6 +30,7 @@ import { SummaryCard } from "@/components/domain/summary-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Dialog,
   DialogContent,
@@ -97,6 +98,12 @@ function movementLabel(kind: MovementFormProps["kind"]) {
   }
 
   return "Transferir";
+}
+
+function formatQuantityPreview(value: number) {
+  return value.toLocaleString("pt-BR", {
+    maximumFractionDigits: 6,
+  });
 }
 
 type ProductDraft = {
@@ -545,12 +552,14 @@ function MovementForm({
   const [productId, setProductId] = useState(
     lockedProduct?.id ?? initialProductId,
   );
+  const [unitId, setUnitId] = useState(lockedProduct?.unitId ?? "");
   const [quantity, setQuantity] = useState("1");
   const [observation, setObservation] = useState("");
   const [destinationNote, setDestinationNote] = useState("");
   const [destinationWarehouseId, setDestinationWarehouseId] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
+  const [freeEntry, setFreeEntry] = useState(false);
   const [minimumQuantity, setMinimumQuantity] = useState("0");
   const [movementDate, setMovementDate] = useState(todayInputValue());
   const [message, setMessage] = useState<string | null>(null);
@@ -560,6 +569,58 @@ function MovementForm({
   const createsNewStock =
     kind === "entry" && Boolean(productId) && !selectedStock && !lockedProduct;
   const productOptions = lockedProduct ? [lockedProduct] : products;
+  const selectedProduct = productOptions.find((product) => product.id === productId);
+  const activeConversions =
+    selectedProduct?.unitConversions?.filter((conversion) => conversion.active) ?? [];
+  const selectedConversion = activeConversions.find(
+    (conversion) => conversion.fromUnitId === unitId,
+  );
+  const selectedUnit =
+    selectedConversion?.fromUnit ??
+    (unitId === selectedProduct?.unitId ? selectedProduct?.unit : undefined);
+  const unitOptions = selectedProduct
+    ? [
+        {
+          label: `${selectedProduct.unit.name} / ${selectedProduct.unit.abbreviation}`,
+          searchText: "unidade base",
+          value: selectedProduct.unitId,
+        },
+        ...activeConversions.map((conversion) => ({
+          label: `${conversion.fromUnit.name} / ${conversion.fromUnit.abbreviation}`,
+          searchText: `${formatQuantityPreview(Number(conversion.factorToBase))} ${selectedProduct.unit.abbreviation}`,
+          value: conversion.fromUnitId,
+        })),
+      ]
+    : [];
+  const quantityValue = Number(quantity);
+  const conversionFactor = selectedConversion
+    ? Number(selectedConversion.factorToBase)
+    : null;
+  const convertedQuantity =
+    selectedConversion &&
+    conversionFactor !== null &&
+    Number.isFinite(quantityValue) &&
+    Number.isFinite(conversionFactor)
+      ? quantityValue * conversionFactor
+      : null;
+  const conversionPreview =
+    convertedQuantity !== null && selectedUnit && selectedProduct
+      ? `${formatQuantityPreview(quantityValue)} ${selectedUnit.abbreviation} serão registradas como ${formatQuantityPreview(convertedQuantity)} ${selectedProduct.unit.abbreviation}.`
+      : null;
+  const unitPriceValue = Number(unitPrice);
+  const convertedUnitPrice =
+    kind === "entry" &&
+    !freeEntry &&
+    conversionFactor !== null &&
+    Number.isFinite(unitPriceValue) &&
+    Number.isFinite(conversionFactor) &&
+    conversionFactor > 0
+      ? unitPriceValue / conversionFactor
+      : null;
+
+  useEffect(() => {
+    setUnitId(selectedProduct?.unitId ?? "");
+  }, [selectedProduct?.id, selectedProduct?.unitId]);
 
   const endpoint = {
     entry: "/movements/entry",
@@ -572,6 +633,8 @@ function MovementForm({
     event.preventDefault();
     setMessage(null);
 
+    const selectedUnitId = unitId || selectedProduct?.unitId || undefined;
+
     const payload =
       kind === "transfer"
         ? {
@@ -581,6 +644,7 @@ function MovementForm({
             productId,
             quantity,
             sourceWarehouseId: warehouse.id,
+            unitId: selectedUnitId,
           }
         : {
             destinationNote,
@@ -590,7 +654,8 @@ function MovementForm({
             observation,
             productId,
             quantity,
-            unitPrice: kind === "entry" ? unitPrice : undefined,
+            unitId: selectedUnitId,
+            unitPrice: kind === "entry" ? (freeEntry ? 0 : unitPrice) : undefined,
             warehouseId: warehouse.id,
           };
 
@@ -604,7 +669,9 @@ function MovementForm({
       setDestinationNote("");
       setDestinationWarehouseId("");
       setUnitPrice("");
+      setFreeEntry(false);
       setMinimumQuantity("0");
+      setUnitId(selectedProduct?.unitId ?? "");
       setMessage(
         kind === "entryRequest"
           ? "Solicitação enviada."
@@ -646,7 +713,7 @@ function MovementForm({
           </AlertDescription>
         </Alert>
       ) : null}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className={`grid gap-4 ${selectedProduct ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
         <FormField>
           <div className="mt-2 flex items-center justify-between gap-2">
             <Label className="mb-0" htmlFor={`${kind}-product`}>
@@ -657,6 +724,7 @@ function MovementForm({
                 onCreated={async (product) => {
                   await onProductCreated(product);
                   setProductId(product.id);
+                  setUnitId(product.unitId);
                   setMinimumQuantity("0");
                 }}
                 productCategories={productCategories}
@@ -687,14 +755,34 @@ function MovementForm({
           </Label>
           <Input
             id={`${kind}-quantity`}
-            min="1"
+            min="0.000001"
             onChange={(event) => setQuantity(event.target.value)}
             required
+            step="any"
             type="number"
             value={quantity}
           />
         </FormField>
+        {selectedProduct ? (
+          <FormField>
+            <Label htmlFor={`${kind}-unit`}>Unidade</Label>
+            <SearchSelect
+              ariaLabel="Unidade"
+              id={`${kind}-unit`}
+              onValueChange={setUnitId}
+              options={unitOptions}
+              placeholder="Selecione"
+              value={unitId || selectedProduct.unitId}
+            />
+          </FormField>
+        ) : null}
       </div>
+
+      {conversionPreview ? (
+        <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+          {conversionPreview}
+        </p>
+      ) : null}
 
       {kind === "output" ? (
         <FormField>
@@ -750,16 +838,34 @@ function MovementForm({
         {kind === "entry" ? (
           <FormField>
             <Label htmlFor="entry-unit-price">Valor unitário</Label>
-            <Input
+            <CurrencyInput
+              disabled={freeEntry}
               id="entry-unit-price"
-              min="0"
-              onChange={(event) => setUnitPrice(event.target.value)}
-              placeholder="0.00"
-              required
-              step="0.01"
-              type="number"
-              value={unitPrice}
+              onValueChange={setUnitPrice}
+              required={!freeEntry}
+              value={freeEntry ? "0" : unitPrice}
             />
+            <label className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                checked={freeEntry}
+                className="h-4 w-4 rounded border"
+                id="entry-free"
+                onChange={(event) => {
+                  setFreeEntry(event.target.checked);
+                  if (event.target.checked) {
+                    setUnitPrice("");
+                  }
+                }}
+                type="checkbox"
+              />
+              Entrada gratuita/doação
+            </label>
+            {convertedUnitPrice !== null && selectedUnit && selectedProduct ? (
+              <p className="text-xs text-muted-foreground">
+                Valor informado por {selectedUnit.abbreviation}. Base:{" "}
+                {formatCurrency(convertedUnitPrice)}/{selectedProduct.unit.abbreviation}.
+              </p>
+            ) : null}
           </FormField>
         ) : null}
       </div>
@@ -781,6 +887,7 @@ function MovementForm({
             id={`${kind}-observation`}
             onChange={(event) => setObservation(event.target.value)}
             value={observation}
+            placeholder={freeEntry ? "Ex: Entrada sem custo!" : "Ex: Entrada de mercadoria."}
           />
         </FormField>
       </div>
@@ -2166,7 +2273,19 @@ function WarehouseCsvImportDialog({
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          {row.quantity} {row.unit}
+                          <div className="space-y-1">
+                            <p>
+                              {row.quantity} {row.unit}
+                            </p>
+                            {row.convertedQuantity &&
+                            row.suggestedProduct &&
+                            row.suggestedUnit?.id !== row.suggestedProduct.unit.id ? (
+                              <p className="text-xs text-muted-foreground">
+                                {row.convertedQuantity}{" "}
+                                {row.suggestedProduct.unit.abbreviation}
+                              </p>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="space-y-1">
@@ -2174,6 +2293,13 @@ function WarehouseCsvImportDialog({
                             <p className="text-xs text-muted-foreground">
                               {formatCurrency(row.unitPrice)}
                             </p>
+                            {row.convertedUnitPrice &&
+                            row.suggestedProduct &&
+                            row.suggestedUnit?.id !== row.suggestedProduct.unit.id ? (
+                              <p className="text-xs text-muted-foreground">
+                                Base: {formatCurrency(row.convertedUnitPrice)}
+                              </p>
+                            ) : null}
                             {row.warnings.map((warning) => (
                               <p className="text-xs text-amber-600" key={warning}>
                                 {warning}

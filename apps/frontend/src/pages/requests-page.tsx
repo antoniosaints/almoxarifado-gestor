@@ -1,6 +1,5 @@
 import {
   ArrowRightLeft,
-  Building2,
   Check,
   FileDown,
   FileText,
@@ -31,7 +30,6 @@ import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api, apiFile, useApiResource } from "@/lib/api";
-import { resolveAssetUrl } from "@/lib/assets";
 import { useSession } from "@/lib/session";
 import type {
   EntryRequest,
@@ -72,6 +70,7 @@ type EntryRequestItemDraft = {
   id: string;
   productId: string;
   quantity: string;
+  unitId: string;
 };
 
 type ApprovalItemPayload = {
@@ -83,6 +82,7 @@ type ApprovalItemPayload = {
 function createEntryRequestItemDraft(
   productId = "",
   quantity = "1",
+  unitId = "",
 ): EntryRequestItemDraft {
   return {
     id:
@@ -91,7 +91,53 @@ function createEntryRequestItemDraft(
         : `${Date.now()}-${Math.random()}`,
     productId,
     quantity,
+    unitId,
   };
+}
+
+function formatQuantityPreview(value: number) {
+  return value.toLocaleString("pt-BR", {
+    maximumFractionDigits: 6,
+  });
+}
+
+function unitOptionsForProduct(product?: Product) {
+  if (!product) {
+    return [];
+  }
+
+  return [
+    {
+      label: `${product.unit.name} / ${product.unit.abbreviation}`,
+      searchText: "unidade base",
+      value: product.unitId,
+    },
+    ...(product.unitConversions?.filter((conversion) => conversion.active) ?? []).map(
+      (conversion) => ({
+        label: `${conversion.fromUnit.name} / ${conversion.fromUnit.abbreviation}`,
+        searchText: `${formatQuantityPreview(Number(conversion.factorToBase))} ${product.unit.abbreviation}`,
+        value: conversion.fromUnitId,
+      }),
+    ),
+  ];
+}
+
+function conversionPreviewForProduct(
+  product: Product | undefined,
+  unitId: string,
+  quantity: string,
+) {
+  const conversion = product?.unitConversions?.find(
+    (item) => item.active && item.fromUnitId === unitId,
+  );
+  const quantityValue = Number(quantity);
+  const factor = Number(conversion?.factorToBase);
+
+  if (!product || !conversion || !Number.isFinite(quantityValue) || !Number.isFinite(factor)) {
+    return null;
+  }
+
+  return `${formatQuantityPreview(quantityValue)} ${conversion.fromUnit.abbreviation} serão registradas como ${formatQuantityPreview(quantityValue * factor)} ${product.unit.abbreviation}.`;
 }
 
 function entryRequestItems(request: EntryRequest) {
@@ -103,6 +149,9 @@ function entryRequestItems(request: EntryRequest) {
           product: request.product,
           productId: request.product.id,
           quantity: request.quantity,
+          sourceQuantity: request.sourceQuantity,
+          sourceUnit: request.sourceUnit,
+          sourceUnitId: request.sourceUnitId,
         },
       ];
 }
@@ -120,13 +169,35 @@ function entryRequestProductSummary(request: EntryRequest) {
     : `${firstItem.product.name} + ${items.length - 1} item(ns)`;
 }
 
+function requestSourceQuantityLabel(item: {
+  sourceQuantity?: number | string | null;
+  sourceUnit?: { abbreviation: string } | null;
+}) {
+  if (!item.sourceQuantity || !item.sourceUnit) {
+    return null;
+  }
+
+  return `${Number(item.sourceQuantity).toLocaleString("pt-BR", {
+    maximumFractionDigits: 6,
+  })} ${item.sourceUnit.abbreviation}`;
+}
+
 function entryRequestQuantitySummary(request: EntryRequest) {
   return entryRequestItems(request)
-    .map(
-      (item) =>
-        `${item.quantity} ${item.product.unit.abbreviation} ${item.product.name}`,
-    )
+    .map((item) => {
+      const sourceQuantity = requestSourceQuantityLabel(item);
+      const baseQuantity = `${item.quantity} ${item.product.unit.abbreviation}`;
+
+      return `${baseQuantity}${sourceQuantity ? ` (${sourceQuantity})` : ""} ${item.product.name}`;
+    })
     .join(", ");
+}
+
+function transferRequestQuantitySummary(request: TransferRequest) {
+  const sourceQuantity = requestSourceQuantityLabel(request);
+  const baseQuantity = `${request.quantity} ${request.product.unit.abbreviation}`;
+
+  return sourceQuantity ? `${baseQuantity} (${sourceQuantity})` : baseQuantity;
 }
 
 function OfficeLetterDialog({ request }: { request: EntryRequest }) {
@@ -135,8 +206,6 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const logoUrl = resolveAssetUrl(letter?.header.logoUrl);
-
   async function openDialog() {
     setOpen(true);
 
@@ -200,7 +269,7 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
         Ver ofício
       </Button>
       <Dialog onOpenChange={setOpen} open={open}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
           <DialogHeader>
             <DialogTitle>Ofício da solicitação</DialogTitle>
             <DialogDescription>
@@ -211,31 +280,12 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
           {loading ? <LoadingLine /> : null}
           {error ? <ResourceError message={error} /> : null}
           {letter ? (
-            <article className="space-y-6 rounded-md border bg-background p-5 text-sm">
-              <header className="flex items-center gap-3 border-b pb-4">
-                <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
-                  {logoUrl ? (
-                    <img
-                      alt=""
-                      className="h-full w-full object-contain"
-                      src={logoUrl}
-                    />
-                  ) : (
-                    <Building2 className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="font-semibold">{letter.header.title}</p>
-                  <p className="text-muted-foreground">{letter.header.subtitle}</p>
-                </div>
-              </header>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold">OFICIO Nº {letter.numberFormatted}</p>
-                <p className="text-muted-foreground">{letter.subject}</p>
-              </div>
+            <article className="overflow-x-auto rounded-md border bg-muted/30 p-3">
               <div
-                className="prose prose-sm max-w-none dark:prose-invert"
-                dangerouslySetInnerHTML={{ __html: letter.contentHtml }}
+                className="mx-auto max-w-full bg-background text-foreground"
+                dangerouslySetInnerHTML={{
+                  __html: letter.documentHtml ?? letter.contentHtml,
+                }}
               />
             </article>
           ) : null}
@@ -484,14 +534,19 @@ function DirectEntryRequestDialog({
   const [message, setMessage] = useState<string | null>(null);
   const availableWarehouses = warehouses.filter((warehouse) => !warehouse.isGeneral);
   const validItems = items
-    .map((item) => ({
-      productId: item.productId,
-      quantity: Number.parseInt(item.quantity, 10),
-    }))
+    .map((item) => {
+      const product = products.find((currentProduct) => currentProduct.id === item.productId);
+
+      return {
+        productId: item.productId,
+        quantity: Number(item.quantity),
+        unitId: item.unitId || product?.unitId,
+      };
+    })
     .filter(
       (item) =>
         item.productId &&
-        Number.isInteger(item.quantity) &&
+        Number.isFinite(item.quantity) &&
         item.quantity > 0,
     );
 
@@ -529,13 +584,21 @@ function DirectEntryRequestDialog({
           setItems((current) =>
             current.map((item, index) => ({
               ...item,
-              productId: nextProducts.some(
-                (product) => product.id === item.productId,
-              )
-                ? item.productId
-                : index === 0
-                  ? nextProducts[0]?.id ?? ""
-                  : "",
+              ...(() => {
+                const currentProduct = nextProducts.find(
+                  (product) => product.id === item.productId,
+                );
+                const fallbackProduct = index === 0 ? nextProducts[0] : undefined;
+                const product = currentProduct ?? fallbackProduct;
+
+                return {
+                  productId: product?.id ?? "",
+                  unitId:
+                    product && item.unitId === currentProduct?.unitId
+                      ? item.unitId
+                      : product?.unitId ?? "",
+                };
+              })(),
             })),
           );
         }
@@ -563,7 +626,9 @@ function DirectEntryRequestDialog({
 
   function openDialog() {
     setMessage(null);
-    setItems([createEntryRequestItemDraft(products[0]?.id ?? "")]);
+    setItems([
+      createEntryRequestItemDraft(products[0]?.id ?? "", "1", products[0]?.unitId ?? ""),
+    ]);
     setMovementDate(todayInputValue());
     setObservation("");
     setOpen(true);
@@ -571,25 +636,39 @@ function DirectEntryRequestDialog({
 
   function updateItem(
     itemId: string,
-    field: "productId" | "quantity",
+    field: "productId" | "quantity" | "unitId",
     value: string,
   ) {
     setItems((current) =>
-      current.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              [field]: value,
-            }
-          : item,
-      ),
+      current.map((item) => {
+        if (item.id !== itemId) {
+          return item;
+        }
+
+        if (field === "productId") {
+          const product = products.find((currentProduct) => currentProduct.id === value);
+
+          return {
+            ...item,
+            productId: value,
+            unitId: product?.unitId ?? "",
+          };
+        }
+
+        return {
+          ...item,
+          [field]: value,
+        };
+      }),
     );
   }
 
   function addItem() {
+    const product = products[0];
+
     setItems((current) => [
       ...current,
-      createEntryRequestItemDraft(products[0]?.id ?? ""),
+      createEntryRequestItemDraft(product?.id ?? "", "1", product?.unitId ?? ""),
     ]);
   }
 
@@ -674,11 +753,21 @@ function DirectEntryRequestDialog({
               />
             </FormField>
             <div className="space-y-3">
-              {items.map((item, index) => (
-                <div
-                  className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto]"
-                  key={item.id}
-                >
+              {items.map((item, index) => {
+                const itemProduct = products.find(
+                  (product) => product.id === item.productId,
+                );
+                const itemConversionPreview = conversionPreviewForProduct(
+                  itemProduct,
+                  item.unitId,
+                  item.quantity,
+                );
+
+                return (
+                  <div
+                    className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_9rem_9rem_auto]"
+                    key={item.id}
+                  >
                   <FormField>
                     <Label htmlFor={`request-product-${item.id}`}>
                       {items.length === 1 ? "Produto" : `Produto ${index + 1}`}
@@ -712,13 +801,26 @@ function DirectEntryRequestDialog({
                     </Label>
                     <Input
                       id={`request-quantity-${item.id}`}
-                      min="1"
+                      min="0.000001"
                       onChange={(event) =>
                         updateItem(item.id, "quantity", event.target.value)
                       }
                       required
+                      step="any"
                       type="number"
                       value={item.quantity}
+                    />
+                  </FormField>
+                  <FormField>
+                    <Label htmlFor={`request-unit-${item.id}`}>Unidade</Label>
+                    <SearchSelect
+                      ariaLabel={`Unidade ${index + 1}`}
+                      disabled={!itemProduct}
+                      id={`request-unit-${item.id}`}
+                      onValueChange={(value) => updateItem(item.id, "unitId", value)}
+                      options={unitOptionsForProduct(itemProduct)}
+                      placeholder="Selecione"
+                      value={item.unitId || itemProduct?.unitId || ""}
                     />
                   </FormField>
                   <div className="flex items-end">
@@ -733,8 +835,14 @@ function DirectEntryRequestDialog({
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
+                  {itemConversionPreview ? (
+                    <p className="sm:col-span-4 rounded-md border bg-background p-2 text-sm text-muted-foreground">
+                      {itemConversionPreview}
+                    </p>
+                  ) : null}
                 </div>
-              ))}
+                );
+              })}
               <Button
                 disabled={!warehouseId || loadingProducts}
                 onClick={addItem}
@@ -790,6 +898,7 @@ function DirectTransferDialog({
   const [destinationWarehouseId, setDestinationWarehouseId] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [productId, setProductId] = useState("");
+  const [unitId, setUnitId] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [movementDate, setMovementDate] = useState(todayInputValue());
   const [observation, setObservation] = useState("");
@@ -798,6 +907,12 @@ function DirectTransferDialog({
   const [message, setMessage] = useState<string | null>(null);
   const sourceWarehouse = warehouses.find((warehouse) => warehouse.isGeneral);
   const destinationWarehouses = warehouses.filter((warehouse) => !warehouse.isGeneral);
+  const selectedProduct = products.find((product) => product.id === productId);
+  const transferConversionPreview = conversionPreviewForProduct(
+    selectedProduct,
+    unitId,
+    quantity,
+  );
 
   useEffect(() => {
     if (!open) {
@@ -830,6 +945,12 @@ function DirectTransferDialog({
               ? current
               : nextProducts[0]?.id ?? "",
           );
+          setUnitId((current) => {
+            const product =
+              nextProducts.find((item) => item.id === productId) ?? nextProducts[0];
+
+            return current || product?.unitId || "";
+          });
         }
       } catch (caughtError) {
         if (!ignore) {
@@ -856,10 +977,15 @@ function DirectTransferDialog({
   function openDialog() {
     setMessage(null);
     setQuantity("1");
+    setUnitId(products[0]?.unitId ?? "");
     setMovementDate(todayInputValue());
     setObservation("");
     setOpen(true);
   }
+
+  useEffect(() => {
+    setUnitId(selectedProduct?.unitId ?? "");
+  }, [selectedProduct?.id, selectedProduct?.unitId]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -881,6 +1007,7 @@ function DirectTransferDialog({
           productId,
           quantity,
           sourceWarehouseId: sourceWarehouse.id,
+          unitId: unitId || selectedProduct?.unitId,
         }),
         method: "POST",
       });
@@ -944,7 +1071,12 @@ function DirectTransferDialog({
                     : "Nenhum produto disponível no almoxarifado geral."
                 }
                 id="transfer-product"
-                onValueChange={setProductId}
+                onValueChange={(nextProductId) => {
+                  const product = products.find((item) => item.id === nextProductId);
+
+                  setProductId(nextProductId);
+                  setUnitId(product?.unitId ?? "");
+                }}
                 options={products.map((product) => ({
                   label: `${product.code} - ${product.name}`,
                   searchText: `${product.category.name} ${product.unit.abbreviation}`,
@@ -954,16 +1086,29 @@ function DirectTransferDialog({
                 value={productId}
               />
             </FormField>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <FormField>
                 <Label htmlFor="transfer-quantity">Quantidade</Label>
                 <Input
                   id="transfer-quantity"
-                  min="1"
+                  min="0.000001"
                   onChange={(event) => setQuantity(event.target.value)}
                   required
+                  step="any"
                   type="number"
                   value={quantity}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor="transfer-unit">Unidade</Label>
+                <SearchSelect
+                  ariaLabel="Unidade da transferência"
+                  disabled={!selectedProduct}
+                  id="transfer-unit"
+                  onValueChange={setUnitId}
+                  options={unitOptionsForProduct(selectedProduct)}
+                  placeholder="Selecione"
+                  value={unitId || selectedProduct?.unitId || ""}
                 />
               </FormField>
               <FormField>
@@ -977,6 +1122,11 @@ function DirectTransferDialog({
                 />
               </FormField>
             </div>
+            {transferConversionPreview ? (
+              <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                {transferConversionPreview}
+              </p>
+            ) : null}
             <FormField>
               <Label htmlFor="transfer-observation">Observação</Label>
               <Textarea
@@ -1275,8 +1425,7 @@ export function RequestsPage() {
                 key: "destination",
               },
               {
-                cell: (request) =>
-                  `${request.quantity} ${request.product.unit.abbreviation}`,
+                cell: (request) => transferRequestQuantitySummary(request),
                 header: "Quantidade",
                 key: "quantity",
               },
@@ -1317,6 +1466,7 @@ export function RequestsPage() {
                 request.product.name,
                 request.product.code,
                 request.product.unit.abbreviation,
+                transferRequestQuantitySummary(request),
                 request.sourceWarehouse.name,
                 request.destinationWarehouse.name,
                 request.status,

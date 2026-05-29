@@ -4,22 +4,24 @@ import {
   RequestStatus,
   type PrismaClient,
 } from "@prisma/client";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import PDFDocument from "pdfkit";
 import { AppError } from "../lib/errors.js";
 import { defaultSettings, settingsId } from "./settings-service.js";
-import { getLocalUploadRoot } from "./upload-service.js";
+import {
+  convertQuantityToBase,
+  quantityConversionAuditData,
+} from "./unit-conversion-service.js";
 
 type EntryRequestInput = {
   items?: Array<{
     productId: string;
     quantity: number;
+    unitId?: string | null;
   }>;
   movementDate: Date;
   observation?: string | null;
   productId: string;
   quantity: number;
+  unitId?: string | null;
   requestedById: string;
   warehouseId: string;
 };
@@ -90,13 +92,25 @@ function assertPositiveQuantity(quantity: number) {
   }
 }
 
+function assertPositiveRequestedQuantity(quantity: number) {
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw new AppError(400, "Informe uma quantidade maior que zero.");
+  }
+}
+
 function normalizeEntryRequestItems(input: EntryRequestInput) {
   const items = input.items?.length
     ? input.items
-    : [{ productId: input.productId, quantity: input.quantity }];
+    : [
+        {
+          productId: input.productId,
+          quantity: input.quantity,
+          unitId: input.unitId,
+        },
+      ];
 
   for (const item of items) {
-    assertPositiveQuantity(item.quantity);
+    assertPositiveRequestedQuantity(item.quantity);
   }
 
   return items;
@@ -260,6 +274,18 @@ export async function createEntryRequest(
       );
     }
 
+    const convertedItems = await Promise.all(
+      items.map(async (item) => ({
+        ...item,
+        converted: await convertQuantityToBase(transaction, {
+          productId: item.productId,
+          quantity: item.quantity,
+          unitId: item.unitId,
+        }),
+      })),
+    );
+    const primaryConverted = convertedItems[0];
+
     const officeYear = input.movementDate.getFullYear();
     const shouldCreateOffice = !warehouse.isGeneral;
     const officeNumber = shouldCreateOffice
@@ -269,18 +295,20 @@ export async function createEntryRequest(
     return transaction.entryRequest.create({
       data: {
         items: {
-          create: items.map((item) => ({
+          create: convertedItems.map((item) => ({
+            ...quantityConversionAuditData(item.converted),
             productId: item.productId,
-            quantity: item.quantity,
+            quantity: item.converted.baseQuantity,
           })),
         },
         movementDate: input.movementDate,
         observation: input.observation,
         officeNumber,
         officeYear: shouldCreateOffice ? officeYear : null,
-        productId: primaryItem.productId,
-        quantity: primaryItem.quantity,
+        productId: primaryConverted.productId,
+        quantity: primaryConverted.converted.baseQuantity,
         requestedById: input.requestedById,
+        ...quantityConversionAuditData(primaryConverted.converted),
         warehouseId: input.warehouseId,
       },
     });
@@ -317,19 +345,33 @@ async function createEntryRequestLegacy(
     );
   }
 
+  const convertedItems = await Promise.all(
+    items.map(async (item) => ({
+      ...item,
+      converted: await convertQuantityToBase(prisma, {
+        productId: item.productId,
+        quantity: item.quantity,
+        unitId: item.unitId,
+      }),
+    })),
+  );
+  const primaryConverted = convertedItems[0];
+
   return prisma.entryRequest.create({
     data: {
       items: {
-        create: items.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-        })),
+          create: convertedItems.map((item) => ({
+            ...quantityConversionAuditData(item.converted),
+            productId: item.productId,
+            quantity: item.converted.baseQuantity,
+          })),
       },
       movementDate: input.movementDate,
       observation: input.observation,
-      productId: primaryItem.productId,
-      quantity: primaryItem.quantity,
+      productId: primaryConverted.productId,
+      quantity: primaryConverted.converted.baseQuantity,
       requestedById: input.requestedById,
+      ...quantityConversionAuditData(primaryConverted.converted),
       warehouseId: input.warehouseId,
     },
   });
@@ -613,268 +655,83 @@ function renderPlainTemplate(template: string, variables: Record<string, string>
   );
 }
 
-function localUploadPathFromPublicUrl(url: string) {
-  const prefixedUrl = url.startsWith("uploads/") ? `/${url}` : url;
+const officeDocumentAttribute = 'data-office-letter-document="true"';
 
-  if (!prefixedUrl.startsWith("/uploads/")) {
-    return null;
-  }
-
-  let pathname: string;
-
-  try {
-    pathname = new URL(prefixedUrl, "http://local").pathname;
-  } catch {
-    return null;
-  }
-
-  if (!pathname.startsWith("/uploads/")) {
-    return null;
-  }
-
-  let relativePath: string;
-
-  try {
-    relativePath = decodeURIComponent(pathname.slice("/uploads/".length));
-  } catch {
-    return null;
-  }
-
-  const uploadRoot = getLocalUploadRoot();
-  const filePath = path.resolve(uploadRoot, relativePath);
-  const relativeToRoot = path.relative(uploadRoot, filePath);
-
-  if (
-    relativeToRoot === ".." ||
-    relativeToRoot.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relativeToRoot)
-  ) {
-    return null;
-  }
-
-  return filePath;
-}
-
-async function loadOfficeLogo(url: string | null | undefined) {
-  const normalizedUrl = url?.trim();
-
-  if (!normalizedUrl) {
-    return null;
-  }
-
-  if (normalizedUrl.startsWith("data:image/")) {
-    const commaIndex = normalizedUrl.indexOf(",");
-
-    if (commaIndex < 0) {
-      return null;
-    }
-
-    const metadata = normalizedUrl.slice(0, commaIndex);
-    const payload = normalizedUrl.slice(commaIndex + 1);
-
-    return Buffer.from(
-      metadata.includes(";base64") ? payload : decodeURIComponent(payload),
-      metadata.includes(";base64") ? "base64" : "utf8",
-    );
-  }
-
-  const localUploadPath = localUploadPathFromPublicUrl(normalizedUrl);
-
-  if (localUploadPath) {
-    try {
-      return await readFile(localUploadPath);
-    } catch {
-      return null;
-    }
-  }
-
-  if (!/^https?:\/\//i.test(normalizedUrl)) {
-    return null;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 2500);
-
-  try {
-    const response = await fetch(normalizedUrl, { signal: controller.signal });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    return Buffer.from(await response.arrayBuffer());
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function decodeHtmlEntities(value: string) {
-  const namedEntities: Record<string, string> = {
-    amp: "&",
-    ccedil: "ç",
-    eacute: "é",
-    gt: ">",
-    iacute: "í",
-    lt: "<",
-    nbsp: " ",
-    ordm: "º",
-    quot: '"',
-    aacute: "á",
-    agrave: "à",
-    acirc: "â",
-    atilde: "ã",
-    egrave: "è",
-    ecirc: "ê",
-    oacute: "ó",
-    ocirc: "ô",
-    otilde: "õ",
-    uacute: "ú",
-  };
-
-  return value.replace(
-    /&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g,
-    (match, entity: string) => {
-      if (entity.startsWith("#x")) {
-        const codePoint = Number.parseInt(entity.slice(2), 16);
-
-        return Number.isFinite(codePoint)
-          ? String.fromCodePoint(codePoint)
-          : match;
-      }
-
-      if (entity.startsWith("#")) {
-        const codePoint = Number.parseInt(entity.slice(1), 10);
-
-        return Number.isFinite(codePoint)
-          ? String.fromCodePoint(codePoint)
-          : match;
-      }
-
-      return namedEntities[entity.toLocaleLowerCase("pt-BR")] ?? match;
-    },
+function isCompleteOfficeDocument(html: string) {
+  return /\sdata-office-letter-document(?:\s*=\s*(?:"true"|'true'|true))?/i.test(
+    html,
   );
 }
 
-function htmlToPdfParagraphs(html: string) {
-  return decodeHtmlEntities(
-    html
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/(p|div|h[1-6])>\s*<\s*(p|div|h[1-6])[^>]*>/gi, "\n\n")
-      .replace(/<li[^>]*>/gi, "\n")
-      .replace(/<\/(p|div|h[1-6]|li)>/gi, "\n\n")
-      .replace(/<[^>]+>/g, "")
-      .replace(/\u00a0/g, " "),
-  )
-    .split(/\n{2,}/)
-    .map((paragraph) =>
-      paragraph
-        .split("\n")
-        .map((line) => line.trim())
-        .join("\n")
-        .trim(),
-    )
-    .filter(Boolean);
+function wrapOfficeDocument(contentHtml: string) {
+  return [
+    `<article ${officeDocumentAttribute} class="office-letter-document" style="min-height:297mm;width:210mm;margin:0 auto;padding:18mm 20mm;background:#fff;color:#111827;font-family:'Times New Roman',serif;font-size:12pt;line-height:1.45;">`,
+    contentHtml,
+    "</article>",
+  ].join("");
 }
 
-function ensurePdfSpace(document: PDFKit.PDFDocument, height: number) {
-  if (document.y + height > document.page.height - document.page.margins.bottom) {
-    document.addPage();
-  }
-}
-
-function drawOfficeFallbackLogo(document: PDFKit.PDFDocument, x: number, y: number) {
-  document
-    .roundedRect(x, y, 74, 48, 6)
-    .lineWidth(0.8)
-    .strokeColor("#94a3b8")
-    .stroke();
-  document
-    .font("Helvetica-Bold")
-    .fontSize(16)
-    .fillColor("#0f172a")
-    .text("OF", x, y + 16, { align: "center", width: 74 });
-}
-
-function drawOfficeHeader(
-  document: PDFKit.PDFDocument,
-  letter: Awaited<ReturnType<typeof getEntryRequestOfficeLetter>>,
-  logo: Buffer | null,
-) {
-  const left = document.page.margins.left;
-  const right = document.page.width - document.page.margins.right;
-  const titleX = left + 92;
-
-  if (logo) {
-    try {
-      document.image(logo, left, 42, { fit: [74, 48] });
-    } catch {
-      drawOfficeFallbackLogo(document, left, 42);
-    }
-  } else {
-    drawOfficeFallbackLogo(document, left, 42);
+function buildOfficeDocumentHtml(contentHtml: string) {
+  if (isCompleteOfficeDocument(contentHtml)) {
+    return contentHtml;
   }
 
-  document
-    .font("Helvetica-Bold")
-    .fontSize(12)
-    .fillColor("#111827")
-    .text(letter.header.title, titleX, 44, { width: right - titleX });
-  document
-    .font("Helvetica")
-    .fontSize(10)
-    .fillColor("#374151")
-    .text(letter.header.subtitle, titleX, 62, { width: right - titleX });
-  document
-    .moveTo(left, 104)
-    .lineTo(right, 104)
-    .lineWidth(0.6)
-    .strokeColor("#d1d5db")
-    .stroke();
-  document.x = left;
-  document.y = 132;
-}
-
-function drawOfficeFooter(document: PDFKit.PDFDocument) {
-  const range = document.bufferedPageRange();
-
-  for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
-    document.switchToPage(pageIndex);
-
-    const left = document.page.margins.left;
-    const right = document.page.width - document.page.margins.right;
-    const footerY = document.page.height - 52;
-    const originalBottomMargin = document.page.margins.bottom;
-
-    document
-      .moveTo(left, footerY)
-      .lineTo(right, footerY)
-      .lineWidth(0.5)
-      .strokeColor("#e5e7eb")
-      .stroke();
-
-    document.page.margins.bottom = 0;
-    try {
-      document
-        .font("Helvetica")
-        .fontSize(8)
-        .fillColor("#6b7280")
-        .text(`Pagina ${pageIndex + 1} de ${range.count}`, left, footerY + 10, {
-          align: "right",
-          lineBreak: false,
-          width: right - left,
-        });
-    } finally {
-      document.page.margins.bottom = originalBottomMargin;
-    }
-  }
+  return wrapOfficeDocument(contentHtml);
 }
 
 function officeLetterFileName(numberFormatted: string, requestId: string) {
   const suffix = numberFormatted.replace(/[^\d]+/g, "-").replace(/^-|-$/g, "");
 
   return `oficio-${suffix || requestId}.pdf`;
+}
+
+function officePdfHtml(documentHtml: string) {
+  const baseUrl = process.env.BACKEND_PUBLIC_URL ?? "http://127.0.0.1:3333";
+
+  return [
+    "<!doctype html>",
+    '<html lang="pt-BR">',
+    "<head>",
+    '<meta charset="utf-8" />',
+    `<base href="${escapeHtml(baseUrl)}" />`,
+    "<style>",
+    "@page{size:A4;margin:0}",
+    "html,body{margin:0;padding:0;background:#fff;color:#111827}",
+    "body{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:1.45}",
+    ".office-letter-document{box-sizing:border-box}",
+    ".office-letter-document *{box-sizing:border-box}",
+    ".office-letter-document img{max-width:100%}",
+    "</style>",
+    "</head>",
+    `<body>${documentHtml}</body>`,
+    "</html>",
+  ].join("");
+}
+
+async function renderOfficePdfWithBrowser(documentHtml: string) {
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+
+  try {
+    const page = await browser.newPage({ viewport: { height: 1123, width: 794 } });
+
+    await page.setContent(officePdfHtml(documentHtml), {
+      waitUntil: "networkidle",
+    });
+
+    return page.pdf({
+      format: "A4",
+      margin: {
+        bottom: "0",
+        left: "0",
+        right: "0",
+        top: "0",
+      },
+      printBackground: true,
+    });
+  } finally {
+    await browser.close();
+  }
 }
 
 async function ensureOfficeNumber(
@@ -961,19 +818,23 @@ export async function getEntryRequestOfficeLetter(
     const subjectTemplate = template?.subject ?? defaultOfficeLetterSubject;
     const contentTemplate =
       template?.contentHtml ?? defaultOfficeLetterContentHtml;
+    const subject = renderPlainTemplate(subjectTemplate, variables);
+    const contentHtml = renderTemplate(
+      contentTemplate,
+      variables,
+      new Set(["itens_solicitados_html"]),
+    );
+    const header = {
+      logoUrl:
+        settings.officeLogoUrl ?? settings.reportLogoUrl ?? settings.logoUrl ?? null,
+      subtitle: request.warehouse.name,
+      title: request.warehouse.category.name,
+    };
 
     return {
-      contentHtml: renderTemplate(
-        contentTemplate,
-        variables,
-        new Set(["itens_solicitados_html"]),
-      ),
-      header: {
-        logoUrl:
-          settings.officeLogoUrl ?? settings.reportLogoUrl ?? settings.logoUrl ?? null,
-        subtitle: request.warehouse.name,
-        title: request.warehouse.category.name,
-      },
+      contentHtml,
+      documentHtml: buildOfficeDocumentHtml(contentHtml),
+      header,
       items,
       number: request.officeNumber,
       numberFormatted,
@@ -982,7 +843,7 @@ export async function getEntryRequestOfficeLetter(
         status: request.status,
         warehouseId: request.warehouseId,
       },
-      subject: renderPlainTemplate(subjectTemplate, variables),
+      subject,
       year: request.officeYear,
     };
   });
@@ -994,60 +855,19 @@ export async function buildEntryRequestOfficeLetterPdf(
   viewerName: string,
 ) {
   const letter = await getEntryRequestOfficeLetter(prisma, requestId, viewerName);
-  const logo = await loadOfficeLogo(letter.header.logoUrl);
-  const document = new PDFDocument({
-    bufferPages: true,
-    margins: {
-      bottom: 72,
-      left: 72,
-      right: 72,
-      top: 42,
-    },
-    size: "A4",
-  });
-  const chunks: Buffer[] = [];
+  let browserPdf: Buffer | Uint8Array;
 
-  const buffer = await new Promise<Buffer>((resolve, reject) => {
-    document.on("data", (chunk: Buffer) => chunks.push(chunk));
-    document.on("end", () => resolve(Buffer.concat(chunks)));
-    document.on("error", reject);
-
-    drawOfficeHeader(document, letter, logo);
-
-    for (const paragraph of htmlToPdfParagraphs(letter.contentHtml)) {
-      const isTitle = /^OF[IÍ]CIO\s+N[º°]/i.test(paragraph);
-      const contentX = document.page.margins.left;
-      const contentWidth =
-        document.page.width -
-        document.page.margins.left -
-        document.page.margins.right;
-
-      document
-        .font(isTitle ? "Times-Bold" : "Times-Roman")
-        .fontSize(isTitle ? 13 : 12);
-
-      const paragraphHeight = document.heightOfString(paragraph, {
-        align: isTitle ? "center" : "left",
-        width: contentWidth,
-      });
-
-      ensurePdfSpace(document, paragraphHeight + 18);
-      document
-        .fillColor("#111827")
-        .text(paragraph, contentX, document.y, {
-          align: isTitle ? "center" : "left",
-          lineGap: 4,
-          width: contentWidth,
-        });
-      document.moveDown(isTitle ? 1.2 : 0.8);
-    }
-
-    drawOfficeFooter(document);
-    document.end();
-  });
+  try {
+    browserPdf = await renderOfficePdfWithBrowser(letter.documentHtml);
+  } catch (error) {
+    throw new AppError(
+      500,
+      "Nao foi possivel exportar o oficio em PDF. Instale o Chromium do Playwright no ambiente do backend.",
+    );
+  }
 
   return {
-    buffer,
+    buffer: Buffer.from(browserPdf),
     fileName: officeLetterFileName(letter.numberFormatted, requestId),
   };
 }

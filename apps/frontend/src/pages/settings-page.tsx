@@ -1,14 +1,19 @@
 import {
   AlertTriangle,
+  AlignCenter,
+  AlignJustify,
   AlignLeft,
+  AlignRight,
   Bold,
   Building2,
   Database,
   FileText,
+  Heading2,
   Image,
   Italic,
   List,
   ListOrdered,
+  Minus,
   Moon,
   Palette,
   Pencil,
@@ -16,7 +21,9 @@ import {
   RotateCcw,
   Save,
   Sun,
+  Table,
   Trash2,
+  Underline,
   Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -187,7 +194,21 @@ type OfficeTemplateDraft = {
   subject: string;
 };
 
-const defaultOfficeTemplateContentHtml = [
+const officeDocumentAttribute = 'data-office-letter-document="true"';
+
+function isCompleteOfficeDocument(contentHtml: string) {
+  return contentHtml.includes("data-office-letter-document");
+}
+
+function createOfficeDocumentHtml(contentHtml: string) {
+  if (isCompleteOfficeDocument(contentHtml)) {
+    return contentHtml;
+  }
+
+  return `<article ${officeDocumentAttribute} class="office-letter-document" style="min-height:297mm;width:210mm;margin:0 auto;padding:18mm 20mm;background:#fff;color:#111827;font-family:'Times New Roman',serif;font-size:12pt;line-height:1.45;">${contentHtml}</article>`;
+}
+
+const defaultOfficeTemplateBodyHtml = [
   "<p><strong>OF&Iacute;CIO N&ordm; {{oficio_numero_ano}}</strong></p>",
   "<p><strong>Assunto:</strong> Solicita&ccedil;&atilde;o de material/equipamento</p>",
   "<p>Prezados,</p>",
@@ -197,6 +218,10 @@ const defaultOfficeTemplateContentHtml = [
   "<p>Certos de contarmos com a colabora&ccedil;&atilde;o de Vossa Senhoria, aguardamos o atendimento desta solicita&ccedil;&atilde;o e renovamos nossos votos de estima e considera&ccedil;&atilde;o.</p>",
   "<p>Atenciosamente,</p>",
 ].join("");
+
+const defaultOfficeTemplateContentHtml = createOfficeDocumentHtml(
+  defaultOfficeTemplateBodyHtml,
+);
 
 function createDefaultOfficeTemplateDraft(): OfficeTemplateDraft {
   return {
@@ -208,17 +233,7 @@ function createDefaultOfficeTemplateDraft(): OfficeTemplateDraft {
   };
 }
 
-function OfficeTemplatesTab({
-  officeLogoUrl,
-  onUpload,
-  uploadingLogo,
-  updateSettingsDraft,
-}: {
-  officeLogoUrl?: string | null;
-  onUpload: (field: keyof SystemSettings, file?: File) => void;
-  uploadingLogo?: boolean;
-  updateSettingsDraft: (field: keyof SystemSettings, value: string) => void;
-}) {
+function OfficeTemplatesTab() {
   const templates = useApiResource<OfficeLetterTemplate[]>("/office-templates", []);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const editorInitialContentRef = useRef(defaultOfficeTemplateContentHtml);
@@ -230,6 +245,7 @@ function OfficeTemplatesTab({
   const [templateToDelete, setTemplateToDelete] =
     useState<OfficeLetterTemplate | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingDocumentImage, setUploadingDocumentImage] = useState(false);
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(
     null,
   );
@@ -238,8 +254,6 @@ function OfficeTemplatesTab({
   );
   const [message, setMessage] = useState<SettingsMessage | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
-  const resolvedOfficeLogoUrl = resolveAssetUrl(officeLogoUrl);
-
   const attachEditor = useCallback((node: HTMLDivElement | null) => {
     editorRef.current = node;
 
@@ -307,32 +321,87 @@ function OfficeTemplatesTab({
     }
   }
 
-  function formatContent(command: "bold" | "insertOrderedList" | "insertUnorderedList" | "italic" | "justifyLeft") {
+  function formatContent(
+    command:
+      | "bold"
+      | "formatBlock"
+      | "insertHorizontalRule"
+      | "insertOrderedList"
+      | "insertUnorderedList"
+      | "italic"
+      | "justifyCenter"
+      | "justifyFull"
+      | "justifyLeft"
+      | "justifyRight"
+      | "underline",
+    value?: string,
+  ) {
     editorRef.current?.focus();
 
     if (typeof document.execCommand === "function") {
-      document.execCommand(command);
+      if (value === undefined) {
+        document.execCommand(command);
+      } else {
+        document.execCommand(command, false, value);
+      }
       syncEditorContent();
     }
   }
 
   function insertVariable(variable: string) {
+    insertHtml(variable);
+  }
+
+  function insertHtml(html: string) {
     const editor = editorRef.current;
 
     if (!editor) {
-      setContentHtml(`${draft.contentHtml}${variable}`);
+      setContentHtml(`${draft.contentHtml}${html}`);
       return;
     }
 
     editor.focus();
 
     if (typeof document.execCommand === "function") {
-      document.execCommand("insertHTML", false, variable);
+      document.execCommand("insertHTML", false, html);
     } else {
-      editor.innerHTML = `${editor.innerHTML}${variable}`;
+      editor.innerHTML = `${editor.innerHTML}${html}`;
     }
 
     syncEditorContent();
+  }
+
+  async function uploadDocumentImage(file?: File) {
+    if (!file) {
+      return;
+    }
+
+    if (!acceptedImageTypes.includes(file.type) || file.size > maxImageSize) {
+      setEditorError("Envie uma imagem PNG, JPG, WEBP ou SVG de atÃ© 1 MB.");
+      return;
+    }
+
+    setUploadingDocumentImage(true);
+    setEditorError(null);
+
+    try {
+      const uploaded = await apiUpload<{ url: string }>(
+        "/uploads/office-template-images",
+        file,
+      );
+
+      insertHtml(
+        `<img src="${resolveAssetUrl(uploaded.url)}" alt="" style="max-width:100%;height:auto;" />`,
+      );
+    } catch (caughtError) {
+      setEditorError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao inserir imagem no ofÃ­cio.",
+      );
+    } finally {
+      setUploadingDocumentImage(false);
+    }
   }
 
   async function saveTemplate(event: FormEvent<HTMLFormElement>) {
@@ -340,7 +409,9 @@ function OfficeTemplatesTab({
 
     const payload = {
       ...draft,
-      contentHtml: editorRef.current?.innerHTML ?? draft.contentHtml,
+      contentHtml: createOfficeDocumentHtml(
+        editorRef.current?.innerHTML ?? draft.contentHtml,
+      ),
     };
 
     if (
@@ -467,36 +538,6 @@ function OfficeTemplatesTab({
 
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4">
-      <div className="grid gap-4 rounded-md border bg-background p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <ImageUrlField
-          field="officeLogoUrl"
-          label="Logo do cabeçalho do ofício"
-          onUpload={onUpload}
-          uploading={uploadingLogo}
-          updateDraft={updateSettingsDraft}
-          value={officeLogoUrl}
-        />
-        <div className="flex items-center gap-3 rounded-md border bg-card p-3">
-          <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted">
-            {resolvedOfficeLogoUrl ? (
-              <img
-                alt=""
-                className="h-full w-full object-contain"
-                src={resolvedOfficeLogoUrl}
-              />
-            ) : (
-              <Building2 className="h-5 w-5 text-muted-foreground" />
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">Secretaria</p>
-            <p className="truncate text-xs text-muted-foreground">
-              Almoxarifado solicitante
-            </p>
-          </div>
-        </div>
-      </div>
-
       {message ? (
         message.kind === "success" ? (
           <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
@@ -682,10 +723,30 @@ function OfficeTemplatesTab({
                 <Italic className="h-4 w-4" />
               </Button>
               <Button
-                aria-label="Lista"
+                aria-label="Sublinhar"
+                onClick={() => formatContent("underline")}
+                size="icon"
+                title="Sublinhar"
+                type="button"
+                variant="outline"
+              >
+                <Underline className="h-4 w-4" />
+              </Button>
+              <Button
+                aria-label="Titulo"
+                onClick={() => formatContent("formatBlock", "h2")}
+                size="icon"
+                title="Titulo"
+                type="button"
+                variant="outline"
+              >
+                <Heading2 className="h-4 w-4" />
+              </Button>
+              <Button
+                aria-label="Marcadores"
                 onClick={() => formatContent("insertUnorderedList")}
                 size="icon"
-                title="Lista"
+                title="Marcadores"
                 type="button"
                 variant="outline"
               >
@@ -711,6 +772,85 @@ function OfficeTemplatesTab({
               >
                 <AlignLeft className="h-4 w-4" />
               </Button>
+              <Button
+                aria-label="Alinhar ao centro"
+                onClick={() => formatContent("justifyCenter")}
+                size="icon"
+                title="Alinhar ao centro"
+                type="button"
+                variant="outline"
+              >
+                <AlignCenter className="h-4 w-4" />
+              </Button>
+              <Button
+                aria-label="Alinhar a direita"
+                onClick={() => formatContent("justifyRight")}
+                size="icon"
+                title="Alinhar a direita"
+                type="button"
+                variant="outline"
+              >
+                <AlignRight className="h-4 w-4" />
+              </Button>
+              <Button
+                aria-label="Justificar texto"
+                onClick={() => formatContent("justifyFull")}
+                size="icon"
+                title="Justificar texto"
+                type="button"
+                variant="outline"
+              >
+                <AlignJustify className="h-4 w-4" />
+              </Button>
+              <Button
+                aria-label="Tabela"
+                onClick={() =>
+                  insertHtml(
+                    '<table style="border-collapse:collapse;width:100%;"><tbody><tr><td style="border:1px solid #111827;padding:6px;"> </td><td style="border:1px solid #111827;padding:6px;"> </td></tr><tr><td style="border:1px solid #111827;padding:6px;"> </td><td style="border:1px solid #111827;padding:6px;"> </td></tr></tbody></table>',
+                  )
+                }
+                size="icon"
+                title="Tabela"
+                type="button"
+                variant="outline"
+              >
+                <Table className="h-4 w-4" />
+              </Button>
+              <Button
+                aria-label="Linha horizontal"
+                onClick={() => formatContent("insertHorizontalRule")}
+                size="icon"
+                title="Linha horizontal"
+                type="button"
+                variant="outline"
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
+              <Button
+                asChild
+                aria-disabled={uploadingDocumentImage}
+                title="Inserir imagem"
+                variant="outline"
+              >
+                <Label
+                  className={`cursor-pointer ${uploadingDocumentImage ? "pointer-events-none opacity-60" : ""}`}
+                  htmlFor="office-template-document-image"
+                >
+                  <Image className="h-4 w-4" />
+                  {uploadingDocumentImage ? "Enviando..." : "Imagem"}
+                </Label>
+              </Button>
+              <Input
+                accept={acceptedImageTypes.join(",")}
+                aria-label="Imagem do documento"
+                className="hidden"
+                id="office-template-document-image"
+                onChange={(event) => {
+                  void uploadDocumentImage(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+                type="file"
+              />
               <Button
                 onClick={() => setContentHtml(defaultOfficeTemplateContentHtml)}
                 type="button"
@@ -1336,12 +1476,7 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="office">
-            <OfficeTemplatesTab
-              officeLogoUrl={draft.officeLogoUrl}
-              onUpload={(field, file) => void uploadImage(field, file)}
-              uploadingLogo={uploadingField === "officeLogoUrl"}
-              updateSettingsDraft={updateDraft}
-            />
+            <OfficeTemplatesTab />
           </TabsContent>
           <TabsContent value="data">
             <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-950">
