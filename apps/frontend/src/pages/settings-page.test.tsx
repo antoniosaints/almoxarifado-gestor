@@ -130,6 +130,101 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("saves reusable office header and simple footer settings", async () => {
+    let templatePayload: unknown;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (
+        url.pathname === "/uploads/office-template-images" &&
+        init?.method === "POST"
+      ) {
+        return new Response(
+          JSON.stringify({
+            driver: "local",
+            key: "office-template-images/office-header.png",
+            url: "/uploads/office-template-images/office-header.png?v=1",
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 201,
+          },
+        );
+      }
+
+      if (url.pathname === "/office-templates" && (init?.method ?? "GET") === "POST") {
+        templatePayload = JSON.parse(String(init?.body));
+
+        return new Response(
+          JSON.stringify({
+            ...(templatePayload as object),
+            id: "template-1",
+            variables: ["secretaria_nome", "almoxarifado_nome"],
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 201,
+          },
+        );
+      }
+
+      if (url.pathname === "/office-templates") {
+        return new Response(JSON.stringify([]), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /of.cios/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Novo modelo" }));
+    fireEvent.change(screen.getByLabelText("Nome do modelo"), {
+      target: { value: "Oficio reutilizavel" },
+    });
+    fireEvent.change(screen.getByLabelText("Assunto"), {
+      target: { value: "Solicitacao" },
+    });
+    fireEvent.change(screen.getByLabelText(/Texto do cabe.alho/i), {
+      target: { value: "{{secretaria_nome}}\n{{almoxarifado_nome}}" },
+    });
+    fireEvent.change(screen.getByLabelText(/Posi..o do cabe.alho/i), {
+      target: { value: "CENTER" },
+    });
+    fireEvent.change(screen.getByLabelText(/Rodap. simples/i), {
+      target: { value: "Documento {{oficio_numero_ano}}" },
+    });
+    fireEvent.change(screen.getByLabelText(/Arquivo do cabe.alho/i), {
+      target: {
+        files: [new File(["imagem"], "cabecalho.png", { type: "image/png" })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(/office-header\.png/)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Salvar modelo" }));
+
+    await waitFor(() => {
+      expect(templatePayload).toMatchObject({
+        footerText: "Documento {{oficio_numero_ano}}",
+        headerAlignment: "CENTER",
+        headerImageUrl:
+          "http://127.0.0.1:3333/uploads/office-template-images/office-header.png?v=1",
+        headerText: "{{secretaria_nome}}\n{{almoxarifado_nome}}",
+      });
+    });
+  });
+
   it("offers complete document formatting controls in the office editor", async () => {
     const execCommand = vi.fn();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -159,10 +254,19 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: /of.cios/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Novo modelo" }));
 
+    const markerButton = screen.getByRole("button", { name: "Marcadores" });
+    const markerMouseDown = new MouseEvent("mousedown", {
+      bubbles: true,
+      cancelable: true,
+    });
+
+    expect(markerButton.dispatchEvent(markerMouseDown)).toBe(false);
+    expect(markerMouseDown.defaultPrevented).toBe(true);
+
     fireEvent.click(screen.getByRole("button", { name: "Justificar texto" }));
     fireEvent.click(screen.getByRole("button", { name: "Alinhar ao centro" }));
     fireEvent.click(screen.getByRole("button", { name: "Alinhar a direita" }));
-    fireEvent.click(screen.getByRole("button", { name: "Marcadores" }));
+    fireEvent.click(markerButton);
     fireEvent.click(screen.getByRole("button", { name: "Titulo" }));
     fireEvent.click(screen.getByRole("button", { name: "Tabela" }));
     fireEvent.click(screen.getByRole("button", { name: "Linha horizontal" }));
@@ -258,8 +362,8 @@ describe("SettingsPage", () => {
         ),
       });
     });
-    expect((templatePayload as { contentHtml: string }).contentHtml).toContain(
-      'data-office-letter-document="true"',
+    expect((templatePayload as { contentHtml: string }).contentHtml).not.toContain(
+      "data-office-letter-document",
     );
   });
 
@@ -349,7 +453,7 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(templatePayload).toMatchObject({
-        contentHtml: expect.stringContaining('data-office-letter-document="true"'),
+        contentHtml: expect.stringContaining("<img"),
       });
     });
     expect((templatePayload as { contentHtml: string }).contentHtml).toContain(

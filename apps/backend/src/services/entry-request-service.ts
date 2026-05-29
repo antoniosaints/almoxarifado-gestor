@@ -4,12 +4,33 @@ import {
   RequestStatus,
   type PrismaClient,
 } from "@prisma/client";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import path from "node:path";
+import htmlToPdfmake from "html-to-pdfmake";
+import { JSDOM } from "jsdom";
+import pdfMake from "pdfmake";
+import type { PdfMakeFontDefinitions } from "pdfmake";
 import { AppError } from "../lib/errors.js";
 import { defaultSettings, settingsId } from "./settings-service.js";
 import {
   convertQuantityToBase,
   quantityConversionAuditData,
 } from "./unit-conversion-service.js";
+import { getLocalUploadRoot } from "./upload-service.js";
+
+const require = createRequire(import.meta.url);
+const robotoFonts = require("pdfmake/fonts/Roboto") as PdfMakeFontDefinitions;
+const allowedPdfFontPaths = new Set(
+  Object.values(robotoFonts).flatMap((fontFamily) =>
+    Object.values(fontFamily).map((fontPath) => path.resolve(fontPath)),
+  ),
+);
+
+pdfMake.addFonts(robotoFonts);
+pdfMake.setLocalAccessPolicy((filePath) =>
+  allowedPdfFontPaths.has(path.resolve(filePath)),
+);
 
 type EntryRequestInput = {
   items?: Array<{
@@ -655,6 +676,21 @@ function renderPlainTemplate(template: string, variables: Record<string, string>
   );
 }
 
+type OfficeHeaderAlignment = "LEFT" | "CENTER" | "RIGHT";
+
+type OfficeDocumentChrome = {
+  footerText?: string | null;
+  headerAlignment?: string | null;
+  headerImageUrl?: string | null;
+  headerText?: string | null;
+};
+
+const headerAlignmentStyles: Record<OfficeHeaderAlignment, string> = {
+  CENTER: "center",
+  LEFT: "left",
+  RIGHT: "right",
+};
+
 const officeDocumentAttribute = 'data-office-letter-document="true"';
 
 function isCompleteOfficeDocument(html: string) {
@@ -671,12 +707,117 @@ function wrapOfficeDocument(contentHtml: string) {
   ].join("");
 }
 
-function buildOfficeDocumentHtml(contentHtml: string) {
-  if (isCompleteOfficeDocument(contentHtml)) {
+function hasOfficeChrome(chrome?: OfficeDocumentChrome | null) {
+  return Boolean(
+    chrome?.headerImageUrl?.trim() ||
+      chrome?.headerText?.trim() ||
+      chrome?.footerText?.trim(),
+  );
+}
+
+function normalizeHeaderAlignment(value?: string | null): OfficeHeaderAlignment {
+  return value === "CENTER" || value === "RIGHT" ? value : "LEFT";
+}
+
+function unwrapOfficeDocument(contentHtml: string) {
+  if (!isCompleteOfficeDocument(contentHtml)) {
     return contentHtml;
   }
 
-  return wrapOfficeDocument(contentHtml);
+  try {
+    const { window } = new JSDOM(contentHtml) as {
+      window: {
+        document: {
+          querySelector(selector: string): { innerHTML: string } | null;
+        };
+      };
+    };
+    const document = window.document;
+    const documentRoot = document.querySelector("[data-office-letter-document]");
+
+    return documentRoot?.innerHTML ?? contentHtml;
+  } catch {
+    return contentHtml;
+  }
+}
+
+function renderMultilineHtmlText(text: string, variables: Record<string, string>) {
+  return renderTemplate(text, variables)
+    .split(/\r?\n/)
+    .map((line) =>
+      line.trim()
+        ? `<p style="margin:0;">${line}</p>`
+        : '<p style="margin:0;">&nbsp;</p>',
+    )
+    .join("");
+}
+
+function buildOfficeHeaderHtml(
+  chrome: OfficeDocumentChrome | null | undefined,
+  variables: Record<string, string>,
+) {
+  const imageUrl = chrome?.headerImageUrl
+    ? renderPlainTemplate(chrome.headerImageUrl, variables).trim()
+    : "";
+  const headerText = chrome?.headerText?.trim() ?? "";
+
+  if (!imageUrl && !headerText) {
+    return "";
+  }
+
+  const alignment = headerAlignmentStyles[
+    normalizeHeaderAlignment(chrome?.headerAlignment)
+  ];
+  const imageHtml = imageUrl
+    ? `<div style="margin:0 0 8px 0;"><img src="${escapeHtml(
+        imageUrl,
+      )}" alt="" style="max-height:80px;max-width:180px;width:auto;height:auto;" /></div>`
+    : "";
+  const textHtml = headerText
+    ? `<div style="font-size:11pt;line-height:1.25;">${renderMultilineHtmlText(
+        headerText,
+        variables,
+      )}</div>`
+    : "";
+
+  return `<header data-office-letter-header="true" style="margin:0 0 18px 0;text-align:${alignment};">${imageHtml}${textHtml}</header>`;
+}
+
+function buildOfficeFooterHtml(
+  chrome: OfficeDocumentChrome | null | undefined,
+  variables: Record<string, string>,
+) {
+  const footerText = chrome?.footerText?.trim() ?? "";
+
+  if (!footerText) {
+    return "";
+  }
+
+  return `<footer data-office-letter-footer="true" style="margin:28px 0 0 0;text-align:center;color:#4b5563;font-size:9pt;line-height:1.25;">${renderMultilineHtmlText(
+    footerText,
+    variables,
+  )}</footer>`;
+}
+
+function buildOfficeDocumentHtml(
+  contentHtml: string,
+  chrome?: OfficeDocumentChrome | null,
+  variables: Record<string, string> = {},
+) {
+  if (isCompleteOfficeDocument(contentHtml) && !hasOfficeChrome(chrome)) {
+    return contentHtml;
+  }
+
+  const bodyHtml = hasOfficeChrome(chrome)
+    ? unwrapOfficeDocument(contentHtml)
+    : contentHtml;
+  const documentHtml = [
+    buildOfficeHeaderHtml(chrome, variables),
+    `<main data-office-letter-body="true">${bodyHtml}</main>`,
+    buildOfficeFooterHtml(chrome, variables),
+  ].join("");
+
+  return wrapOfficeDocument(documentHtml);
 }
 
 function officeLetterFileName(numberFormatted: string, requestId: string) {
@@ -685,53 +826,191 @@ function officeLetterFileName(numberFormatted: string, requestId: string) {
   return `oficio-${suffix || requestId}.pdf`;
 }
 
-function officePdfHtml(documentHtml: string) {
-  const baseUrl = process.env.BACKEND_PUBLIC_URL ?? "http://127.0.0.1:3333";
+function mimeTypeFromPath(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase();
 
-  return [
-    "<!doctype html>",
-    '<html lang="pt-BR">',
-    "<head>",
-    '<meta charset="utf-8" />',
-    `<base href="${escapeHtml(baseUrl)}" />`,
-    "<style>",
-    "@page{size:A4;margin:0}",
-    "html,body{margin:0;padding:0;background:#fff;color:#111827}",
-    "body{font-family:'Times New Roman',Times,serif;font-size:12pt;line-height:1.45}",
-    ".office-letter-document{box-sizing:border-box}",
-    ".office-letter-document *{box-sizing:border-box}",
-    ".office-letter-document img{max-width:100%}",
-    "</style>",
-    "</head>",
-    `<body>${documentHtml}</body>`,
-    "</html>",
-  ].join("");
+  if (extension === ".jpg" || extension === ".jpeg") {
+    return "image/jpeg";
+  }
+
+  if (extension === ".png") {
+    return "image/png";
+  }
+
+  if (extension === ".svg") {
+    return "image/svg+xml";
+  }
+
+  if (extension === ".webp") {
+    return "image/webp";
+  }
+
+  return "application/octet-stream";
 }
 
-async function renderOfficePdfWithBrowser(documentHtml: string) {
-  const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ headless: true });
+function localUploadPathFromImageSource(src: string) {
+  const trimmed = src.trim();
+
+  if (!trimmed || trimmed.startsWith("data:")) {
+    return null;
+  }
+
+  let pathname = "";
 
   try {
-    const page = await browser.newPage({ viewport: { height: 1123, width: 794 } });
-
-    await page.setContent(officePdfHtml(documentHtml), {
-      waitUntil: "networkidle",
-    });
-
-    return page.pdf({
-      format: "A4",
-      margin: {
-        bottom: "0",
-        left: "0",
-        right: "0",
-        top: "0",
-      },
-      printBackground: true,
-    });
-  } finally {
-    await browser.close();
+    pathname = /^https?:\/\//i.test(trimmed)
+      ? new URL(trimmed).pathname
+      : trimmed.split("#")[0]?.split("?")[0] ?? "";
+  } catch {
+    return null;
   }
+
+  const normalizedPathname = decodeURIComponent(pathname).replace(/\\/g, "/");
+  const uploadPath = normalizedPathname.startsWith("/uploads/")
+    ? normalizedPathname.slice("/uploads/".length)
+    : normalizedPathname.startsWith("uploads/")
+      ? normalizedPathname.slice("uploads/".length)
+      : null;
+
+  if (!uploadPath) {
+    return null;
+  }
+
+  const uploadRoot = getLocalUploadRoot();
+  const filePath = path.resolve(uploadRoot, uploadPath);
+  const relativePath = path.relative(uploadRoot, filePath);
+
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return null;
+  }
+
+  return filePath;
+}
+
+async function inlineLocalUploadImages(html: string) {
+  const matches = Array.from(
+    html.matchAll(/(<img\b[^>]*?\bsrc\s*=\s*)(["'])(.*?)\2/gi),
+  );
+  let preparedHtml = html;
+
+  for (const match of matches) {
+    const [fullMatch, prefix, quote, src] = match;
+    const filePath = localUploadPathFromImageSource(src ?? "");
+
+    if (!filePath) {
+      continue;
+    }
+
+    try {
+      const image = await readFile(filePath);
+      const dataUrl = `data:${mimeTypeFromPath(filePath)};base64,${image.toString("base64")}`;
+
+      preparedHtml = preparedHtml.replace(
+        fullMatch,
+        `${prefix}${quote}${dataUrl}${quote}`,
+      );
+    } catch {
+      // If a legacy template references a missing local upload, keep the HTML intact.
+    }
+  }
+
+  return preparedHtml;
+}
+
+function normalizeOfficeDocumentHtmlForPdf(html: string) {
+  return html
+    .replace(/<article\b/gi, "<div")
+    .replace(/<\/article>/gi, "</div>")
+    .replace(/<section\b/gi, "<div")
+    .replace(/<\/section>/gi, "</div>");
+}
+
+function isAllowedOfficeImageUrl(value: string) {
+  const allowedBases = [
+    process.env.BACKEND_PUBLIC_URL,
+    process.env.UPLOAD_PUBLIC_URL,
+    process.env.S3_PUBLIC_URL,
+  ].filter((base): base is string => Boolean(base?.trim()));
+
+  if (!allowedBases.length) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+
+    return allowedBases.some((base) => {
+      try {
+        const allowed = new URL(base);
+        const allowedPath = allowed.pathname.replace(/\/$/, "");
+
+        return (
+          url.origin === allowed.origin &&
+          (allowedPath === "" || url.pathname.startsWith(allowedPath))
+        );
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+const supportedPdfFonts = new Set(Object.keys(robotoFonts));
+
+function normalizePdfDefinitionFonts(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizePdfDefinitionFonts);
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const normalized: Record<string, unknown> = {};
+
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (
+      key === "font" &&
+      typeof entryValue === "string" &&
+      !supportedPdfFonts.has(entryValue)
+    ) {
+      continue;
+    }
+
+    normalized[key] = normalizePdfDefinitionFonts(entryValue);
+  }
+
+  return normalized;
+}
+
+async function renderOfficePdfWithPdfmake(documentHtml: string) {
+  const { window } = new JSDOM("");
+  const preparedHtml = normalizeOfficeDocumentHtmlForPdf(
+    await inlineLocalUploadImages(documentHtml),
+  );
+  const content = normalizePdfDefinitionFonts(
+    htmlToPdfmake(preparedHtml, {
+      removeExtraBlanks: false,
+      window,
+    }),
+  );
+
+  pdfMake.setUrlAccessPolicy(isAllowedOfficeImageUrl);
+
+  return pdfMake
+    .createPdf({
+      content,
+      defaultStyle: {
+        font: "Roboto",
+        fontSize: 12,
+        lineHeight: 1.2,
+      },
+      pageMargins: [0, 0, 0, 0],
+      pageSize: "A4",
+    })
+    .getBuffer();
 }
 
 async function ensureOfficeNumber(
@@ -824,6 +1103,14 @@ export async function getEntryRequestOfficeLetter(
       variables,
       new Set(["itens_solicitados_html"]),
     );
+    const chrome = template
+      ? {
+          footerText: template.footerText,
+          headerAlignment: template.headerAlignment,
+          headerImageUrl: template.headerImageUrl,
+          headerText: template.headerText,
+        }
+      : null;
     const header = {
       logoUrl:
         settings.officeLogoUrl ?? settings.reportLogoUrl ?? settings.logoUrl ?? null,
@@ -833,7 +1120,7 @@ export async function getEntryRequestOfficeLetter(
 
     return {
       contentHtml,
-      documentHtml: buildOfficeDocumentHtml(contentHtml),
+      documentHtml: buildOfficeDocumentHtml(contentHtml, chrome, variables),
       header,
       items,
       number: request.officeNumber,
@@ -855,19 +1142,19 @@ export async function buildEntryRequestOfficeLetterPdf(
   viewerName: string,
 ) {
   const letter = await getEntryRequestOfficeLetter(prisma, requestId, viewerName);
-  let browserPdf: Buffer | Uint8Array;
+  let pdfBuffer: Buffer | Uint8Array;
 
   try {
-    browserPdf = await renderOfficePdfWithBrowser(letter.documentHtml);
+    pdfBuffer = await renderOfficePdfWithPdfmake(letter.documentHtml);
   } catch (error) {
     throw new AppError(
       500,
-      "Nao foi possivel exportar o oficio em PDF. Instale o Chromium do Playwright no ambiente do backend.",
+      "Nao foi possivel exportar o oficio em PDF a partir do modelo configurado.",
     );
   }
 
   return {
-    buffer: Buffer.from(browserPdf),
+    buffer: Buffer.from(pdfBuffer),
     fileName: officeLetterFileName(letter.numberFormatted, requestId),
   };
 }

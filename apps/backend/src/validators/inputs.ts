@@ -15,6 +15,11 @@ const optionalText = z
   .nullable()
   .transform((value) => value || null);
 
+const optionalUrl = optionalText.refine(
+  (value) => !value || /^https?:\/\//i.test(value) || value.startsWith("/uploads/"),
+  "Informe uma URL válida.",
+);
+
 export const idParam = z.object({
   id: z.string().min(1),
 });
@@ -151,15 +156,22 @@ export const officeTemplateInput = z.object({
   active: z.boolean().default(true),
   contentHtml: z.string().trim().min(3, "Informe o conteudo do oficio."),
   description: optionalText,
+  footerText: optionalText,
+  headerAlignment: z.enum(["LEFT", "CENTER", "RIGHT"]).default("LEFT"),
+  headerImageUrl: optionalUrl,
+  headerText: optionalText,
   name: z.string().trim().min(2, "Informe o nome do modelo."),
   subject: z.string().trim().min(2, "Informe o assunto do oficio."),
 });
 
-export function extractOfficeTemplateVariables(content: string, subject = "") {
+export function extractOfficeTemplateVariables(...contents: Array<string | null | undefined>) {
   const variables = new Set<string>();
   const allowed = new Set<string>(allowedOfficeVariables);
 
-  for (const match of `${subject}\n${content}`.matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)) {
+  for (const match of contents
+    .filter((content): content is string => Boolean(content))
+    .join("\n")
+    .matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g)) {
     const variable = match[1] ?? "";
 
     if (!allowed.has(variable)) {
@@ -190,11 +202,6 @@ export const invoiceXmlImportInput = z.object({
 export const invoiceXmlPreviewInput = z.object({
   xml: z.string().min(1, "Selecione o XML da nota."),
 });
-
-const optionalUrl = optionalText.refine(
-  (value) => !value || /^https?:\/\//i.test(value) || value.startsWith("/uploads/"),
-  "Informe uma URL válida.",
-);
 
 export const systemSettingsInput = z.object({
   faviconUrl: optionalUrl,

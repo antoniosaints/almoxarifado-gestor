@@ -25,7 +25,12 @@ function templateData(input: ReturnType<typeof officeTemplateInput.parse>) {
     return {
       ...input,
       variables: JSON.stringify(
-        extractOfficeTemplateVariables(input.contentHtml, input.subject),
+        extractOfficeTemplateVariables(
+          input.subject,
+          input.headerText,
+          input.contentHtml,
+          input.footerText,
+        ),
       ),
     };
   } catch (error) {
