@@ -858,91 +858,6 @@ function OfficeTemplatesTab() {
                 value={draft.description}
               />
             </FormField>
-            <section className="grid gap-4 rounded-md border bg-background p-3 md:grid-cols-[minmax(0,1fr)_13rem]">
-              <div className="space-y-4">
-                <FormField>
-                  <Label htmlFor="office-template-header-image">
-                    Imagem do cabeçalho
-                  </Label>
-                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                    <Input
-                      id="office-template-header-image"
-                      onChange={(event) =>
-                        setDraft({ ...draft, headerImageUrl: event.target.value })
-                      }
-                      placeholder="/uploads/..."
-                      value={draft.headerImageUrl}
-                    />
-                    <Button asChild type="button" variant="outline">
-                      <Label
-                        className={`cursor-pointer ${uploadingHeaderImage ? "pointer-events-none opacity-60" : ""}`}
-                        htmlFor="office-template-header-image-upload"
-                      >
-                        <Upload className="h-4 w-4" />
-                        {uploadingHeaderImage ? "Enviando..." : "Upload"}
-                      </Label>
-                    </Button>
-                  </div>
-                  <Input
-                    accept={acceptedImageTypes.join(",")}
-                    aria-label="Arquivo do cabeçalho"
-                    className="hidden"
-                    id="office-template-header-image-upload"
-                    onChange={(event) => {
-                      void uploadHeaderImage(event.currentTarget.files?.[0]);
-                      event.currentTarget.value = "";
-                    }}
-                    type="file"
-                  />
-                </FormField>
-                <FormField>
-                  <Label htmlFor="office-template-header-text">
-                    Texto do cabeçalho
-                  </Label>
-                  <Textarea
-                    id="office-template-header-text"
-                    onChange={(event) =>
-                      setDraft({ ...draft, headerText: event.target.value })
-                    }
-                    rows={3}
-                    value={draft.headerText}
-                  />
-                </FormField>
-              </div>
-              <div className="space-y-4">
-                <FormField>
-                  <Label htmlFor="office-template-header-alignment">
-                    Posição do cabeçalho
-                  </Label>
-                  <Select
-                    id="office-template-header-alignment"
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        headerAlignment: event.target
-                          .value as OfficeTemplateDraft["headerAlignment"],
-                      })
-                    }
-                    value={draft.headerAlignment}
-                  >
-                    <option value="LEFT">Esquerda</option>
-                    <option value="CENTER">Centralizado</option>
-                    <option value="RIGHT">Direita</option>
-                  </Select>
-                </FormField>
-                <FormField>
-                  <Label htmlFor="office-template-footer-text">Rodapé simples</Label>
-                  <Textarea
-                    id="office-template-footer-text"
-                    onChange={(event) =>
-                      setDraft({ ...draft, footerText: event.target.value })
-                    }
-                    rows={4}
-                    value={draft.footerText}
-                  />
-                </FormField>
-              </div>
-            </section>
             <div className="flex flex-wrap gap-2 rounded-md border bg-background p-2">
               <Button
                 aria-label="Negrito"
@@ -1115,7 +1030,6 @@ function OfficeTemplatesTab() {
               </Button>
             </div>
             <FormField>
-              <Label htmlFor="office-template-content">Conteúdo do ofício</Label>
               <div
                 aria-label="Conteúdo do ofício"
                 aria-multiline="true"
