@@ -615,6 +615,7 @@ function requestItem(request: OfficeRequest) {
     productName: request.product.name,
     quantity: request.quantity,
     unit: request.product.unit.abbreviation,
+    unitName: request.product.unit.name,
   };
 }
 
@@ -626,6 +627,7 @@ function requestItems(request: OfficeRequest): OfficeRequestItem[] {
       productName: item.product.name,
       quantity: item.quantity,
       unit: item.product.unit.abbreviation,
+      unitName: item.product.unit.name,
     }));
   }
 
@@ -638,7 +640,7 @@ function renderItemsHtml(items: OfficeRequestItem[]) {
       const suffix = index === items.length - 1 ? "." : ";";
 
       return `${escapeHtml(item.productName)} - ${item.quantity} ${escapeHtml(
-        item.unit,
+        item.unitName,
       )}${suffix}`;
     })
     .join("<br />");
@@ -752,10 +754,12 @@ function renderMultilineHtmlText(text: string, variables: Record<string, string>
     .join("");
 }
 
+
 function buildOfficeHeaderHtml(
   chrome: OfficeDocumentChrome | null | undefined,
   variables: Record<string, string>,
 ) {
+  
   const imageUrl = chrome?.headerImageUrl
     ? renderPlainTemplate(chrome.headerImageUrl, variables).trim()
     : "";
@@ -1005,9 +1009,9 @@ async function renderOfficePdfWithPdfmake(documentHtml: string) {
       defaultStyle: {
         font: "Roboto",
         fontSize: 12,
-        lineHeight: 1.2,
+        lineHeight: 1,
       },
-      pageMargins: [0, 0, 0, 0],
+      pageMargins: [30, 30, 30, 30],
       pageSize: "A4",
     })
     .getBuffer();

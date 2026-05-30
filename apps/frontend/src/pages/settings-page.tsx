@@ -248,30 +248,12 @@ const defaultOfficeTemplateBodyHtml = [
 const defaultOfficeTemplateContentHtml = defaultOfficeTemplateBodyHtml;
 
 function officeTemplatePreviewHtml(draft: OfficeTemplateDraft) {
-  const alignment = draft.headerAlignment === "CENTER"
-    ? "center"
-    : draft.headerAlignment === "RIGHT"
-      ? "right"
-      : "left";
-  const headerImageHtml = draft.headerImageUrl.trim()
-    ? `<div style="margin:0 0 8px 0;"><img src="${draft.headerImageUrl}" alt="" style="max-height:64px;max-width:160px;width:auto;height:auto;" /></div>`
-    : "";
-  const headerTextHtml = draft.headerText.trim()
-    ? `<div>${draft.headerText
-        .split(/\r?\n/)
-        .map((line) => `<p style="margin:0;">${line || "&nbsp;"}</p>`)
-        .join("")}</div>`
-    : "";
-  const headerHtml =
-    headerImageHtml || headerTextHtml
-      ? `<header style="margin:0 0 16px 0;text-align:${alignment};">${headerImageHtml}${headerTextHtml}</header>`
-      : "";
   const footerHtml = draft.footerText.trim()
     ? `<footer style="margin:24px 0 0 0;text-align:center;color:#64748b;font-size:12px;">${draft.footerText}</footer>`
     : "";
 
   return createOfficeDocumentHtml(
-    `${headerHtml}<main>${draft.contentHtml || "-"}</main>${footerHtml}`,
+    `<main>${draft.contentHtml || "-"}</main>${footerHtml}`,
   );
 }
 
@@ -502,9 +484,33 @@ function OfficeTemplatesTab() {
         file,
       );
 
-      insertHtml(
-        `<img src="${resolveAssetUrl(uploaded.url)}" alt="" style="max-width:100%;height:auto;" />`,
-      );
+      insertHtml(`
+        <div style="
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          gap:12px;
+          width:100%;
+          margin:8px 0;
+          text-align:center;
+        ">
+          <img
+            src="${resolveAssetUrl(uploaded.url)}"
+            alt=""
+            style="
+              max-height:64px;
+              width:auto;
+              height:auto;
+              flex-shrink:0;
+            "
+          />
+          <div contenteditable="true">
+            <strong>PREFEITURA MUNICIPAL</strong><br>
+            Secretaria de Administração<br>
+            Departamento de Ofícios
+          </div>
+        </div>
+      `);
     } catch (caughtError) {
       setEditorError(
         caughtError instanceof Error

@@ -143,7 +143,7 @@ entryRequestRoutes.get(
     });
 
     if (!entryRequest) {
-      throw new AppError(404, "SolicitaÃ§Ã£o nÃ£o encontrada.");
+      throw new AppError(404, "Solicitação não encontrada.");
     }
 
     await assertWarehouseAccess(prisma, user, entryRequest.warehouseId);
