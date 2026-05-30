@@ -350,6 +350,9 @@ describe("SettingsPage", () => {
       expect(editor.querySelector("strong")).not.toBeNull();
     });
     expect(editor).not.toHaveTextContent("<strong>");
+    expect(
+      document.body.querySelector(".office-letter-a4 [data-office-letter-document]"),
+    ).not.toBeNull();
 
     editor.innerHTML = "<p>Texto editado <strong>renderizado</strong></p>";
     fireEvent.input(editor);

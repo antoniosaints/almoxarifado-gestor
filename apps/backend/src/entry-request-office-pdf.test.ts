@@ -24,7 +24,7 @@ function tinyPngBuffer() {
   );
 }
 
-describe("entry request office PDF rendering", () => {
+describe("entry request office letter rendering", () => {
   beforeEach(async () => {
     await resetDatabase(prisma);
     rmSync(path.join(process.cwd(), "uploads", "office-template-images"), {
@@ -42,7 +42,7 @@ describe("entry request office PDF rendering", () => {
     await prisma.$disconnect();
   });
 
-  it("exports a PDF with reusable header/footer config and saved body HTML", async () => {
+  it("renders reusable header/footer config and leaves PDF export to the frontend", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({
       data: { role: UserRole.ADMIN },
@@ -115,16 +115,14 @@ describe("entry request office PDF rendering", () => {
     );
     expect(office.body.documentHtml).toContain("Almoxarifado da Saude");
     expect(office.body.documentHtml).toContain("Documento 001/2026");
-    expect(office.body.documentHtml).toContain("Papel A4 - 4 UN.");
+    expect(office.body.documentHtml).toContain("Papel A4 - 4 Unidade.");
     expect(office.body.documentHtml).toContain(imageUpload.body.url);
 
     const pdf = await request(app)
       .get(`/entry-requests/${createdRequest.body.id}/office-letter/pdf`)
       .set("Authorization", auth);
 
-    expect(pdf.status).toBe(200);
-    expect(pdf.headers["content-type"]).toContain("application/pdf");
-    expect(pdf.headers["content-disposition"]).toContain("oficio-001-2026.pdf");
-    expect(pdf.body.toString("latin1")).toContain("%PDF");
+    expect(pdf.status).toBe(404);
+    expect(pdf.headers["content-type"]).not.toContain("application/pdf");
   });
 });

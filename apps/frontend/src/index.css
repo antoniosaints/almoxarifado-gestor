@@ -70,6 +70,71 @@
   .route-loading-slide {
     animation: route-loading-slide 1.15s ease-in-out infinite;
   }
+
+  .office-letter-a4 {
+    overflow-x: auto;
+  }
+
+  .office-letter-a4__canvas {
+    display: flex;
+    justify-content: center;
+    min-width: min-content;
+    padding: 1rem;
+  }
+
+  .office-letter-a4 [data-office-letter-document] {
+    background: #fff;
+    box-shadow: 0 18px 42px rgb(15 23 42 / 0.18);
+    box-sizing: border-box;
+    color: #111827;
+    min-height: 297mm;
+    width: 210mm;
+  }
+
+  .office-letter-print-screen {
+    min-height: 100vh;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body,
+  #root {
+    background: #fff !important;
+  }
+
+  .app-route-frame {
+    animation: none;
+  }
+
+  .office-letter-print-actions {
+    display: none !important;
+  }
+
+  .office-letter-print-screen {
+    min-height: auto;
+  }
+
+  .office-letter-a4 {
+    overflow: visible;
+  }
+
+  .office-letter-a4__canvas {
+    display: block;
+    padding: 0;
+  }
+
+  .office-letter-a4 [data-office-letter-document] {
+    box-shadow: none !important;
+    margin: 0 !important;
+    min-height: 297mm !important;
+    width: 210mm !important;
+  }
 }
 
 @keyframes route-enter {
