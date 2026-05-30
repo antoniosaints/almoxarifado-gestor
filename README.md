@@ -40,8 +40,8 @@ de uma prefeitura.
 
 - Node.js compativel com Vite 6.
 - `pnpm` instalado.
-- O backend exporta oficios em PDF com bibliotecas Node (`pdfmake` e
-  `html-to-pdfmake`), sem depender de navegador headless.
+- Oficios sao renderizados pelo frontend em uma pagina A4 e salvos como PDF
+  pelo fluxo nativo de impressao do navegador.
 
 ## Configuracao local
 

@@ -204,36 +204,17 @@ describe("RequestsPage", () => {
   });
 
   it("opens the office letter for non-general entry requests", async () => {
-    const createObjectUrl = vi.fn(() => "blob:office-pdf");
-    const revokeObjectUrl = vi.fn();
-    const click = vi.fn();
-    const appendChild = vi.spyOn(document.body, "appendChild");
-    const createElement = vi.spyOn(document, "createElement");
-    const OriginalURL = URL;
+    const open = vi.spyOn(window, "open").mockReturnValue({} as Window);
+    const requestedPaths: string[] = [];
 
-    vi.stubGlobal("URL", Object.assign(OriginalURL, {
-      createObjectURL: createObjectUrl,
-      revokeObjectURL: revokeObjectUrl,
-    }));
-    createElement.mockImplementation((tagName: string) => {
-      const element = document.createElementNS("http://www.w3.org/1999/xhtml", tagName);
-
-      if (tagName.toLowerCase() === "a") {
-        Object.defineProperty(element, "click", { value: click });
-      }
-
-      return element as HTMLElement;
-    });
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(String(input));
+        requestedPaths.push(url.pathname);
 
         if (url.pathname === "/entry-requests/entry-request/office-letter/pdf") {
-          return new Response(new Blob(["pdf"], { type: "application/pdf" }), {
-            headers: { "Content-Type": "application/pdf" },
-            status: 200,
-          });
+          throw new Error("The frontend should not request backend office PDFs.");
         }
 
         const payload =
@@ -309,14 +290,18 @@ describe("RequestsPage", () => {
     expect(within(dialog).getByText("Documento fiel do ofÃ­cio")).toBeInTheDocument();
     expect(within(dialog).getByText("Papel A4 - 4 PCT.")).toBeInTheDocument();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Exportar PDF" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Abrir PDF" }));
 
     await waitFor(() => {
-      expect(createObjectUrl).toHaveBeenCalled();
-      expect(click).toHaveBeenCalled();
+      expect(open).toHaveBeenCalledWith(
+        "/requests/entry-request/office-letter/print",
+        "_blank",
+        "noopener,noreferrer",
+      );
     });
-    expect(appendChild).toHaveBeenCalled();
-    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:office-pdf");
+    expect(requestedPaths).not.toContain(
+      "/entry-requests/entry-request/office-letter/pdf",
+    );
   });
 
   it("opens a direct request dialog with warehouse and product fields", async () => {

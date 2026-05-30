@@ -17,6 +17,7 @@ import { ManagerDashboardPage } from "@/pages/manager-dashboard-page";
 import { ManagerLicensesPage } from "@/pages/manager-licenses-page";
 import { ManagerSubscribersPage } from "@/pages/manager-subscribers-page";
 import { MovementsPage } from "@/pages/movements-page";
+import { OfficeLetterPrintPage } from "@/pages/office-letter-print-page";
 import { ProductsPage } from "@/pages/products-page";
 import { ReportsPage } from "@/pages/reports-page";
 import { RequestsPage } from "@/pages/requests-page";
@@ -103,6 +104,10 @@ export function App() {
         ) : (
           <>
         <Route element={<LoginPage />} path="/login" />
+        <Route
+          element={<OfficeLetterPrintPage />}
+          path="/requests/:requestId/office-letter/print"
+        />
         <Route element={<ProtectedLayout />}>
           {isManagerSystem ? (
             <>

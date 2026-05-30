@@ -46,6 +46,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { OfficeLetterDocument } from "@/components/domain/office-letter-document";
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1161,10 +1162,7 @@ function OfficeTemplatesTab() {
               <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
                 Prévia
               </p>
-              <div
-                className="prose prose-sm max-w-none dark:prose-invert"
-                dangerouslySetInnerHTML={{ __html: officeTemplatePreviewHtml(draft) }}
-              />
+              <OfficeLetterDocument html={officeTemplatePreviewHtml(draft)} />
             </div>
             <div className="flex justify-end gap-2">
               <Button

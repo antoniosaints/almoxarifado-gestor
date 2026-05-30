@@ -10,14 +10,6 @@ import { prisma } from "./lib/prisma.js";
 import { hashPassword } from "./services/auth-service.js";
 import { createBaseFixture, resetDatabase } from "./test/database.js";
 
-const htmlToPdfmakeMock = vi.hoisted(() => ({
-  convert: vi.fn((_html: string) => [{ text: "oficio" }]),
-}));
-
-vi.mock("html-to-pdfmake", () => ({
-  default: htmlToPdfmakeMock.convert,
-}));
-
 function authorizationFor(user: {
   id: string;
   name: string;
@@ -44,7 +36,6 @@ describe("api", () => {
     delete process.env.LICENSE_SYSTEM;
     delete process.env.SECRET_VALIDATION_LICENSE;
     delete process.env.URL_VALIDATION_LICENSE;
-    htmlToPdfmakeMock.convert.mockClear();
     await resetDatabase(prisma);
     rmSync(path.join(process.cwd(), "uploads", "settings"), {
       force: true,
@@ -1188,17 +1179,17 @@ describe("api", () => {
       year: 2026,
     });
     expect(office.body.contentHtml).toContain("OFICIO Nº 001/2026");
-    expect(office.body.contentHtml).toContain("Papel A4 - 4 UN;");
-    expect(office.body.contentHtml).toContain("Caneta azul - 2 UN.");
+    expect(office.body.contentHtml).toContain("Papel A4 - 4 Unidade;");
+    expect(office.body.contentHtml).toContain("Caneta azul - 2 Unidade.");
     expect(office.body.documentHtml).toContain('data-office-letter-document="true"');
     expect(office.body.documentHtml).toContain("OFICIO Nº 001/2026");
-    expect(office.body.documentHtml).toContain("Papel A4 - 4 UN;");
+    expect(office.body.documentHtml).toContain("Papel A4 - 4 Unidade;");
     expect(office.body.documentHtml).not.toContain("/uploads/settings/office-logo");
     expect(office.body.documentHtml).not.toContain("Almoxarifado da Saude");
     expect(office.body.documentHtml).not.toContain("Teste");
   });
 
-  it("exports an office letter PDF from the saved document html only", async () => {
+  it("does not expose backend PDF export for office letters", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({
       where: { id: user.id },
@@ -1236,26 +1227,24 @@ describe("api", () => {
       });
 
     const office = await request(app)
-      .get(`/entry-requests/${createdRequest.body.id}/office-letter/pdf`)
+      .get(`/entry-requests/${createdRequest.body.id}/office-letter`)
       .set("Authorization", auth);
 
     expect(office.status).toBe(200);
-    expect(office.headers["content-type"]).toContain("application/pdf");
-    expect(office.headers["content-disposition"]).toContain("oficio-001-2026.pdf");
-    expect(office.body.toString("latin1")).toContain("%PDF");
-    expect(htmlToPdfmakeMock.convert).toHaveBeenCalledTimes(1);
+    expect(office.body.documentHtml).toContain("OF&Iacute;CIO");
+    expect(office.body.documentHtml).not.toContain("/uploads/settings/office-logo");
+    expect(office.body.documentHtml).not.toContain("Almoxarifado da Saude");
+    expect(office.body.documentHtml).not.toContain("Teste");
 
-    const renderedHtml = String(
-      htmlToPdfmakeMock.convert.mock.calls[0]?.[0] ?? "",
-    );
+    const pdf = await request(app)
+      .get(`/entry-requests/${createdRequest.body.id}/office-letter/pdf`)
+      .set("Authorization", auth);
 
-    expect(renderedHtml).toContain("OF&Iacute;CIO");
-    expect(renderedHtml).not.toContain("/uploads/settings/office-logo");
-    expect(renderedHtml).not.toContain("Almoxarifado da Saude");
-    expect(renderedHtml).not.toContain("Teste");
+    expect(pdf.status).toBe(404);
+    expect(pdf.headers["content-type"]).not.toContain("application/pdf");
   });
 
-  it("inlines office template upload images before exporting the PDF", async () => {
+  it("keeps office template upload images in document html for frontend rendering", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({
       where: { id: user.id },
@@ -1311,18 +1300,12 @@ describe("api", () => {
       });
 
     const office = await request(app)
-      .get(`/entry-requests/${createdRequest.body.id}/office-letter/pdf`)
+      .get(`/entry-requests/${createdRequest.body.id}/office-letter`)
       .set("Authorization", auth);
 
     expect(office.status).toBe(200);
-    expect(office.body.toString("latin1")).toContain("%PDF");
-
-    const renderedHtml = String(
-      htmlToPdfmakeMock.convert.mock.calls.at(-1)?.[0] ?? "",
-    );
-
-    expect(renderedHtml).toContain("data:image/png;base64,");
-    expect(renderedHtml).not.toContain("/uploads/office-template-images/");
+    expect(office.body.documentHtml).toContain(imageUpload.body.url);
+    expect(office.body.documentHtml).toContain("OFICIO 001/2026");
   });
 
   it("uploads one settings asset per slot and stores only the public URL", async () => {

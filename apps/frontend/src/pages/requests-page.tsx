@@ -1,7 +1,6 @@
 import {
   ArrowRightLeft,
   Check,
-  FileDown,
   FileText,
   PackagePlus,
   Plus,
@@ -29,7 +28,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Form, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { api, apiFile, useApiResource } from "@/lib/api";
+import { OfficeLetterDocument } from "@/components/domain/office-letter-document";
+import { api, useApiResource } from "@/lib/api";
+import { openOfficeLetterPrintWindow } from "@/lib/office-letter";
 import { useSession } from "@/lib/session";
 import type {
   EntryRequest,
@@ -203,7 +204,6 @@ function transferRequestQuantitySummary(request: TransferRequest) {
 function OfficeLetterDialog({ request }: { request: EntryRequest }) {
   const [open, setOpen] = useState(false);
   const [letter, setLetter] = useState<OfficeLetter | null>(null);
-  const [exportingPdf, setExportingPdf] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function openDialog() {
@@ -231,34 +231,13 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
     }
   }
 
-  async function exportPdf() {
-    setExportingPdf(true);
+  function openPrintPage() {
     setError(null);
 
-    try {
-      const blob = await apiFile(
-        `/entry-requests/${request.id}/office-letter/pdf`,
-      );
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const suffix =
-        letter?.numberFormatted.replace(/[^\d]+/g, "-").replace(/^-|-$/g, "") ??
-        request.id;
-
-      link.href = url;
-      link.download = `oficio-${suffix}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (caughtError) {
+    if (!openOfficeLetterPrintWindow(request.id)) {
       setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Falha ao exportar o PDF.",
+        "O navegador bloqueou a abertura do PDF. Permita pop-ups para continuar.",
       );
-    } finally {
-      setExportingPdf(false);
     }
   }
 
@@ -280,20 +259,16 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
           {loading ? <LoadingLine /> : null}
           {error ? <ResourceError message={error} /> : null}
           {letter ? (
-            <article className="overflow-x-auto rounded-md border bg-muted/30 p-3">
-              <div
-                className="mx-auto max-w-full bg-background text-foreground"
-                dangerouslySetInnerHTML={{
-                  __html: letter.documentHtml ?? letter.contentHtml,
-                }}
-              />
-            </article>
+            <OfficeLetterDocument
+              className="rounded-md border bg-muted/30"
+              html={letter.documentHtml ?? letter.contentHtml}
+            />
           ) : null}
           {letter ? (
             <div className="flex justify-end border-t pt-4">
-              <Button onClick={() => void exportPdf()} disabled={exportingPdf}>
-                <FileDown className="h-4 w-4" />
-                {exportingPdf ? "Exportando..." : "Exportar PDF"}
+              <Button onClick={openPrintPage}>
+                <FileText className="h-4 w-4" />
+                Abrir PDF
               </Button>
             </div>
           ) : null}
