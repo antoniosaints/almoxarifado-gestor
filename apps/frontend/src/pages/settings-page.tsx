@@ -286,7 +286,6 @@ function OfficeTemplatesTab() {
     useState<OfficeLetterTemplate | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingDocumentImage, setUploadingDocumentImage] = useState(false);
-  const [uploadingHeaderImage, setUploadingHeaderImage] = useState(false);
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(
     null,
   );
@@ -520,40 +519,6 @@ function OfficeTemplatesTab() {
       );
     } finally {
       setUploadingDocumentImage(false);
-    }
-  }
-
-  async function uploadHeaderImage(file?: File) {
-    if (!file) {
-      return;
-    }
-
-    if (!acceptedImageTypes.includes(file.type) || file.size > maxImageSize) {
-      setEditorError("Envie uma imagem PNG, JPG, WEBP ou SVG de atÃƒÂ© 1 MB.");
-      return;
-    }
-
-    setUploadingHeaderImage(true);
-    setEditorError(null);
-
-    try {
-      const uploaded = await apiUpload<{ url: string }>(
-        "/uploads/office-template-images",
-        file,
-      );
-
-      setDraft((current) => ({
-        ...current,
-        headerImageUrl: resolveAssetUrl(uploaded.url),
-      }));
-    } catch (caughtError) {
-      setEditorError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Falha ao enviar imagem do cabeÃƒÂ§alho.",
-      );
-    } finally {
-      setUploadingHeaderImage(false);
     }
   }
 
