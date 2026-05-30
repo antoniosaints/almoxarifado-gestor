@@ -269,7 +269,7 @@ function OfficeLetterDialog({ request }: { request: EntryRequest }) {
         Ver ofício
       </Button>
       <Dialog onOpenChange={setOpen} open={open}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Ofício da solicitação</DialogTitle>
             <DialogDescription>
