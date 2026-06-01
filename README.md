@@ -59,7 +59,14 @@ de uma prefeitura.
 
    O SQLite usa por padrao `apps/backend/prisma/dev.db`.
 
-   Para hospedar em outro banco sem alterar codigo, ajuste no `.env`:
+   O provider do banco precisa combinar com a URL. O historico de migrations
+   versionado neste repositorio esta atualmente travado para SQLite
+   (`apps/backend/prisma/migrations/migration_lock.toml`). Para usar PostgreSQL
+   ou MySQL em producao, crie e revise um historico de migrations especifico
+   para esse provider antes do deploy; o comando `db:deploy` falha fechado se
+   detectar provider diferente para evitar corrupcao de banco.
+
+   Exemplos de configuracao futura para outro banco:
 
    ```env
    DATABASE_PROVIDER="postgresql"
@@ -68,11 +75,15 @@ de uma prefeitura.
 
    Tambem sao aceitos `DATABASE_PROVIDER="sqlite"` e `DATABASE_PROVIDER="mysql"`.
 
-3. Rode a migration Prisma:
+3. Aplique as migrations versionadas:
 
    ```bash
-   pnpm db:migrate
+   pnpm db:deploy
    ```
+
+   `pnpm db:migrate` e um alias seguro para o mesmo fluxo: aplica apenas
+   migrations ja versionadas e nao cria migration nova ao baixar o projeto em
+   outro local.
 
 4. Popule dados de exemplo:
 
@@ -98,12 +109,31 @@ pnpm dev:backend
 pnpm build
 pnpm test
 pnpm db:generate
+pnpm db:validate
+pnpm db:status
+pnpm db:deploy
 pnpm db:migrate
+pnpm db:migration:create -- --name nome_da_migration
 pnpm db:push
 pnpm db:seed
 ```
 
-`pnpm db:generate`, `pnpm db:migrate` e `pnpm db:push` preparam automaticamente o schema Prisma conforme `DATABASE_PROVIDER`. Em uma hospedagem nova com PostgreSQL/MySQL, prefira `pnpm db:push` para criar a estrutura inicial a partir do schema atual.
+`pnpm db:generate` prepara o schema Prisma conforme `DATABASE_PROVIDER`.
+`pnpm db:validate` e leitura segura: valida provider, URL, checksums das
+migrations, drift entre schema e migrations e operacoes SQL arriscadas.
+`pnpm db:deploy` aplica somente migrations versionadas e e o comando correto
+para producao. `pnpm db:migrate` aponta para o mesmo fluxo seguro para evitar
+que um pull em outro ambiente crie migration duplicada por acidente.
+
+Para alterar o schema em desenvolvimento, edite `schema.prisma` e rode:
+
+```bash
+pnpm db:migration:create -- --name nome_da_migration
+```
+
+Revise o SQL gerado antes de versionar. `pnpm db:push` e apenas para
+prototipagem local descartavel; ele e bloqueado em producao e nao deve ser usado
+para deploy.
 
 ## Uploads
 

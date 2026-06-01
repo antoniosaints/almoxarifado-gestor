@@ -1,0 +1,18 @@
+{
+  "id": "99256129-8bf1-4b78-a671-6cc1ad06e030",
+  "runtime": "node",
+  "purpose": "Summarize Prisma migrations for provider-specific SQL and migration risks",
+  "script_chars": 1023,
+  "started_at": "2026-06-01T17:30:17.798Z",
+  "finished_at": "2026-06-01T17:30:17.871Z",
+  "exit_code": 0,
+  "signal": null,
+  "timed_out": false,
+  "duration_ms": 73,
+  "stdout_bytes": 370,
+  "stderr_bytes": 0,
+  "stdout_truncated": false,
+  "stderr_truncated": false,
+  "stdout_path": "C:\\Users\\Usuario\\Desktop\\Projetos\\Clientes\\Prefeitura\\Almoxarifado\\.gsd\\exec\\99256129-8bf1-4b78-a671-6cc1ad06e030.stdout",
+  "stderr_path": "C:\\Users\\Usuario\\Desktop\\Projetos\\Clientes\\Prefeitura\\Almoxarifado\\.gsd\\exec\\99256129-8bf1-4b78-a671-6cc1ad06e030.stderr"
+}

@@ -1,0 +1,6 @@
+migration_count 31
+20260522100000_init chars 4706 first_line -- CreateTable
+20260522114500_auth_requests_invoices chars 5911 first_line -- CreateTable
+20260522135000_stock_movement_unit_price chars 74 first_line -- AlterTable
+markers {"PRAGMA":11,"AUTOINCREMENT":0,"TEXT":25,"REAL":0,"DATETIME":19,"INTEGER":17,"DROP TABLE":11,"CREATE TABLE":19}
+duplicate_timestamps {}

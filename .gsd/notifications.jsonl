@@ -1,0 +1,4 @@
+{"id":"8c647ad1-3c7b-4894-af79-2b085dd30705","ts":"2026-06-01T17:05:13.958Z","severity":"info","message":"Current version: v2.76.0\nChecking npm registry...","source":"notify","read":false}
+{"id":"e0341ba3-82e2-491f-b8de-db381ab79095","ts":"2026-06-01T17:05:14.580Z","severity":"info","message":"Updating: v2.76.0 → v3.0.0...","source":"notify","read":false}
+{"id":"3b4f193f-2a36-4a82-9793-81da5e67ef29","ts":"2026-06-01T17:07:51.558Z","severity":"info","message":"Updated to v3.0.0. Restart your GSD session to use the new version.","source":"notify","read":false}
+{"id":"87f2ad50-b800-4775-a17d-8d51c1fbd5d6","ts":"2026-06-01T17:08:45.494Z","severity":"warning","message":"Web search: Set BRAVE_API_KEY or use an Anthropic model for built-in search","source":"notify","read":false}

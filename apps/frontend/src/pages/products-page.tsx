@@ -154,7 +154,7 @@ export function ProductConversionsDialog({
   product,
   units,
 }: {
-  onChanged: () => Promise<void>;
+  onChanged: (conversions: UnitConversion[]) => Promise<void> | void;
   product: Product;
   units: UnitOfMeasure[];
 }) {
@@ -222,15 +222,15 @@ export function ProductConversionsDialog({
         },
       );
 
-      setConversions((current) =>
-        draft.id
-          ? current.map((conversion) =>
-              conversion.id === saved.id ? saved : conversion,
-            )
-          : [...current, saved],
-      );
+      const nextConversions = draft.id
+        ? conversions.map((conversion) =>
+            conversion.id === saved.id ? saved : conversion,
+          )
+        : [...conversions, saved];
+
+      setConversions(nextConversions);
       setDraft(null);
-      await onChanged();
+      await onChanged(nextConversions);
     } catch (caughtError) {
       setMessage(
         caughtError instanceof Error
@@ -248,13 +248,14 @@ export function ProductConversionsDialog({
         `/products/${product.id}/unit-conversions/${conversion.id}`,
         { method: "DELETE" },
       );
-      setConversions((current) =>
-        current.filter((currentConversion) => currentConversion.id !== conversion.id),
+      const nextConversions = conversions.filter(
+        (currentConversion) => currentConversion.id !== conversion.id,
       );
+      setConversions(nextConversions);
       if (draft?.id === conversion.id) {
         setDraft(null);
       }
-      await onChanged();
+      await onChanged(nextConversions);
     } catch (caughtError) {
       setMessage(
         caughtError instanceof Error
@@ -767,7 +768,15 @@ export function ProductsPage() {
                 <ProductStocksDialog product={product} stocks={stocks.data} />
                 {canManageConversions ? (
                   <ProductConversionsDialog
-                    onChanged={products.reload}
+                    onChanged={(conversions) =>
+                      products.setData((currentProducts) =>
+                        currentProducts.map((currentProduct) =>
+                          currentProduct.id === product.id
+                            ? { ...currentProduct, unitConversions: conversions }
+                            : currentProduct,
+                        ),
+                      )
+                    }
                     product={product}
                     units={units.data}
                   />

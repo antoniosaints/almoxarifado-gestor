@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Product, Stock } from "@/lib/types";
 import {
@@ -121,6 +121,19 @@ describe("ProductConversionsDialog", () => {
       target: { value: "10" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Salvar conversão" }));
+
+    await screen.findByText("1 CX = 10 RSM");
+
+    expect(screen.getByText("Conversões de Papel A4")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledWith([
+        expect.objectContaining({
+          factorToBase: 10,
+          fromUnitId: "box",
+          id: "paper-box",
+        }),
+      ]);
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/products/paper/unit-conversions"),
