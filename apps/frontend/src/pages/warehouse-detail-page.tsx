@@ -17,7 +17,7 @@ import {
   TriangleAlert,
   Upload,
 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   CategoryCreateDialog,
@@ -105,6 +105,68 @@ function formatQuantityPreview(value: number) {
   return value.toLocaleString("pt-BR", {
     maximumFractionDigits: 6,
   });
+}
+
+type WarehouseEntryRequestItemDraft = {
+  id: string;
+  productId: string;
+  quantity: string;
+  unitId: string;
+};
+
+function createWarehouseEntryRequestItemDraft(
+  productId = "",
+  quantity = "1",
+  unitId = "",
+): WarehouseEntryRequestItemDraft {
+  return {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`,
+    productId,
+    quantity,
+    unitId,
+  };
+}
+
+function unitOptionsForProduct(product?: Product) {
+  if (!product) {
+    return [];
+  }
+
+  return [
+    {
+      label: `${product.unit.name} / ${product.unit.abbreviation}`,
+      searchText: "unidade base",
+      value: product.unitId,
+    },
+    ...(product.unitConversions?.filter((conversion) => conversion.active) ?? []).map(
+      (conversion) => ({
+        label: `${conversion.fromUnit.name} / ${conversion.fromUnit.abbreviation}`,
+        searchText: `${formatQuantityPreview(Number(conversion.factorToBase))} ${product.unit.abbreviation}`,
+        value: conversion.fromUnitId,
+      }),
+    ),
+  ];
+}
+
+function conversionPreviewForProduct(
+  product: Product | undefined,
+  unitId: string,
+  quantity: string,
+) {
+  const conversion = product?.unitConversions?.find(
+    (item) => item.active && item.fromUnitId === unitId,
+  );
+  const quantityValue = Number(quantity);
+  const factor = Number(conversion?.factorToBase);
+
+  if (!product || !conversion || !Number.isFinite(quantityValue) || !Number.isFinite(factor)) {
+    return null;
+  }
+
+  return `${formatQuantityPreview(quantityValue)} ${conversion.fromUnit.abbreviation} serão registradas como ${formatQuantityPreview(quantityValue * factor)} ${product.unit.abbreviation}.`;
 }
 
 type ProductDraft = {
@@ -539,6 +601,303 @@ function InvoiceFields({
   );
 }
 
+function WarehouseEntryRequestForm({
+  onSaved,
+  onSubmitted,
+  products,
+  warehouse,
+}: Pick<MovementFormProps, "onSaved" | "products" | "warehouse"> & {
+  onSubmitted?: () => void;
+}) {
+  const availableProducts = useMemo(
+    () =>
+      products
+        .filter((product) => product.active)
+        .sort((left, right) => left.code.localeCompare(right.code)),
+    [products],
+  );
+  const [items, setItems] = useState<WarehouseEntryRequestItemDraft[]>([
+    createWarehouseEntryRequestItemDraft(
+      availableProducts[0]?.id ?? "",
+      "1",
+      availableProducts[0]?.unitId ?? "",
+    ),
+  ]);
+  const [movementDate, setMovementDate] = useState(todayInputValue());
+  const [observation, setObservation] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const validItems = items
+    .map((item) => {
+      const product = availableProducts.find(
+        (currentProduct) => currentProduct.id === item.productId,
+      );
+
+      return {
+        productId: item.productId,
+        quantity: Number(item.quantity),
+        unitId: item.unitId || product?.unitId,
+      };
+    })
+    .filter(
+      (item) =>
+        item.productId && Number.isFinite(item.quantity) && item.quantity > 0,
+    );
+
+  useEffect(() => {
+    setItems((current) => {
+      if (!availableProducts.length) {
+        return [createWarehouseEntryRequestItemDraft()];
+      }
+
+      return current.map((item, index) => {
+        const currentProduct = availableProducts.find(
+          (product) => product.id === item.productId,
+        );
+        const fallbackProduct = index === 0 ? availableProducts[0] : undefined;
+        const product = currentProduct ?? fallbackProduct;
+
+        return {
+          ...item,
+          productId: product?.id ?? "",
+          unitId:
+            product && item.unitId === currentProduct?.unitId
+              ? item.unitId
+              : product?.unitId ?? "",
+        };
+      });
+    });
+  }, [availableProducts]);
+
+  function updateItem(
+    itemId: string,
+    field: "productId" | "quantity" | "unitId",
+    value: string,
+  ) {
+    setItems((current) =>
+      current.map((item) => {
+        if (item.id !== itemId) {
+          return item;
+        }
+
+        if (field === "productId") {
+          const product = availableProducts.find(
+            (currentProduct) => currentProduct.id === value,
+          );
+
+          return {
+            ...item,
+            productId: value,
+            unitId: product?.unitId ?? "",
+          };
+        }
+
+        return {
+          ...item,
+          [field]: value,
+        };
+      }),
+    );
+  }
+
+  function addItem() {
+    const product = availableProducts[0];
+
+    setItems((current) => [
+      ...current,
+      createWarehouseEntryRequestItemDraft(
+        product?.id ?? "",
+        "1",
+        product?.unitId ?? "",
+      ),
+    ]);
+  }
+
+  function removeItem(itemId: string) {
+    setItems((current) =>
+      current.length > 1
+        ? current.filter((item) => item.id !== itemId)
+        : current,
+    );
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!validItems.length) {
+      setMessage("Informe ao menos um produto com quantidade maior que zero.");
+      return;
+    }
+
+    const primaryItem = validItems[0];
+
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      await api("/entry-requests", {
+        body: JSON.stringify({
+          items: validItems,
+          movementDate,
+          observation,
+          productId: primaryItem.productId,
+          quantity: primaryItem.quantity,
+          warehouseId: warehouse.id,
+        }),
+        method: "POST",
+      });
+      await onSaved();
+      setItems([
+        createWarehouseEntryRequestItemDraft(
+          availableProducts[0]?.id ?? "",
+          "1",
+          availableProducts[0]?.unitId ?? "",
+        ),
+      ]);
+      setMovementDate(todayInputValue());
+      setObservation("");
+      onSubmitted?.();
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao enviar solicitação.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Form onSubmit={submit}>
+      {message ? <ResourceError message={message} /> : null}
+      {!availableProducts.length ? (
+        <Alert>
+          <AlertTitle>Nenhum produto disponível</AlertTitle>
+          <AlertDescription>
+            Só é possível solicitar itens que já possuem estoque em {warehouse.name}.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      <div className="space-y-3">
+        {items.map((item, index) => {
+          const itemProduct = availableProducts.find(
+            (product) => product.id === item.productId,
+          );
+          const itemConversionPreview = conversionPreviewForProduct(
+            itemProduct,
+            item.unitId,
+            item.quantity,
+          );
+
+          return (
+            <div
+              className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_9rem_9rem_auto]"
+              key={item.id}
+            >
+              <FormField>
+                <Label htmlFor={`warehouse-request-product-${item.id}`}>
+                  {items.length === 1 ? "Produto" : `Produto ${index + 1}`}
+                </Label>
+                <SearchSelect
+                  ariaLabel={items.length === 1 ? "Produto" : `Produto ${index + 1}`}
+                  disabled={!availableProducts.length}
+                  emptyMessage="Nenhum produto disponível."
+                  id={`warehouse-request-product-${item.id}`}
+                  onValueChange={(value) => updateItem(item.id, "productId", value)}
+                  options={availableProducts.map((product) => ({
+                    label: `${product.code} - ${product.name}`,
+                    searchText: `${product.category.name} ${product.unit.abbreviation}`,
+                    value: product.id,
+                  }))}
+                  placeholder="Selecione"
+                  value={item.productId}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor={`warehouse-request-quantity-${item.id}`}>
+                  Quantidade
+                </Label>
+                <Input
+                  id={`warehouse-request-quantity-${item.id}`}
+                  min="0.000001"
+                  onChange={(event) =>
+                    updateItem(item.id, "quantity", event.target.value)
+                  }
+                  required
+                  step="any"
+                  type="number"
+                  value={item.quantity}
+                />
+              </FormField>
+              <FormField>
+                <Label htmlFor={`warehouse-request-unit-${item.id}`}>Unidade</Label>
+                <SearchSelect
+                  ariaLabel={`Unidade ${index + 1}`}
+                  disabled={!itemProduct}
+                  id={`warehouse-request-unit-${item.id}`}
+                  onValueChange={(value) => updateItem(item.id, "unitId", value)}
+                  options={unitOptionsForProduct(itemProduct)}
+                  placeholder="Selecione"
+                  value={item.unitId || itemProduct?.unitId || ""}
+                />
+              </FormField>
+              <div className="flex items-end">
+                <Button
+                  aria-label={`Remover item ${index + 1}`}
+                  disabled={items.length === 1}
+                  onClick={() => removeItem(item.id)}
+                  size="icon"
+                  type="button"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              {itemConversionPreview ? (
+                <p className="rounded-md border bg-background p-2 text-sm text-muted-foreground sm:col-span-4">
+                  {itemConversionPreview}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
+        <Button
+          disabled={!availableProducts.length}
+          onClick={addItem}
+          type="button"
+          variant="outline"
+        >
+          <Plus className="h-4 w-4" />
+          Adicionar item
+        </Button>
+      </div>
+      <FormField>
+        <Label htmlFor="warehouse-request-date">Data da movimentação</Label>
+        <Input
+          id="warehouse-request-date"
+          onChange={(event) => setMovementDate(event.target.value)}
+          required
+          type="datetime-local"
+          value={movementDate}
+        />
+      </FormField>
+      <FormField>
+        <Label htmlFor="warehouse-request-observation">Observação</Label>
+        <Textarea
+          id="warehouse-request-observation"
+          onChange={(event) => setObservation(event.target.value)}
+          value={observation}
+        />
+      </FormField>
+      <Button disabled={!validItems.length || saving} type="submit">
+        <PackagePlus className="h-4 w-4" />
+        {saving ? "Enviando..." : "Enviar solicitação"}
+      </Button>
+    </Form>
+  );
+}
+
 function MovementForm({
   initialProductId = "",
   kind,
@@ -949,7 +1308,16 @@ function MovementDialog({
             <DialogTitle>{dialogLabel}</DialogTitle>
             <DialogDescription>{props.warehouse.name}</DialogDescription>
           </DialogHeader>
-          <MovementForm {...props} />
+          {props.kind === "entryRequest" ? (
+            <WarehouseEntryRequestForm
+              onSaved={props.onSaved}
+              onSubmitted={() => setOpen(false)}
+              products={props.products}
+              warehouse={props.warehouse}
+            />
+          ) : (
+            <MovementForm {...props} />
+          )}
         </DialogContent>
       </Dialog>
     </>
@@ -2461,6 +2829,7 @@ export function WarehouseTabs({
           activeTab === "stock" &&
           !warehouse.isGeneral ? (
             <MovementDialog
+              disabled={!stockedProducts.length}
               kind="entryRequest"
               onSaved={onMovementSaved}
               products={stockedProducts}

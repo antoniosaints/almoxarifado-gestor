@@ -112,6 +112,24 @@ const outsideProduct: Product = {
   unitId: "unit",
 };
 
+const warehouseWithMultipleStocks: Warehouse = {
+  ...warehouseWithStock,
+  stocks: [
+    warehouseWithStock.stocks[0],
+    {
+      currentQuantity: 3,
+      id: "health-clips",
+      lastMovementAt: null,
+      minimumQuantity: 1,
+      product: createdProduct,
+      productId: createdProduct.id,
+      totalValue: 30,
+      unitPriceAverage: 10,
+      warehouseId: "health",
+    },
+  ],
+};
+
 const generalWarehouseWithStock: Warehouse = {
   ...warehouseWithStock,
   id: "central",
@@ -323,8 +341,79 @@ describe("WarehouseTabs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Solicitar" }));
     fireEvent.click(screen.getByRole("button", { name: "Produto" }));
 
-    expect(screen.getByText("0000001 - Papel A4")).toBeInTheDocument();
+    expect(screen.getAllByText("0000001 - Papel A4").length).toBeGreaterThan(0);
     expect(screen.queryByText("0000003 - Detergente")).not.toBeInTheDocument();
+  });
+
+  it("sends multiple stocked items when requesting from a warehouse", async () => {
+    let requestPayload: unknown;
+    const onMovementSaved = vi.fn(async () => undefined);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/entry-requests" && init?.method === "POST") {
+        requestPayload = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({ id: "warehouse-request" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+
+      return new Response(JSON.stringify([]), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "operator-token",
+            user: {
+              email: "operador@prefeitura.local",
+              id: "operator",
+              name: "Operador",
+              role: "OPERATOR",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={onMovementSaved}
+            onStockDeleted={() => Promise.resolve()}
+            products={[]}
+            warehouse={warehouseWithMultipleStocks}
+            warehouses={[warehouseWithMultipleStocks]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openStockTab();
+
+    fireEvent.click(screen.getByRole("button", { name: "Solicitar" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Solicitar" });
+    expect(within(dialog).queryByLabelText("Almoxarifado destino")).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Adicionar item" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Produto 2" }));
+    fireEvent.click(screen.getByText("0000002 - Clips galvanizado"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitação" }));
+
+    await waitFor(() => expect(onMovementSaved).toHaveBeenCalled());
+    expect(requestPayload).toMatchObject({
+      items: [
+        { productId: "paper", quantity: 1, unitId: "ream" },
+        { productId: "new-paper", quantity: 1, unitId: "box" },
+      ],
+      productId: "paper",
+      quantity: 1,
+      warehouseId: "health",
+    });
   });
 
   it("only offers products with available stock for transfers from the general warehouse", () => {

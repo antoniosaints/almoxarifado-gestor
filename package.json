@@ -15,6 +15,7 @@
     "db:validate": "pnpm --filter @almoxarifado/backend db:validate",
     "db:status": "pnpm --filter @almoxarifado/backend db:status",
     "db:deploy": "pnpm --filter @almoxarifado/backend db:deploy",
+    "db:deploy:force": "pnpm --filter @almoxarifado/backend db:deploy:force",
     "db:migrate": "pnpm --filter @almoxarifado/backend db:migrate",
     "db:migration:create": "pnpm --filter @almoxarifado/backend db:migration:create",
     "db:push": "pnpm --filter @almoxarifado/backend db:push",
