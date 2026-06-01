@@ -12,6 +12,7 @@
     "test": "pnpm -r test",
     "db:prepare": "pnpm --filter @almoxarifado/backend db:prepare",
     "db:generate": "pnpm --filter @almoxarifado/backend db:generate",
+    "db:deploy": "pnpm --filter @almoxarifado/backend db:deploy",
     "db:migrate": "pnpm --filter @almoxarifado/backend db:migrate",
     "db:push": "pnpm --filter @almoxarifado/backend db:push",
     "db:seed": "pnpm --filter @almoxarifado/backend db:seed"

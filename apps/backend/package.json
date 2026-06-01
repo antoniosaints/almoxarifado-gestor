@@ -10,6 +10,7 @@
     "db:prepare": "node scripts/prepare-prisma-schema.mjs",
     "db:generate": "pnpm db:prepare && prisma generate --schema prisma/schema.generated.prisma",
     "db:migrate": "pnpm db:prepare && prisma migrate dev --schema prisma/schema.generated.prisma",
+    "db:deploy": "pnpm db:prepare && prisma migrate deploy --schema prisma/schema.generated.prisma",
     "db:push": "pnpm db:prepare && prisma db push --schema prisma/schema.generated.prisma",
     "db:seed": "pnpm db:prepare && prisma db seed --schema prisma/schema.generated.prisma"
   },
