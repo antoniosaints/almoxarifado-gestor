@@ -115,6 +115,9 @@ describe("ProductConversionsDialog", () => {
 
     fireEvent.click(screen.getByLabelText("Configurar conversões de Papel A4"));
     fireEvent.click(screen.getByRole("button", { name: "Nova conversão" }));
+
+    expect(screen.getByRole("dialog", { name: "Nova conversão" })).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Unidade de entrada ou saída" }));
     fireEvent.click(screen.getByText("Caixa / CX"));
     fireEvent.change(screen.getByLabelText("Equivale a"), {

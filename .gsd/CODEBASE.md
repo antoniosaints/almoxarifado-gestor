@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-06-01T17:27:54Z | Files: 259 | Described: 0/259
-<!-- gsd:codebase-meta {"generatedAt":"2026-06-01T17:27:54Z","fingerprint":"e1aa7ff5968f574e6c80b10a1acb302c9a6f7e04","fileCount":259,"truncated":false} -->
+Generated: 2026-06-01T18:09:05Z | Files: 264 | Described: 0/264
+<!-- gsd:codebase-meta {"generatedAt":"2026-06-01T18:09:05Z","fingerprint":"8aa32546d9f0852d41da4af028b0b306ea9e9db1","fileCount":264,"truncated":false} -->
 
 ### (root)/
 - `.gitignore`
@@ -67,6 +67,7 @@ Generated: 2026-06-01T17:27:54Z | Files: 259 | Described: 0/259
 - `apps/backend/vitest.config.ts`
 
 ### apps/backend/prisma/
+- `apps/backend/prisma/migration-safety-baseline.json`
 - `apps/backend/prisma/schema.prisma`
 - `apps/backend/prisma/seed.ts`
 
@@ -163,8 +164,14 @@ Generated: 2026-06-01T17:27:54Z | Files: 259 | Described: 0/259
 ### apps/backend/prisma/migrations/20260601100000_permission_profiles/
 - `apps/backend/prisma/migrations/20260601100000_permission_profiles/migration.sql`
 
+### apps/backend/prisma/migrations/20260601113101_atualizacao_permissoes_fix/
+- `apps/backend/prisma/migrations/20260601113101_atualizacao_permissoes_fix/migration.sql`
+
 ### apps/backend/scripts/
 - `apps/backend/scripts/prepare-prisma-schema.mjs`
+- `apps/backend/scripts/prisma-command.mjs`
+- `apps/backend/scripts/prisma-env.mjs`
+- `apps/backend/scripts/validate-prisma-migrations.mjs`
 
 ### apps/backend/src/
 - `apps/backend/src/app.test.ts`

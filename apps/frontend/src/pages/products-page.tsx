@@ -164,6 +164,7 @@ export function ProductConversionsDialog({
     product.unitConversions ?? [],
   );
   const [message, setMessage] = useState<string | null>(null);
+  const [editorMessage, setEditorMessage] = useState<string | null>(null);
   const conversionOptions = units
     .filter(
       (unit) =>
@@ -181,6 +182,7 @@ export function ProductConversionsDialog({
 
   function newDraft() {
     setMessage(null);
+    setEditorMessage(null);
     setDraft({
       active: true,
       factorToBase: "",
@@ -190,6 +192,7 @@ export function ProductConversionsDialog({
 
   function editDraft(conversion: UnitConversion) {
     setMessage(null);
+    setEditorMessage(null);
     setDraft({
       active: conversion.active,
       factorToBase: String(conversion.factorToBase),
@@ -205,7 +208,7 @@ export function ProductConversionsDialog({
       return;
     }
 
-    setMessage(null);
+    setEditorMessage(null);
 
     try {
       const saved = await api<UnitConversion>(
@@ -230,9 +233,10 @@ export function ProductConversionsDialog({
 
       setConversions(nextConversions);
       setDraft(null);
+      setEditorMessage(null);
       await onChanged(nextConversions);
     } catch (caughtError) {
-      setMessage(
+      setEditorMessage(
         caughtError instanceof Error
           ? caughtError.message
           : "Falha ao salvar conversão.",
@@ -254,6 +258,7 @@ export function ProductConversionsDialog({
       setConversions(nextConversions);
       if (draft?.id === conversion.id) {
         setDraft(null);
+        setEditorMessage(null);
       }
       await onChanged(nextConversions);
     } catch (caughtError) {
@@ -272,6 +277,7 @@ export function ProductConversionsDialog({
         onClick={() => {
           setConversions(product.unitConversions ?? []);
           setDraft(null);
+          setEditorMessage(null);
           setMessage(null);
           setOpen(true);
         }}
@@ -360,59 +366,84 @@ export function ProductConversionsDialog({
                 ].join(" ")
               }
             />
-            {draft ? (
-              <Form onSubmit={saveConversion}>
-                <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                  <FormField>
-                    <Label htmlFor="product-conversion-unit">
-                      Unidade de entrada ou saída
-                    </Label>
-                    <SearchSelect
-                      ariaLabel="Unidade de entrada ou saída"
-                      id="product-conversion-unit"
-                      onValueChange={(fromUnitId) =>
-                        setDraft({ ...draft, fromUnitId })
-                      }
-                      options={conversionOptions}
-                      placeholder="Selecione"
-                      value={draft.fromUnitId}
-                    />
-                  </FormField>
-                  <FormField>
-                    <Label htmlFor="product-conversion-factor">Equivale a</Label>
-                    <Input
-                      id="product-conversion-factor"
-                      min="0.000001"
-                      onChange={(event) =>
-                        setDraft({ ...draft, factorToBase: event.target.value })
-                      }
-                      required
-                      step="any"
-                      type="number"
-                      value={draft.factorToBase}
-                    />
-                  </FormField>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  1 unidade escolhida será registrada como o fator informado em{" "}
-                  {product.unit.abbreviation}.
-                </p>
-                <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
-                  <input
-                    checked={draft.active}
-                    onChange={(event) =>
-                      setDraft({ ...draft, active: event.target.checked })
-                    }
-                    type="checkbox"
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        onOpenChange={(editorOpen) => {
+          if (!editorOpen) {
+            setDraft(null);
+            setEditorMessage(null);
+          }
+        }}
+        open={Boolean(draft)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {draft?.id ? "Editar conversão" : "Nova conversão"}
+            </DialogTitle>
+            <DialogDescription>
+              Informe como a unidade alternativa deve ser convertida para{" "}
+              {product.unit.abbreviation}.
+            </DialogDescription>
+          </DialogHeader>
+          {draft ? (
+            <Form onSubmit={saveConversion}>
+              {editorMessage ? <ResourceError message={editorMessage} /> : null}
+              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                <FormField>
+                  <Label htmlFor="product-conversion-unit">
+                    Unidade de entrada ou saída
+                  </Label>
+                  <SearchSelect
+                    ariaLabel="Unidade de entrada ou saída"
+                    id="product-conversion-unit"
+                    onValueChange={(fromUnitId) => setDraft({ ...draft, fromUnitId })}
+                    options={conversionOptions}
+                    placeholder="Selecione"
+                    value={draft.fromUnitId}
                   />
-                  Conversão ativa
-                </label>
+                </FormField>
+                <FormField>
+                  <Label htmlFor="product-conversion-factor">Equivale a</Label>
+                  <Input
+                    id="product-conversion-factor"
+                    min="0.000001"
+                    onChange={(event) =>
+                      setDraft({ ...draft, factorToBase: event.target.value })
+                    }
+                    required
+                    step="any"
+                    type="number"
+                    value={draft.factorToBase}
+                  />
+                </FormField>
+              </div>
+              <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                1 unidade escolhida será registrada como o fator informado em{" "}
+                {product.unit.abbreviation}.
+              </p>
+              <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                <input
+                  checked={draft.active}
+                  onChange={(event) =>
+                    setDraft({ ...draft, active: event.target.checked })
+                  }
+                  type="checkbox"
+                />
+                Conversão ativa
+              </label>
+              <div className="flex justify-end gap-2">
+                <Button onClick={() => setDraft(null)} type="button" variant="outline">
+                  Cancelar
+                </Button>
                 <Button disabled={!draft.fromUnitId} type="submit">
                   Salvar conversão
                 </Button>
-              </Form>
-            ) : null}
-          </div>
+              </div>
+            </Form>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>
