@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { OfficeLetterDocument } from "@/components/domain/office-letter-document";
 import { api, useApiResource } from "@/lib/api";
 import { openOfficeLetterPrintWindow } from "@/lib/office-letter";
+import { hasPermission } from "@/lib/permissions";
 import { useSession } from "@/lib/session";
 import type {
   EntryRequest,
@@ -1138,6 +1139,8 @@ export function RequestsPage() {
     text: string;
   } | null>(null);
   const admin = session?.user.role === "ADMIN";
+  const canApproveRequests = hasPermission(session?.user, "APPROVE_REQUESTS");
+  const canApproveTransfers = hasPermission(session?.user, "APPROVE_TRANSFERS");
 
   async function approve(
     requestId: string,
@@ -1194,6 +1197,22 @@ export function RequestsPage() {
     }
   }
 
+  async function cancelTransfer(requestId: string) {
+    try {
+      await api(`/transfer-requests/${requestId}/cancel`, { method: "POST" });
+      setMessage({ error: false, text: "Transferencia cancelada." });
+      await transfers.reload();
+    } catch (caughtError) {
+      setMessage({
+        error: true,
+        text:
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Falha ao cancelar transferencia.",
+      });
+    }
+  }
+
   async function requestCreated() {
     setMessage({ error: false, text: "Solicitação enviada." });
     await entries.reload();
@@ -1208,12 +1227,17 @@ export function RequestsPage() {
     entries.loading ||
     transfers.loading ||
     warehouses.loading ||
-    (admin && invoices.loading)
+    (canApproveRequests && invoices.loading)
   ) {
     return <LoadingLine />;
   }
 
-  if (entries.error || transfers.error || warehouses.error || (admin && invoices.error)) {
+  if (
+    entries.error ||
+    transfers.error ||
+    warehouses.error ||
+    (canApproveRequests && invoices.error)
+  ) {
     return (
       <ResourceError
         message={
@@ -1328,7 +1352,7 @@ export function RequestsPage() {
                         Almoxarifado
                       </Link>
                     </Button>
-                    {admin && request.status === "PENDING" ? (
+                    {canApproveRequests && request.status === "PENDING" ? (
                       <>
                         <ApprovalDialog
                           invoices={invoices.data}
@@ -1421,8 +1445,18 @@ export function RequestsPage() {
                         Destino
                       </Link>
                     </Button>
-                    {request.status === "PENDING_RECEIPT" ? (
-                      <ReceiveDialog onReceive={receive} request={request} />
+                    {canApproveTransfers && request.status === "PENDING_RECEIPT" ? (
+                      <>
+                        <ReceiveDialog onReceive={receive} request={request} />
+                        <Button
+                          onClick={() => void cancelTransfer(request.id)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          <X className="h-4 w-4" />
+                          Cancelar
+                        </Button>
+                      </>
                     ) : null}
                   </div>
                 ),

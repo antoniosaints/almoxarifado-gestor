@@ -7,6 +7,7 @@ import { Prisma, UserRole } from "@prisma/client";
 import { ZodError } from "zod";
 import { verifyAccessToken, type SessionUser } from "./auth.js";
 import { AppError } from "./errors.js";
+import { permissionsFromProfile, type AppPermission } from "./permissions.js";
 import { prisma } from "./prisma.js";
 
 export function asyncHandler(handler: RequestHandler): RequestHandler {
@@ -30,6 +31,18 @@ export const authenticate = asyncHandler(async (request, response, next) => {
       email: true,
       id: true,
       name: true,
+      permissionProfile: {
+        select: {
+          active: true,
+          id: true,
+          name: true,
+          permissions: {
+            select: {
+              key: true,
+            },
+          },
+        },
+      },
       role: true,
     },
   });
@@ -42,6 +55,14 @@ export const authenticate = asyncHandler(async (request, response, next) => {
     email: user.email,
     id: user.id,
     name: user.name,
+    permissions: permissionsFromProfile(user.role, user.permissionProfile),
+    permissionProfile:
+      user.role === UserRole.OPERATOR && user.permissionProfile
+        ? {
+            id: user.permissionProfile.id,
+            name: user.permissionProfile.name,
+          }
+        : null,
     role: user.role,
   } satisfies SessionUser;
 
@@ -62,6 +83,22 @@ export function requireRole(...roles: UserRole[]): RequestHandler {
   return (_request, response, next) => {
     if (!roles.includes(currentUser(response).role)) {
       next(new AppError(403, "Você não tem permissão para esta ação."));
+      return;
+    }
+
+    next();
+  };
+}
+
+export function requirePermission(permission: AppPermission): RequestHandler {
+  return (_request, response, next) => {
+    const user = currentUser(response);
+
+    if (
+      user.role !== UserRole.ADMIN &&
+      !user.permissions.includes(permission)
+    ) {
+      next(new AppError(403, "Voce nao tem permissao para esta acao."));
       return;
     }
 

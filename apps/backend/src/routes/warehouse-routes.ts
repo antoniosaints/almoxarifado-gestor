@@ -1,7 +1,10 @@
-import { UserRole } from "@prisma/client";
 import { Router } from "express";
-import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
-import { assertWarehouseAccess, warehouseScope } from "../lib/permissions.js";
+import { asyncHandler, currentUser, requirePermission } from "../lib/http.js";
+import {
+  assertPermission,
+  assertWarehouseAccess,
+  warehouseScope,
+} from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import {
   importWarehouseCsv,
@@ -126,6 +129,10 @@ warehouseRoutes.post(
     const input = warehouseCsvImportInput.parse(request.body);
     await assertWarehouseAccess(prisma, user, warehouseId);
 
+    if (input.rows.some((row) => row.createProduct)) {
+      assertPermission(user, "CREATE_PRODUCTS");
+    }
+
     response.status(201).json(
       await importWarehouseCsv(prisma, {
         ...input,
@@ -174,7 +181,7 @@ warehouseRoutes.get(
 
 warehouseRoutes.post(
   "/",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_WAREHOUSES"),
   asyncHandler(async (request, response) => {
     const data = warehouseInput.parse(request.body);
     response.status(201).json(await createWarehouse(prisma, data));
@@ -183,7 +190,7 @@ warehouseRoutes.post(
 
 warehouseRoutes.put(
   "/:id",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_WAREHOUSES"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const data = warehouseInput.parse(request.body);
@@ -193,7 +200,7 @@ warehouseRoutes.put(
 
 warehouseRoutes.delete(
   "/:id",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_WAREHOUSES"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     await prisma.warehouse.delete({ where: { id } });

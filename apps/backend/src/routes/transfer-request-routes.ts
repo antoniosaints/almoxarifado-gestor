@@ -1,9 +1,12 @@
 import { UserRole } from "@prisma/client";
 import { Router } from "express";
-import { asyncHandler, currentUser } from "../lib/http.js";
+import { asyncHandler, currentUser, requirePermission } from "../lib/http.js";
 import { assertWarehouseAccess, warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
-import { receiveTransferRequest } from "../services/transfer-request-service.js";
+import {
+  cancelTransferRequest,
+  receiveTransferRequest,
+} from "../services/transfer-request-service.js";
 import { productConversionsInclude } from "../services/unit-conversion-service.js";
 import { idParam } from "../validators/inputs.js";
 
@@ -65,6 +68,7 @@ transferRequestRoutes.get(
 
 transferRequestRoutes.post(
   "/:id/receive",
+  requirePermission("APPROVE_TRANSFERS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const user = currentUser(response);
@@ -80,6 +84,30 @@ transferRequestRoutes.post(
     response.json(
       await receiveTransferRequest(prisma, {
         receivedById: user.id,
+        requestId: id,
+      }),
+    );
+  }),
+);
+
+transferRequestRoutes.post(
+  "/:id/cancel",
+  requirePermission("APPROVE_TRANSFERS"),
+  asyncHandler(async (request, response) => {
+    const { id } = idParam.parse(request.params);
+    const user = currentUser(response);
+    const transfer = await prisma.transferRequest.findUniqueOrThrow({
+      where: { id },
+      select: {
+        destinationWarehouseId: true,
+      },
+    });
+
+    await assertWarehouseAccess(prisma, user, transfer.destinationWarehouseId);
+
+    response.json(
+      await cancelTransferRequest(prisma, {
+        cancelledById: user.id,
         requestId: id,
       }),
     );

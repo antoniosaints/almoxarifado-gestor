@@ -29,8 +29,10 @@ import { UsersPage } from "@/pages/users-page";
 import { SettingsPage } from "@/pages/settings-page";
 import { WarehouseDetailPage } from "@/pages/warehouse-detail-page";
 import { WarehousesPage } from "@/pages/warehouses-page";
+import { hasPermission } from "@/lib/permissions";
 import { useSession } from "@/lib/session";
 import { isFleetSystem, isManagerSystem, isSiteSystem } from "@/lib/system-mode";
+import type { AppPermission } from "@/lib/types";
 
 function ProtectedLayout() {
   const { session } = useSession();
@@ -56,6 +58,24 @@ function AdminRoute({
   const { session } = useSession();
 
   if (session?.user.role !== "ADMIN") {
+    return <Navigate replace to={redirectTo} />;
+  }
+
+  return children;
+}
+
+function PermissionRoute({
+  children,
+  permission,
+  redirectTo = "/dashboard",
+}: {
+  children: React.ReactNode;
+  permission: AppPermission;
+  redirectTo?: string;
+}) {
+  const { session } = useSession();
+
+  if (!hasPermission(session?.user, permission)) {
     return <Navigate replace to={redirectTo} />;
   }
 
@@ -167,9 +187,9 @@ export function App() {
               <Route element={<DashboardPage />} path="/dashboard" />
               <Route
                 element={
-                  <AdminRoute>
+                  <PermissionRoute permission="VIEW_INSIGHTS">
                     <InsightsPage />
-                  </AdminRoute>
+                  </PermissionRoute>
                 }
                 path="/insights"
               />
@@ -177,25 +197,25 @@ export function App() {
               <Route element={<WarehouseDetailPage />} path="/warehouses/:warehouseId" />
               <Route
                 element={
-                  <AdminRoute>
+                  <PermissionRoute permission="ACCESS_PRODUCTS">
                     <ProductsPage />
-                  </AdminRoute>
+                  </PermissionRoute>
                 }
                 path="/products"
               />
               <Route
                 element={
-                  <AdminRoute>
+                  <PermissionRoute permission="MANAGE_CATEGORIES">
                     <CategoriesPage />
-                  </AdminRoute>
+                  </PermissionRoute>
                 }
                 path="/categories"
               />
               <Route
                 element={
-                  <AdminRoute>
+                  <PermissionRoute permission="MANAGE_UNITS">
                     <UnitsPage />
-                  </AdminRoute>
+                  </PermissionRoute>
                 }
                 path="/units"
               />
@@ -205,17 +225,17 @@ export function App() {
               <Route element={<RequestsPage />} path="/requests" />
               <Route
                 element={
-                  <AdminRoute>
+                  <PermissionRoute permission="MANAGE_USERS">
                     <UsersPage />
-                  </AdminRoute>
+                  </PermissionRoute>
                 }
                 path="/users"
               />
               <Route
                 element={
-                  <AdminRoute>
+                  <PermissionRoute permission="MANAGE_SETTINGS">
                     <SettingsPage />
-                  </AdminRoute>
+                  </PermissionRoute>
                 }
                 path="/settings"
               />

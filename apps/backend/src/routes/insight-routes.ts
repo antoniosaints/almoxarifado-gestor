@@ -1,11 +1,11 @@
-import { RequestStatus, TransferRequestStatus, UserRole } from "@prisma/client";
+import { RequestStatus, TransferRequestStatus } from "@prisma/client";
 import { Router } from "express";
-import { asyncHandler, requireRole } from "../lib/http.js";
+import { asyncHandler, requirePermission } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 
 export const insightRoutes = Router();
 
-insightRoutes.use(requireRole(UserRole.ADMIN));
+insightRoutes.use(requirePermission("VIEW_INSIGHTS"));
 
 insightRoutes.get(
   "/",

@@ -42,6 +42,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { api, useApiResource } from "@/lib/api";
 import { resolveAssetUrl } from "@/lib/assets";
+import { hasPermission } from "@/lib/permissions";
 import { useRouteLoading } from "@/lib/route-loading";
 import { useSession } from "@/lib/session";
 import {
@@ -51,7 +52,7 @@ import {
   systemModeLabel,
 } from "@/lib/system-mode";
 import { useSystemSettings } from "@/lib/system-settings";
-import type { LicenseStatus, UserRole } from "@/lib/types";
+import type { AppPermission, LicenseStatus, User, UserRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const initialLicenseStatus: LicenseStatus = {
@@ -68,40 +69,38 @@ const initialLicenseStatus: LicenseStatus = {
   warningLevel: "none",
 };
 
-const operationItems = [
+type NavigationItem = {
+  icon: typeof Boxes;
+  label: string;
+  permission?: AppPermission;
+  role?: UserRole;
+  to: string;
+};
+
+const operationItems: NavigationItem[] = [
   { icon: Layers3, label: "Dashboard", to: "/dashboard" },
-  { icon: BarChart3, label: "Insights", role: "ADMIN", to: "/insights" },
+  { icon: BarChart3, label: "Insights", permission: "VIEW_INSIGHTS", to: "/insights" },
   { icon: Boxes, label: "Almoxarifados", to: "/warehouses" },
-  { icon: PackageSearch, label: "Produtos", role: "ADMIN", to: "/products" },
-  { icon: Tags, label: "Categorias", role: "ADMIN", to: "/categories" },
-  { icon: Ruler, label: "Unidades", role: "ADMIN", to: "/units" },
+  { icon: PackageSearch, label: "Produtos", permission: "ACCESS_PRODUCTS", to: "/products" },
+  { icon: Tags, label: "Categorias", permission: "MANAGE_CATEGORIES", to: "/categories" },
+  { icon: Ruler, label: "Unidades", permission: "MANAGE_UNITS", to: "/units" },
   { icon: FileText, label: "Notas fiscais", to: "/invoices" },
   { icon: FileDown, label: "Relatórios", to: "/reports" },
   { icon: ClipboardList, label: "Solicitações", to: "/requests" },
   { icon: ClipboardCheck, label: "Movimentações", to: "/movements" },
-  { icon: UsersRound, label: "Usuários", role: "ADMIN", to: "/users" },
-  { icon: Settings, label: "Configurações", role: "ADMIN", to: "/settings" },
-] satisfies Array<{
-  icon: typeof Boxes;
-  label: string;
-  role?: UserRole;
-  to: string;
-}>;
+  { icon: UsersRound, label: "Usuários", permission: "MANAGE_USERS", to: "/users" },
+  { icon: Settings, label: "Configurações", permission: "MANAGE_SETTINGS", to: "/settings" },
+];
 
-const managerItems = [
+const managerItems: NavigationItem[] = [
   { icon: Layers3, label: "Dashboard", to: "/dashboard" },
   { icon: Building2, label: "Assinantes", role: "ADMIN", to: "/subscribers" },
   { icon: CreditCard, label: "Faturamento", role: "ADMIN", to: "/billing" },
   { icon: KeyRound, label: "Licenças", role: "ADMIN", to: "/licenses" },
   { icon: Settings, label: "Configurações", role: "ADMIN", to: "/settings" },
-] satisfies Array<{
-  icon: typeof Boxes;
-  label: string;
-  role?: UserRole;
-  to: string;
-}>;
+];
 
-const fleetItems = [
+const fleetItems: NavigationItem[] = [
   { icon: Layers3, label: "Dashboard", to: "/dashboard" },
   { icon: Boxes, label: "Veículos", to: "/vehicles" },
   { icon: UsersRound, label: "Motoristas", to: "/drivers" },
@@ -109,14 +108,9 @@ const fleetItems = [
   { icon: Bell, label: "Alertas", to: "/alerts" },
   { icon: FileDown, label: "Relatórios", to: "/reports" },
   { icon: Settings, label: "Configurações", role: "ADMIN", to: "/settings" },
-] satisfies Array<{
-  icon: typeof Boxes;
-  label: string;
-  role?: UserRole;
-  to: string;
-}>;
+];
 
-const siteItems = [
+const siteItems: NavigationItem[] = [
   { icon: Layers3, label: "Site", role: "ADMIN", to: "/admin" },
   { icon: Settings, label: "Identidade", role: "ADMIN", to: "/admin/identity" },
   { icon: Image, label: "Banners", role: "ADMIN", to: "/admin/banners" },
@@ -127,12 +121,7 @@ const siteItems = [
   { icon: HelpCircle, label: "FAQ", role: "ADMIN", to: "/admin/faq" },
   { icon: MessageCircle, label: "Contato", role: "ADMIN", to: "/admin/contact" },
   { icon: Settings, label: "Configurações", role: "ADMIN", to: "/settings" },
-] satisfies Array<{
-  icon: typeof Boxes;
-  label: string;
-  role?: UserRole;
-  to: string;
-}>;
+];
 
 const items = isManagerSystem
   ? managerItems
@@ -142,14 +131,20 @@ const items = isManagerSystem
       ? fleetItems
       : operationItems;
 
-function navigationItems(role: UserRole) {
-  return items.filter((item) => !item.role || item.role === role);
+function navigationItems(user: User | null | undefined) {
+  const role = user?.role ?? "OPERATOR";
+
+  return items.filter(
+    (item) =>
+      (!item.role || item.role === role) &&
+      (!item.permission || hasPermission(user, item.permission)),
+  );
 }
 
-function Navigation({ role }: { role: UserRole }) {
+function Navigation({ user }: { user: User | null | undefined }) {
   return (
     <nav className="grid gap-1">
-      {navigationItems(role).map(({ icon: Icon, label, to }) => (
+      {navigationItems(user).map(({ icon: Icon, label, to }) => (
         <NavLink
           className={({ isActive }) =>
             cn(
@@ -312,7 +307,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const routeLoading = useRouteLoading();
   const location = useLocation();
   const navigate = useNavigate();
-  const role = session?.user.role ?? "OPERATOR";
   const routeKey = `${location.pathname}${location.search}`;
   const notificationsEnabled = !isManagerSystem && !isFleetSystem && !isSiteSystem;
   const licenseStatusEnabled = !isManagerSystem && !isSiteSystem;
@@ -326,7 +320,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [licenseRefreshError, setLicenseRefreshError] = useState<string | null>(null);
   const [refreshingLicense, setRefreshingLicense] = useState(false);
   const title =
-    [...navigationItems(role)]
+    [...navigationItems(session?.user)]
       .sort((left, right) => right.to.length - left.to.length)
       .find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`))
       ?.label ??
@@ -456,7 +450,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <Separator />
         <div className="flex-1 p-4">
-          <Navigation role={role} />
+          <Navigation user={session?.user} />
         </div>
       </aside>
 
@@ -478,7 +472,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </p>
                   <p className="text-sm text-muted-foreground">{systemModeLabel}</p>
                 </div>
-                <Navigation role={role} />
+                <Navigation user={session?.user} />
               </SheetContent>
             </Sheet>
             <div>

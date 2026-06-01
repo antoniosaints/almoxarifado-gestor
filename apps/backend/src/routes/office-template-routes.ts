@@ -1,7 +1,6 @@
-import { UserRole } from "@prisma/client";
 import { Router } from "express";
 import { AppError } from "../lib/errors.js";
-import { asyncHandler, requireRole } from "../lib/http.js";
+import { asyncHandler, requirePermission } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import {
   extractOfficeTemplateVariables,
@@ -11,7 +10,7 @@ import {
 
 export const officeTemplateRoutes = Router();
 
-officeTemplateRoutes.use(requireRole(UserRole.ADMIN));
+officeTemplateRoutes.use(requirePermission("MANAGE_SETTINGS"));
 
 function parseTemplate(template: { variables: string }) {
   return {

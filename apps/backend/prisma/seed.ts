@@ -5,6 +5,7 @@ import {
   restoreDefaultUnits,
   restoreDefaultWarehouseCategories,
 } from "../src/services/default-catalog-service.js";
+import { ensureDefaultOperatorPermissionProfile } from "../src/services/permission-profile-service.js";
 
 const prisma = new PrismaClient();
 
@@ -82,11 +83,13 @@ async function main() {
       }),
     ]);
 
+  const operatorProfile = await ensureDefaultOperatorPermissionProfile(prisma);
   const operator = await prisma.user.upsert({
     where: { email: "operador.saude@prefeitura.local" },
     update: {
       name: "Operador da Saude",
       passwordHash: await hashPassword("operador123"),
+      permissionProfileId: operatorProfile.id,
       role: UserRole.OPERATOR,
       active: true,
     },
@@ -94,6 +97,7 @@ async function main() {
       email: "operador.saude@prefeitura.local",
       name: "Operador da Saude",
       passwordHash: await hashPassword("operador123"),
+      permissionProfileId: operatorProfile.id,
       role: UserRole.OPERATOR,
     },
   });

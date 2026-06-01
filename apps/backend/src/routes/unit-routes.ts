@@ -1,6 +1,5 @@
-import { UserRole } from "@prisma/client";
 import { Router } from "express";
-import { asyncHandler, requireRole } from "../lib/http.js";
+import { asyncHandler, requirePermission } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import { idParam, unitInput } from "../validators/inputs.js";
 
@@ -15,7 +14,7 @@ unitRoutes.get(
 
 unitRoutes.post(
   "/",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_UNITS"),
   asyncHandler(async (request, response) => {
     const data = unitInput.parse(request.body);
     response.status(201).json(await prisma.unitOfMeasure.create({ data }));
@@ -24,7 +23,7 @@ unitRoutes.post(
 
 unitRoutes.put(
   "/:id",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_UNITS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const data = unitInput.parse(request.body);
@@ -34,7 +33,7 @@ unitRoutes.put(
 
 unitRoutes.delete(
   "/:id",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_UNITS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     await prisma.unitOfMeasure.delete({ where: { id } });

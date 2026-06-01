@@ -1,13 +1,38 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import type { PrismaClient, User } from "@prisma/client";
+import { UserRole, type Prisma, type PrismaClient } from "@prisma/client";
 import { createAccessToken, type SessionUser } from "../lib/auth.js";
 import { AppError } from "../lib/errors.js";
+import { permissionsFromProfile } from "../lib/permissions.js";
 
-function sessionUser(user: User): SessionUser {
+const sessionUserInclude = {
+  permissionProfile: {
+    include: {
+      permissions: {
+        orderBy: { key: "asc" },
+      },
+    },
+  },
+} satisfies Prisma.UserInclude;
+
+type UserWithSessionProfile = Prisma.UserGetPayload<{
+  include: typeof sessionUserInclude;
+}>;
+
+function sessionUser(user: UserWithSessionProfile): SessionUser {
+  const permissionProfile =
+    user.role === UserRole.OPERATOR && user.permissionProfile
+      ? {
+          id: user.permissionProfile.id,
+          name: user.permissionProfile.name,
+        }
+      : null;
+
   return {
     id: user.id,
     name: user.name,
     email: user.email,
+    permissions: permissionsFromProfile(user.role, user.permissionProfile),
+    permissionProfile,
     role: user.role,
   };
 }
@@ -42,6 +67,7 @@ export async function loginWithPassword(
   password: string,
 ) {
   const user = await prisma.user.findUnique({
+    include: sessionUserInclude,
     where: { email: email.trim().toLowerCase() },
   });
 

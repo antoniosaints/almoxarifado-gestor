@@ -1,7 +1,7 @@
 import { UserRole } from "@prisma/client";
 import { Router } from "express";
 import { AppError } from "../lib/errors.js";
-import { asyncHandler, requireRole } from "../lib/http.js";
+import { asyncHandler, requirePermission, requireRole } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import {
   importProductsCsv,
@@ -53,7 +53,7 @@ productRoutes.get(
 
 productRoutes.post(
   "/import-csv/preview",
-  requireRole(UserRole.ADMIN),
+  requirePermission("IMPORT_PRODUCTS_CSV"),
   asyncHandler(async (request, response) => {
     const input = productCsvPreviewInput.parse(request.body);
 
@@ -63,7 +63,7 @@ productRoutes.post(
 
 productRoutes.post(
   "/import-csv",
-  requireRole(UserRole.ADMIN),
+  requirePermission("IMPORT_PRODUCTS_CSV"),
   asyncHandler(async (request, response) => {
     const input = productCsvImportInput.parse(request.body);
 
@@ -106,7 +106,7 @@ productRoutes.get(
 
 productRoutes.post(
   "/:id/unit-conversions",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_UNIT_CONVERSIONS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const data = unitConversionInput.parse(request.body);
@@ -116,7 +116,7 @@ productRoutes.post(
 
 productRoutes.put(
   "/:id/unit-conversions/:conversionId",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_UNIT_CONVERSIONS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const conversionId = routeParam(request.params.conversionId);
@@ -127,7 +127,7 @@ productRoutes.put(
 
 productRoutes.delete(
   "/:id/unit-conversions/:conversionId",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_UNIT_CONVERSIONS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const conversionId = routeParam(request.params.conversionId);
@@ -138,6 +138,7 @@ productRoutes.delete(
 
 productRoutes.post(
   "/",
+  requirePermission("CREATE_PRODUCTS"),
   asyncHandler(async (request, response) => {
     const data = productInput.parse(request.body);
     response.status(201).json(await createProduct(prisma, data));

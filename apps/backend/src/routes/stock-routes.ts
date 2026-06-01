@@ -1,7 +1,7 @@
 import { MovementType, Prisma, UserRole } from "@prisma/client";
 import { Router } from "express";
 import { AppError } from "../lib/errors.js";
-import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
+import { asyncHandler, currentUser, requirePermission, requireRole } from "../lib/http.js";
 import { warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import { passwordMatches } from "../services/auth-service.js";
@@ -155,7 +155,7 @@ stockRoutes.put(
 
 stockRoutes.post(
   "/bulk-zero",
-  requireRole(UserRole.ADMIN),
+  requirePermission("ZERO_STOCKS"),
   asyncHandler(async (request, response) => {
     const user = currentUser(response);
     const input = stockBulkAdminInput.parse(request.body);
@@ -235,7 +235,7 @@ stockRoutes.post(
 
 stockRoutes.post(
   "/bulk-delete",
-  requireRole(UserRole.ADMIN),
+  requirePermission("DELETE_STOCKS"),
   asyncHandler(async (request, response) => {
     const user = currentUser(response);
     const input = stockBulkAdminInput.parse(request.body);
@@ -293,7 +293,7 @@ stockRoutes.post(
 
 stockRoutes.delete(
   "/:id",
-  requireRole(UserRole.ADMIN),
+  requirePermission("DELETE_STOCKS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const user = currentUser(response);

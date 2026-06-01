@@ -114,8 +114,10 @@ model User {
   role                     UserRole          @default(ADMIN)
   active                   Boolean           @default(true)
   isDefaultAdmin           Boolean           @default(false)
+  permissionProfileId      String?
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
+  permissionProfile        PermissionProfile? @relation(fields: [permissionProfileId], references: [id], onDelete: SetNull)
   movements                StockMovement[]
   warehouseAssignments     UserWarehouse[]
   requestedEntries         EntryRequest[]    @relation("EntryRequester")
@@ -127,6 +129,33 @@ model User {
   fleetAllocations         FleetVehicleAllocation[] @relation("FleetAllocationUser")
   fleetTransfers           FleetVehicleTransfer[] @relation("FleetTransferUser")
   fleetMaintenances        FleetMaintenance[] @relation("FleetMaintenanceUser")
+
+  @@index([permissionProfileId])
+}
+
+model PermissionProfile {
+  id          String                        @id @default(cuid())
+  name        String                        @unique
+  description String?
+  active      Boolean                       @default(true)
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
+  permissions PermissionProfilePermission[]
+  users       User[]
+
+  @@index([active])
+  @@index([name])
+}
+
+model PermissionProfilePermission {
+  id        String            @id @default(cuid())
+  profileId String
+  key       String
+  createdAt DateTime          @default(now())
+  profile   PermissionProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, key])
+  @@index([key])
 }
 
 model WarehouseCategory {

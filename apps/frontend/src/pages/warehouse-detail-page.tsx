@@ -56,6 +56,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { api, apiFile, useApiResource } from "@/lib/api";
 import { readCsvFile } from "@/lib/csv";
+import { hasPermission } from "@/lib/permissions";
 import { useSession } from "@/lib/session";
 import type {
   Invoice,
@@ -156,7 +157,8 @@ function NewProductInlineDialog({
   units: UnitOfMeasure[];
 }) {
   const { session } = useSession();
-  const canManageCatalog = session?.user.role === "ADMIN";
+  const canManageCategories = hasPermission(session?.user, "MANAGE_CATEGORIES");
+  const canManageUnits = hasPermission(session?.user, "MANAGE_UNITS");
   const [open, setOpen] = useState(false);
   const [availableCategories, setAvailableCategories] =
     useState(productCategories);
@@ -269,7 +271,7 @@ function NewProductInlineDialog({
                     placeholder="Selecione"
                     value={draft.categoryId}
                   />
-                  {canManageCatalog ? (
+                  {canManageCategories ? (
                     <CategoryCreateDialog onCreated={selectCreatedCategory} />
                   ) : null}
                 </div>
@@ -288,7 +290,7 @@ function NewProductInlineDialog({
                     placeholder="Selecione"
                     value={draft.unitId}
                   />
-                  {canManageCatalog ? (
+                  {canManageUnits ? (
                     <UnitCreateDialog onCreated={selectCreatedUnit} />
                   ) : null}
                 </div>
@@ -549,6 +551,8 @@ function MovementForm({
   warehouse,
   warehouses,
 }: MovementFormProps) {
+  const { session } = useSession();
+  const canCreateProducts = hasPermission(session?.user, "CREATE_PRODUCTS");
   const [productId, setProductId] = useState(
     lockedProduct?.id ?? initialProductId,
   );
@@ -719,7 +723,7 @@ function MovementForm({
             <Label className="mb-0" htmlFor={`${kind}-product`}>
               Produto
             </Label>
-            {kind === "entry" && !lockedProduct && onProductCreated ? (
+            {kind === "entry" && !lockedProduct && onProductCreated && canCreateProducts ? (
               <NewProductInlineDialog
                 onCreated={async (product) => {
                   await onProductCreated(product);
@@ -1453,7 +1457,10 @@ function StockTable({
   const [editingStock, setEditingStock] = useState<Stock | null>(null);
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [minimum, setMinimum] = useState("");
-  const admin = session?.user.role === "ADMIN";
+  const canEditMinimum = session?.user.role === "ADMIN";
+  const canDeleteStocks = hasPermission(session?.user, "DELETE_STOCKS");
+  const canZeroStocks = hasPermission(session?.user, "ZERO_STOCKS");
+  const canUseStockAdminActions = canEditMinimum || canDeleteStocks;
   const filteredStocks = showLowStockOnly
     ? stocks.filter((stock) => isLowStock(stock))
     : stocks;
@@ -1540,7 +1547,7 @@ function StockTable({
             header: "Última movimentação",
             key: "last-movement",
           },
-          ...(admin
+          ...(canUseStockAdminActions
             ? [
                 {
                   cell: (stock: Stock) => (
@@ -1568,15 +1575,17 @@ function StockTable({
                         warehouse={warehouse}
                         warehouses={warehouses}
                       />
-                      <Button
-                        aria-label={`Editar estoque de ${stock.product.name}`}
-                        onClick={() => editStock(stock)}
-                        size="icon"
-                        variant="outline"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {!stock.lastMovementAt ? (
+                      {canEditMinimum ? (
+                        <Button
+                          aria-label={`Editar estoque de ${stock.product.name}`}
+                          onClick={() => editStock(stock)}
+                          size="icon"
+                          variant="outline"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                      {canDeleteStocks && !stock.lastMovementAt ? (
                         <Button
                           aria-label={`Remover estoque de ${stock.product.name}`}
                           onClick={() => void onStockDeleted(stock.id)}
@@ -1655,19 +1664,19 @@ function StockTable({
               />
               Estoques baixos
             </label>
-            {admin ? (
-              <>
+            {canZeroStocks ? (
                 <BulkStockActionDialog
                   action="zero"
                   onChanged={onMovementSaved}
                   stocks={stocks}
                 />
+            ) : null}
+            {canDeleteStocks ? (
                 <BulkStockActionDialog
                   action="delete"
                   onChanged={onMovementSaved}
                   stocks={stocks}
                 />
-              </>
             ) : null}
           </div>
         }
@@ -1905,11 +1914,13 @@ function WarehouseOverview({
 }
 
 function WarehouseCsvImportDialog({
+  canCreateProducts,
   onImported,
   productCategories,
   products,
   warehouse,
 }: {
+  canCreateProducts: boolean;
   onImported: () => Promise<void>;
   productCategories: ProductCategory[];
   products: Product[];
@@ -1932,19 +1943,32 @@ function WarehouseCsvImportDialog({
       searchText: "ignorar pular",
       value: skipCsvRowValue,
     },
-    {
-      label: "Criar produto",
-      searchText: "novo cadastrar",
-      value: createProductCsvValue,
-    },
+    ...(canCreateProducts
+      ? [
+          {
+            label: "Criar produto",
+            searchText: "novo cadastrar",
+            value: createProductCsvValue,
+          },
+        ]
+      : []),
     ...products.map((product) => ({
       label: `${product.code} - ${product.name}`,
       searchText: `${product.category.name} ${product.unit.abbreviation}`,
       value: product.id,
     })),
   ];
+  function selectedRowAction(row: WarehouseCsvPreview["rows"][number]) {
+    return (
+      rowActions[row.index] ??
+      (canCreateProducts
+        ? createProductCsvValue
+        : row.suggestedProduct?.id ?? skipCsvRowValue)
+    );
+  }
+
   const needsCategory = (preview?.rows ?? []).some(
-    (row) => (rowActions[row.index] ?? createProductCsvValue) === createProductCsvValue,
+    (row) => selectedRowAction(row) === createProductCsvValue,
   );
   const canSubmit =
     Boolean(preview) &&
@@ -2039,7 +2063,8 @@ function WarehouseCsvImportDialog({
             row.alreadyImported
               ? skipCsvRowValue
               : row.canImport
-                ? row.suggestedProduct?.id ?? createProductCsvValue
+                ? row.suggestedProduct?.id ??
+                  (canCreateProducts ? createProductCsvValue : skipCsvRowValue)
                 : skipCsvRowValue,
           ]),
         ),
@@ -2065,7 +2090,7 @@ function WarehouseCsvImportDialog({
           csv,
           minimumQuantity,
           rows: (preview?.rows ?? []).map((row) => {
-            const action = rowActions[row.index] ?? createProductCsvValue;
+            const action = selectedRowAction(row);
 
             if (action === skipCsvRowValue) {
               return {
@@ -2319,7 +2344,7 @@ function WarehouseCsvImportDialog({
                             }
                             options={productOptions}
                             placeholder="Selecione"
-                            value={rowActions[row.index] ?? createProductCsvValue}
+                            value={selectedRowAction(row)}
                           />
                         </TableCell>
                       </TableRow>
@@ -2365,6 +2390,7 @@ export function WarehouseTabs({
 }) {
   const { session } = useSession();
   const operator = session?.user.role === "OPERATOR";
+  const canCreateProducts = hasPermission(session?.user, "CREATE_PRODUCTS");
   const [activeTab, setActiveTab] = useState(() =>
     readStoredWarehouseTab(warehouse.id),
   );
@@ -2413,6 +2439,7 @@ export function WarehouseTabs({
           {activeTab === "stock" ? (
             <>
               <WarehouseCsvImportDialog
+                canCreateProducts={canCreateProducts}
                 onImported={onMovementSaved}
                 productCategories={productCategories ?? []}
                 products={products}

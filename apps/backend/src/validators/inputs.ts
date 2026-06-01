@@ -244,6 +244,7 @@ export const userCreateInput = z.object({
   email: z.string().trim().email("Informe um email válido.").transform((value) => value.toLowerCase()),
   name: z.string().trim().min(2, "Informe o nome do usuário."),
   password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
+  permissionProfileId: z.string().min(1).optional().nullable(),
   role: z.nativeEnum(UserRole),
   warehouseIds: z.array(z.string().min(1)).default([]),
 });
@@ -253,6 +254,13 @@ export const userUpdateInput = userCreateInput
   .extend({
     password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres.").optional(),
   });
+
+export const permissionProfileInput = z.object({
+  active: z.boolean().default(true),
+  description: optionalText,
+  name: z.string().trim().min(2, "Informe o nome do perfil."),
+  permissions: z.array(z.string().min(1)).default([]),
+});
 
 export const minimumStockInput = z.object({
   minimumQuantity: z.coerce.number().int().min(0, "O estoque mínimo não pode ser negativo."),

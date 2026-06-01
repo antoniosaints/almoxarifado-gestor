@@ -84,10 +84,49 @@ export type MovementType =
 
 export type UserRole = "ADMIN" | "OPERATOR";
 
+export type AppPermission =
+  | "MANAGE_WAREHOUSES"
+  | "MANAGE_UNITS"
+  | "MANAGE_CATEGORIES"
+  | "APPROVE_REQUESTS"
+  | "APPROVE_TRANSFERS"
+  | "MANAGE_SETTINGS"
+  | "VIEW_INSIGHTS"
+  | "MANAGE_USERS"
+  | "ACCESS_PRODUCTS"
+  | "MANAGE_UNIT_CONVERSIONS"
+  | "CREATE_PRODUCTS"
+  | "IMPORT_PRODUCTS_CSV"
+  | "ZERO_STOCKS"
+  | "DELETE_STOCKS";
+
+export type PermissionProfilePermission = {
+  key: AppPermission;
+};
+
+export type PermissionProfile = {
+  active: boolean;
+  description?: string | null;
+  id: string;
+  name: string;
+  permissions: PermissionProfilePermission[];
+  userCount?: number;
+};
+
+export type PermissionDefinition = {
+  description: string;
+  group: string;
+  key: AppPermission;
+  label: string;
+};
+
 export type User = {
   email: string;
   id: string;
   name: string;
+  permissionProfile?: Pick<PermissionProfile, "id" | "name"> | null;
+  permissionProfileId?: string | null;
+  permissions?: AppPermission[];
   role: UserRole;
 };
 

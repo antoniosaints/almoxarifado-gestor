@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
+import { hasPermission } from "@/lib/permissions";
 import { useSession } from "@/lib/session";
 import type { Warehouse, WarehouseCategory } from "@/lib/types";
 
@@ -46,7 +47,7 @@ export function WarehousesPage() {
   const categories = useApiResource<WarehouseCategory[]>("/warehouse-categories", []);
   const [draft, setDraft] = useState<WarehouseDraft | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const admin = session?.user.role === "ADMIN";
+  const canManageWarehouses = hasPermission(session?.user, "MANAGE_WAREHOUSES");
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,7 +92,7 @@ export function WarehousesPage() {
           <p className="text-sm text-muted-foreground">Cadastros</p>
           <h2 className="text-2xl font-semibold">Almoxarifados</h2>
         </div>
-        {admin ? (
+        {canManageWarehouses ? (
           <Button onClick={() => setDraft(emptyDraft(categories.data[0]?.id))}>
             <Plus className="h-4 w-4" />
             Novo almoxarifado
@@ -145,7 +146,7 @@ export function WarehousesPage() {
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>
-                {admin ? (
+                {canManageWarehouses ? (
                   <>
                     <Button
                       aria-label={`Editar ${warehouse.name}`}

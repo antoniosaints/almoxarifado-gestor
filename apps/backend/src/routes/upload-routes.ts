@@ -2,7 +2,7 @@ import { UserRole } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import express, { Router } from "express";
 import { AppError } from "../lib/errors.js";
-import { asyncHandler, requireRole } from "../lib/http.js";
+import { asyncHandler, requirePermission, requireRole } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import {
   uploadSystemSettingsAsset,
@@ -23,7 +23,7 @@ const rawImageUpload = express.raw({
 
 uploadRoutes.post(
   "/office-template-images",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_SETTINGS"),
   rawImageUpload,
   asyncHandler(async (request, response) => {
     if (!Buffer.isBuffer(request.body)) {
@@ -43,7 +43,7 @@ uploadRoutes.post(
 
 uploadRoutes.post(
   "/settings/:slot",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_SETTINGS"),
   rawImageUpload,
   asyncHandler(async (request, response) => {
     if (!Buffer.isBuffer(request.body)) {

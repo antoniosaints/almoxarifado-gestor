@@ -1,7 +1,7 @@
 import { UserRole } from "@prisma/client";
 import { Router } from "express";
 import { AppError } from "../lib/errors.js";
-import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
+import { asyncHandler, currentUser, requirePermission, requireRole } from "../lib/http.js";
 import { assertWarehouseAccess, warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import {
@@ -153,7 +153,7 @@ entryRequestRoutes.get(
 
 entryRequestRoutes.post(
   "/:id/approve",
-  requireRole(UserRole.ADMIN),
+  requirePermission("APPROVE_REQUESTS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const input = entryRequestApprovalInput.parse(request.body ?? {});
@@ -172,7 +172,7 @@ entryRequestRoutes.post(
 
 entryRequestRoutes.post(
   "/:id/reject",
-  requireRole(UserRole.ADMIN),
+  requirePermission("APPROVE_REQUESTS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     response.json(

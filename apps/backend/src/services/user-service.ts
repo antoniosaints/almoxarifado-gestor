@@ -1,8 +1,21 @@
 import { UserRole, type Prisma, type PrismaClient } from "@prisma/client";
+import type { SessionUser } from "../lib/auth.js";
 import { AppError } from "../lib/errors.js";
+import { permissionsFromProfile } from "../lib/permissions.js";
 import { hashPassword } from "./auth-service.js";
+import {
+  assertPermissionProfileAssignable,
+  resolveOperatorPermissionProfileId,
+} from "./permission-profile-service.js";
 
 const userInclude = {
+  permissionProfile: {
+    include: {
+      permissions: {
+        orderBy: { key: "asc" },
+      },
+    },
+  },
   warehouseAssignments: {
     include: {
       warehouse: {
@@ -28,6 +41,7 @@ type UserInput = {
   email: string;
   name: string;
   password?: string;
+  permissionProfileId?: string | null;
   role: UserRole;
   warehouseIds: string[];
 };
@@ -43,7 +57,10 @@ function assignmentCreates(input: UserInput) {
 export function safeUser(user: UserWithAssignments) {
   const { passwordHash: _passwordHash, ...safe } = user;
 
-  return safe;
+  return {
+    ...safe,
+    permissions: permissionsFromProfile(user.role, user.permissionProfile),
+  };
 }
 
 export async function listUsers(prisma: PrismaClient) {
@@ -55,13 +72,48 @@ export async function listUsers(prisma: PrismaClient) {
   return users.map(safeUser);
 }
 
-export async function createUser(prisma: PrismaClient, input: UserInput) {
+function assertOperatorUserManagementAllowed(
+  actingUser: SessionUser,
+  input: UserInput,
+  target?: Pick<UserWithAssignments, "id" | "isDefaultAdmin" | "role">,
+) {
+  if (actingUser.role === UserRole.ADMIN) {
+    return;
+  }
+
+  if (target?.id === actingUser.id) {
+    throw new AppError(403, "Voce nao pode alterar seu proprio usuario.");
+  }
+
+  if (target?.isDefaultAdmin || target?.role === UserRole.ADMIN) {
+    throw new AppError(403, "Operadores nao podem gerenciar usuarios Admin.");
+  }
+
+  if (input.role === UserRole.ADMIN) {
+    throw new AppError(403, "Operadores nao podem criar ou promover usuarios Admin.");
+  }
+}
+
+export async function createUser(
+  prisma: PrismaClient,
+  input: UserInput,
+  actingUser: SessionUser,
+) {
+  assertOperatorUserManagementAllowed(actingUser, input);
+  await assertPermissionProfileAssignable(prisma, actingUser, input.permissionProfileId);
+
+  const permissionProfileId =
+    input.role === UserRole.OPERATOR
+      ? await resolveOperatorPermissionProfileId(prisma, input.permissionProfileId)
+      : null;
+
   const user = await prisma.user.create({
     data: {
       active: input.active,
       email: input.email,
       name: input.name,
       passwordHash: await hashPassword(input.password ?? ""),
+      permissionProfileId,
       role: input.role,
       warehouseAssignments: {
         create: assignmentCreates(input),
@@ -77,13 +129,18 @@ async function assertUpdateAllowed(
   prisma: PrismaClient,
   id: string,
   input: UserInput,
+  actingUser: SessionUser,
 ) {
   const target = await prisma.user.findUniqueOrThrow({
     select: {
+      id: true,
       isDefaultAdmin: true,
+      role: true,
     },
     where: { id },
   });
+
+  assertOperatorUserManagementAllowed(actingUser, input, target);
 
   if (!target.isDefaultAdmin) {
     return;
@@ -102,8 +159,15 @@ export async function updateUser(
   prisma: PrismaClient,
   id: string,
   input: UserInput,
+  actingUser: SessionUser,
 ) {
-  await assertUpdateAllowed(prisma, id, input);
+  await assertUpdateAllowed(prisma, id, input, actingUser);
+  await assertPermissionProfileAssignable(prisma, actingUser, input.permissionProfileId);
+
+  const permissionProfileId =
+    input.role === UserRole.OPERATOR
+      ? await resolveOperatorPermissionProfileId(prisma, input.permissionProfileId)
+      : null;
 
   const user = await prisma.user.update({
     where: { id },
@@ -112,6 +176,7 @@ export async function updateUser(
       email: input.email,
       name: input.name,
       passwordHash: input.password ? await hashPassword(input.password) : undefined,
+      permissionProfileId,
       role: input.role,
       warehouseAssignments: {
         deleteMany: {},
@@ -127,12 +192,13 @@ export async function updateUser(
 export async function deleteUser(
   prisma: PrismaClient,
   id: string,
-  actingUserId: string,
+  actingUser: SessionUser,
 ) {
   const target = await prisma.user.findUniqueOrThrow({
     select: {
       id: true,
       isDefaultAdmin: true,
+      role: true,
     },
     where: { id },
   });
@@ -141,8 +207,12 @@ export async function deleteUser(
     throw new AppError(403, "O usuário admin default não pode ser excluído.");
   }
 
-  if (target.id === actingUserId) {
+  if (target.id === actingUser.id) {
     throw new AppError(403, "Você não pode excluir seu próprio usuário.");
+  }
+
+  if (actingUser.role !== UserRole.ADMIN && target.role === UserRole.ADMIN) {
+    throw new AppError(403, "Operadores nao podem gerenciar usuarios Admin.");
   }
 
   await prisma.$transaction([

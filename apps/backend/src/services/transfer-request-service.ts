@@ -26,6 +26,11 @@ type ReceiveTransferInput = {
   requestId: string;
 };
 
+type CancelTransferInput = {
+  cancelledById: string;
+  requestId: string;
+};
+
 function assertTransferInput(input: {
   destinationWarehouseId: string;
   quantity: number;
@@ -206,5 +211,27 @@ export async function receiveTransferRequest(
       sourceMovement,
       sourceStock: updatedSourceStock,
     };
+  });
+}
+
+export async function cancelTransferRequest(
+  prisma: PrismaClient,
+  input: CancelTransferInput,
+) {
+  const request = await prisma.transferRequest.findUniqueOrThrow({
+    where: { id: input.requestId },
+  });
+
+  if (request.status !== TransferRequestStatus.PENDING_RECEIPT) {
+    throw new AppError(409, "Esta transferência não pode mais ser cancelada.");
+  }
+
+  return prisma.transferRequest.update({
+    where: { id: request.id },
+    data: {
+      receivedAt: new Date(),
+      receivedById: input.cancelledById,
+      status: TransferRequestStatus.CANCELLED,
+    },
   });
 }

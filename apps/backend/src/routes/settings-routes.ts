@@ -1,7 +1,7 @@
 import { UserRole } from "@prisma/client";
 import { Router } from "express";
 import { AppError } from "../lib/errors.js";
-import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
+import { asyncHandler, currentUser, requirePermission, requireRole } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import { passwordMatches } from "../services/auth-service.js";
 import {
@@ -24,7 +24,7 @@ publicSettingsRoutes.get(
 
 settingsRoutes.get(
   "/",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_SETTINGS"),
   asyncHandler(async (_request, response) => {
     response.json(await getSystemSettings(prisma));
   }),
@@ -32,7 +32,7 @@ settingsRoutes.get(
 
 settingsRoutes.put(
   "/",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_SETTINGS"),
   asyncHandler(async (request, response) => {
     const data = systemSettingsInput.parse(request.body);
     const user = currentUser(response);

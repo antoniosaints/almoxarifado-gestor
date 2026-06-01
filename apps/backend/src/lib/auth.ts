@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { UserRole } from "@prisma/client";
+import type { AppPermission } from "./permissions.js";
 import { AppError } from "./errors.js";
 
 export type SessionUser = {
@@ -7,6 +8,11 @@ export type SessionUser = {
   name: string;
   email: string;
   role: UserRole;
+  permissions: AppPermission[];
+  permissionProfile: {
+    id: string;
+    name: string;
+  } | null;
 };
 
 type TokenPayload = SessionUser & {
@@ -25,10 +31,15 @@ function sign(value: string) {
   return createHmac("sha256", authSecret).update(value).digest("base64url");
 }
 
-export function createAccessToken(user: SessionUser) {
+type AccessTokenUser = Omit<SessionUser, "permissions" | "permissionProfile"> &
+  Partial<Pick<SessionUser, "permissions" | "permissionProfile">>;
+
+export function createAccessToken(user: AccessTokenUser) {
   const header = encode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = encode(
     JSON.stringify({
+      permissions: [],
+      permissionProfile: null,
       ...user,
       exp: Math.floor(Date.now() / 1000) + tokenTtlSeconds,
     } satisfies TokenPayload),
@@ -75,5 +86,11 @@ export function verifyAccessToken(token: string): SessionUser {
     name: parsedPayload.name,
     email: parsedPayload.email,
     role: parsedPayload.role,
+    permissions: Array.isArray(parsedPayload.permissions)
+      ? parsedPayload.permissions.filter(
+          (permission): permission is AppPermission => typeof permission === "string",
+        )
+      : [],
+    permissionProfile: parsedPayload.permissionProfile ?? null,
   };
 }

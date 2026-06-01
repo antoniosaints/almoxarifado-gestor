@@ -19,6 +19,17 @@ function authorizationFor(user: {
   return `Bearer ${createAccessToken(user)}`;
 }
 
+async function createPermissionProfile(name: string, permissions: string[]) {
+  return prisma.permissionProfile.create({
+    data: {
+      name,
+      permissions: {
+        create: permissions.map((key) => ({ key })),
+      },
+    },
+  });
+}
+
 function countPdfPages(body: Buffer) {
   return (body.toString("latin1").match(/\/Type\s*\/Page\b/g) ?? []).length;
 }
@@ -220,15 +231,39 @@ describe("api", () => {
     expect(response.body.map((item: { id: string }) => item.id)).toEqual([product.id]);
   });
 
-  it("lets operators create products for local stock entries", async () => {
+  it("requires the create-products permission for operator product creation", async () => {
     const { productCategory, unit } = await createBaseFixture(prisma);
+    const profile = await createPermissionProfile("Cadastro de produtos", [
+      "CREATE_PRODUCTS",
+    ]);
+    const blockedOperator = await prisma.user.create({
+      data: {
+        email: "bloqueado@prefeitura.local",
+        name: "Operador bloqueado",
+        role: UserRole.OPERATOR,
+      },
+    });
     const operator = await prisma.user.create({
       data: {
         email: "operador@prefeitura.local",
         name: "Operador",
+        permissionProfileId: profile.id,
         role: UserRole.OPERATOR,
       },
     });
+
+    const denied = await request(app)
+      .post("/products")
+      .set("Authorization", authorizationFor(blockedOperator))
+      .send({
+        name: "Caneta sem permissao",
+        description: "Caixa para atendimento",
+        categoryId: productCategory.id,
+        unitId: unit.id,
+        active: true,
+      });
+
+    expect(denied.status).toBe(403);
 
     const response = await request(app)
       .post("/products")
@@ -391,6 +426,117 @@ describe("api", () => {
       role: UserRole.OPERATOR,
       warehouseAssignments: [{ warehouseId: warehouse.id }],
     });
+  });
+
+  it("lets admins create permission profiles and assign them to operators", async () => {
+    const { user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        name: "Almoxarifado da Cultura",
+        categoryId: warehouseCategory.id,
+      },
+    });
+    const adminAuth = authorizationFor({ ...user, role: UserRole.ADMIN });
+
+    const profile = await request(app)
+      .post("/permission-profiles")
+      .set("Authorization", adminAuth)
+      .send({
+        active: true,
+        description: "Pode acessar produtos e aprovar solicitacoes.",
+        name: "Catalogo e aprovacoes",
+        permissions: ["ACCESS_PRODUCTS", "APPROVE_REQUESTS"],
+      });
+
+    expect(profile.status).toBe(201);
+    expect(profile.body).toMatchObject({
+      active: true,
+      name: "Catalogo e aprovacoes",
+      permissions: [
+        { key: "ACCESS_PRODUCTS" },
+        { key: "APPROVE_REQUESTS" },
+      ],
+    });
+
+    const createdUser = await request(app)
+      .post("/users")
+      .set("Authorization", adminAuth)
+      .send({
+        active: true,
+        email: "catalogo@prefeitura.local",
+        name: "Operador de catalogo",
+        password: "senha123",
+        permissionProfileId: profile.body.id,
+        role: UserRole.OPERATOR,
+        warehouseIds: [warehouse.id],
+      });
+
+    expect(createdUser.status).toBe(201);
+    expect(createdUser.body).toMatchObject({
+      email: "catalogo@prefeitura.local",
+      permissionProfileId: profile.body.id,
+      permissionProfile: {
+        id: profile.body.id,
+        name: "Catalogo e aprovacoes",
+      },
+      permissions: ["ACCESS_PRODUCTS", "APPROVE_REQUESTS"],
+      role: UserRole.OPERATOR,
+      warehouseAssignments: [{ warehouseId: warehouse.id }],
+    });
+  });
+
+  it("prevents permission-managing operators from granting permissions they do not have", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const profile = await createPermissionProfile("Gestor limitado", [
+      "MANAGE_USERS",
+    ]);
+    const operator = await prisma.user.create({
+      data: {
+        active: true,
+        email: "gestor.limitado@prefeitura.local",
+        name: "Gestor limitado",
+        permissionProfileId: profile.id,
+        role: UserRole.OPERATOR,
+      },
+    });
+
+    const forbiddenProfile = await request(app)
+      .post("/permission-profiles")
+      .set("Authorization", authorizationFor(operator))
+      .send({
+        active: true,
+        name: "Perfil indevido",
+        permissions: ["MANAGE_USERS", "MANAGE_SETTINGS"],
+      });
+
+    expect(forbiddenProfile.status).toBe(403);
+
+    const adminPromotion = await request(app)
+      .put(`/users/${operator.id}`)
+      .set("Authorization", authorizationFor(operator))
+      .send({
+        active: true,
+        email: "gestor.limitado@prefeitura.local",
+        name: "Gestor limitado",
+        permissionProfileId: profile.id,
+        role: UserRole.ADMIN,
+        warehouseIds: [],
+      });
+
+    expect(adminPromotion.status).toBe(403);
+
+    const adminUpdate = await request(app)
+      .put(`/users/${user.id}`)
+      .set("Authorization", authorizationFor(operator))
+      .send({
+        active: true,
+        email: "tester@prefeitura.local",
+        name: "Usuario de teste",
+        role: UserRole.ADMIN,
+        warehouseIds: [],
+      });
+
+    expect(adminUpdate.status).toBe(403);
   });
 
   it("keeps the default admin protected from removal and demotion", async () => {

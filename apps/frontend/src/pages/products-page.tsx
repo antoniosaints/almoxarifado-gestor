@@ -31,6 +31,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { api, useApiResource } from "@/lib/api";
 import { readCsvFile } from "@/lib/csv";
+import { hasPermission } from "@/lib/permissions";
+import { useSession } from "@/lib/session";
 import type {
   Product,
   ProductCategory,
@@ -624,12 +626,17 @@ function ProductCsvImportDialog({ onImported }: { onImported: () => Promise<void
 }
 
 export function ProductsPage() {
+  const { session } = useSession();
   const products = useApiResource<Product[]>("/products", []);
   const categories = useApiResource<ProductCategory[]>("/product-categories", []);
   const stocks = useApiResource<Stock[]>("/stocks", []);
   const units = useApiResource<UnitOfMeasure[]>("/units", []);
   const [draft, setDraft] = useState<ProductDraft | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const canCreateProducts = hasPermission(session?.user, "CREATE_PRODUCTS");
+  const canImportProducts = hasPermission(session?.user, "IMPORT_PRODUCTS_CSV");
+  const canManageConversions = hasPermission(session?.user, "MANAGE_UNIT_CONVERSIONS");
+  const canEditProducts = session?.user.role === "ADMIN";
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -698,11 +705,15 @@ export function ProductsPage() {
           <h2 className="text-2xl font-semibold">Produtos</h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ProductCsvImportDialog onImported={products.reload} />
-          <Button onClick={() => setDraft(emptyDraft(categories.data[0]?.id, units.data[0]?.id))}>
-            <Plus className="h-4 w-4" />
-            Novo produto
-          </Button>
+          {canImportProducts ? (
+            <ProductCsvImportDialog onImported={products.reload} />
+          ) : null}
+          {canCreateProducts ? (
+            <Button onClick={() => setDraft(emptyDraft(categories.data[0]?.id, units.data[0]?.id))}>
+              <Plus className="h-4 w-4" />
+              Novo produto
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -754,38 +765,44 @@ export function ProductsPage() {
             cell: (product) => (
               <div className="flex justify-end gap-2">
                 <ProductStocksDialog product={product} stocks={stocks.data} />
-                <ProductConversionsDialog
-                  onChanged={products.reload}
-                  product={product}
-                  units={units.data}
-                />
-                <Button
-                  aria-label={`Editar ${product.name}`}
-                  onClick={() =>
-                    setDraft({
-                      active: product.active,
-                      categoryId: product.categoryId,
-                      code: product.code,
-                      description: product.description ?? "",
-                      id: product.id,
-                      minimumQuantity: String(product.minimumQuantity ?? 0),
-                      name: product.name,
-                      unitId: product.unitId,
-                    })
-                  }
-                  size="icon"
-                  variant="outline"
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  aria-label={`Remover ${product.name}`}
-                  onClick={() => void remove(product.id)}
-                  size="icon"
-                  variant="outline"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {canManageConversions ? (
+                  <ProductConversionsDialog
+                    onChanged={products.reload}
+                    product={product}
+                    units={units.data}
+                  />
+                ) : null}
+                {canEditProducts ? (
+                  <>
+                    <Button
+                      aria-label={`Editar ${product.name}`}
+                      onClick={() =>
+                        setDraft({
+                          active: product.active,
+                          categoryId: product.categoryId,
+                          code: product.code,
+                          description: product.description ?? "",
+                          id: product.id,
+                          minimumQuantity: String(product.minimumQuantity ?? 0),
+                          name: product.name,
+                          unitId: product.unitId,
+                        })
+                      }
+                      size="icon"
+                      variant="outline"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      aria-label={`Remover ${product.name}`}
+                      onClick={() => void remove(product.id)}
+                      size="icon"
+                      variant="outline"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : null}
               </div>
             ),
             cellClassName: "text-right",

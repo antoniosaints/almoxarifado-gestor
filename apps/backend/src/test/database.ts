@@ -45,6 +45,8 @@ export async function resetDatabase(prisma: PrismaClient) {
   await prisma.fleetSettings.deleteMany();
   await prisma.systemSettings.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.permissionProfilePermission.deleteMany();
+  await prisma.permissionProfile.deleteMany();
 }
 
 export async function createBaseFixture(prisma: PrismaClient) {

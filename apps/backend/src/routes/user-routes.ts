@@ -1,6 +1,5 @@
-import { UserRole } from "@prisma/client";
 import { Router } from "express";
-import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
+import { asyncHandler, currentUser, requirePermission } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import {
   createUser,
@@ -17,7 +16,7 @@ import {
 
 export const userRoutes = Router();
 
-userRoutes.use(requireRole(UserRole.ADMIN));
+userRoutes.use(requirePermission("MANAGE_USERS"));
 
 userRoutes.get(
   "/",
@@ -33,6 +32,13 @@ userRoutes.get(
     const user = await prisma.user.findUniqueOrThrow({
       where: { id },
       include: {
+        permissionProfile: {
+          include: {
+            permissions: {
+              orderBy: { key: "asc" },
+            },
+          },
+        },
         warehouseAssignments: {
           include: {
             warehouse: {
@@ -53,7 +59,7 @@ userRoutes.post(
   "/",
   asyncHandler(async (request, response) => {
     const input = userCreateInput.parse(request.body);
-    response.status(201).json(await createUser(prisma, input));
+    response.status(201).json(await createUser(prisma, input, currentUser(response)));
   }),
 );
 
@@ -62,7 +68,7 @@ userRoutes.put(
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const input = userUpdateInput.parse(request.body);
-    response.json(await updateUser(prisma, id, input));
+    response.json(await updateUser(prisma, id, input, currentUser(response)));
   }),
 );
 
@@ -72,7 +78,7 @@ userRoutes.delete(
     const { id } = idParam.parse(request.params);
     const user = currentUser(response);
 
-    await deleteUser(prisma, id, user.id);
+    await deleteUser(prisma, id, user);
     response.status(204).send();
   }),
 );

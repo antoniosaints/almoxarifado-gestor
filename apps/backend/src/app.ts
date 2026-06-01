@@ -16,6 +16,7 @@ import {
 } from "./routes/manager-routes.js";
 import { movementRoutes } from "./routes/movement-routes.js";
 import { officeTemplateRoutes } from "./routes/office-template-routes.js";
+import { permissionProfileRoutes } from "./routes/permission-profile-routes.js";
 import { productCategoryRoutes } from "./routes/product-category-routes.js";
 import { productRoutes } from "./routes/product-routes.js";
 import { reportRoutes } from "./routes/report-routes.js";
@@ -70,6 +71,7 @@ app.use("/invoices", invoiceRoutes);
 app.use("/manager", managerRoutes);
 app.use("/requests", requestSummaryRoutes);
 app.use("/transfer-requests", transferRequestRoutes);
+app.use("/permission-profiles", permissionProfileRoutes);
 app.use("/users", userRoutes);
 app.use("/fleet", fleetRoutes);
 app.use("/warehouses", warehouseRoutes);

@@ -1,6 +1,5 @@
-import { UserRole } from "@prisma/client";
 import { Router } from "express";
-import { asyncHandler, requireRole } from "../lib/http.js";
+import { asyncHandler, requirePermission } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import { idParam, productCategoryInput } from "../validators/inputs.js";
 
@@ -15,7 +14,7 @@ productCategoryRoutes.get(
 
 productCategoryRoutes.post(
   "/",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_CATEGORIES"),
   asyncHandler(async (request, response) => {
     const data = productCategoryInput.parse(request.body);
     response.status(201).json(await prisma.productCategory.create({ data }));
@@ -24,7 +23,7 @@ productCategoryRoutes.post(
 
 productCategoryRoutes.put(
   "/:id",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_CATEGORIES"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const data = productCategoryInput.parse(request.body);
@@ -34,7 +33,7 @@ productCategoryRoutes.put(
 
 productCategoryRoutes.delete(
   "/:id",
-  requireRole(UserRole.ADMIN),
+  requirePermission("MANAGE_CATEGORIES"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     await prisma.productCategory.delete({ where: { id } });

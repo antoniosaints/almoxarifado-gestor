@@ -91,6 +91,39 @@ describe("AppShell", () => {
     vi.resetModules();
   });
 
+  it("shows permission-based navigation for operators", async () => {
+    const { AppShell, SessionProvider } = await importShellFor("");
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <SessionProvider
+          initialSession={{
+            token: "operator-token",
+            user: {
+              email: "operador@prefeitura.local",
+              id: "operator",
+              name: "Operador",
+              permissions: ["ACCESS_PRODUCTS", "MANAGE_USERS", "VIEW_INSIGHTS"],
+              role: "OPERATOR",
+            },
+          }}
+        >
+          <AppShell>
+            <p>ConteÃºdo</p>
+          </AppShell>
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Produtos")).toBeInTheDocument();
+    expect(screen.getByText("Insights")).toBeInTheDocument();
+    expect(screen.getByText("Usuários")).toBeInTheDocument();
+    expect(screen.queryByText("Configurações")).not.toBeInTheDocument();
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
   it("shows the manager navigation when VITE_TYPE_SYSTEM is manager", async () => {
     vi.stubEnv("VITE_TYPE_SYSTEM", "manager");
     vi.resetModules();
