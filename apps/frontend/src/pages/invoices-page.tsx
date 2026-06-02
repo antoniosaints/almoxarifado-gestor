@@ -1,7 +1,7 @@
-import { Building2, FileDown, FileSearch, Trash2, Upload } from "lucide-react";
+import { Building2, FileDown, FileSearch, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import { DataTable } from "@/components/domain/data-table";
+import { DataTable, type DataTableColumn } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { MaskedInput } from "@/components/ui/masked-input";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -37,7 +38,7 @@ import type {
   Warehouse,
 } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { onlyDigits } from "@/lib/masks";
+import { formatCnpj, formatPhone, onlyDigits } from "@/lib/masks";
 import { MovementsTable } from "./movements-page";
 
 const automaticProductMappingValue = "__automatic__";
@@ -154,6 +155,60 @@ function InvoicePdfButton({
   );
 }
 
+type SupplierEditorDraft = {
+  active: boolean;
+  address: string;
+  city: string;
+  cnpj: string;
+  email: string;
+  id?: string;
+  municipalRegistration: string;
+  name: string;
+  notes: string;
+  phone: string;
+  state: string;
+  stateRegistration: string;
+  tradeName: string;
+  zipCode: string;
+};
+
+function emptySupplierDraft(): SupplierEditorDraft {
+  return {
+    active: true,
+    address: "",
+    city: "",
+    cnpj: "",
+    email: "",
+    municipalRegistration: "",
+    name: "",
+    notes: "",
+    phone: "",
+    state: "",
+    stateRegistration: "",
+    tradeName: "",
+    zipCode: "",
+  };
+}
+
+function supplierToDraft(supplier: Supplier): SupplierEditorDraft {
+  return {
+    active: supplier.active,
+    address: supplier.address ?? "",
+    city: supplier.city ?? "",
+    cnpj: formatCnpj(supplier.cnpj),
+    email: supplier.email ?? "",
+    id: supplier.id,
+    municipalRegistration: supplier.municipalRegistration ?? "",
+    name: supplier.name,
+    notes: supplier.notes ?? "",
+    phone: formatPhone(supplier.phone ?? ""),
+    state: supplier.state ?? "",
+    stateRegistration: supplier.stateRegistration ?? "",
+    tradeName: supplier.tradeName ?? "",
+    zipCode: supplier.zipCode ?? "",
+  };
+}
+
 function SupplierManagementDialog({
   onSaved,
   suppliers,
@@ -162,30 +217,56 @@ function SupplierManagementDialog({
   suppliers: Supplier[];
 }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState({
-    cnpj: "",
-    name: "",
-    phone: "",
-    tradeName: "",
-  });
+  const [editorDraft, setEditorDraft] = useState<SupplierEditorDraft | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [listMessage, setListMessage] = useState<string | null>(null);
+  const [editorMessage, setEditorMessage] = useState<string | null>(null);
+  const canEditSuppliers = getStoredSession()?.user.role === "ADMIN";
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  function openCreateSupplier() {
+    setListMessage(null);
+    setEditorMessage(null);
+    setEditorDraft(emptySupplierDraft());
+  }
+
+  function openEditSupplier(supplier: Supplier) {
+    setListMessage(null);
+    setEditorMessage(null);
+    setEditorDraft(supplierToDraft(supplier));
+  }
+
+  function closeListDialog(nextOpen: boolean) {
+    setOpen(nextOpen);
+
+    if (!nextOpen) {
+      setEditorDraft(null);
+      setEditorMessage(null);
+      setListMessage(null);
+    }
+  }
+
+  async function submitSupplier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!editorDraft) {
+      return;
+    }
+
+    const { id, ...payload } = editorDraft;
+
     setSaving(true);
-    setMessage(null);
+    setEditorMessage(null);
 
     try {
-      await api<Supplier>("/suppliers", {
-        body: JSON.stringify(draft),
-        method: "POST",
+      await api<Supplier>(id ? `/suppliers/${id}` : "/suppliers", {
+        body: JSON.stringify(payload),
+        method: id ? "PUT" : "POST",
       });
-      setDraft({ cnpj: "", name: "", phone: "", tradeName: "" });
       await onSaved();
-      setMessage("Fornecedor salvo.");
+      setEditorDraft(null);
+      setListMessage(id ? "Fornecedor atualizado." : "Fornecedor cadastrado.");
     } catch (caughtError) {
-      setMessage(
+      setEditorMessage(
         caughtError instanceof Error
           ? caughtError.message
           : "Falha ao salvar fornecedor.",
@@ -195,115 +276,285 @@ function SupplierManagementDialog({
     }
   }
 
+  const supplierColumns: DataTableColumn<Supplier>[] = [
+    {
+      cell: (supplier) => (
+        <>
+          <p className="font-medium">{supplier.name}</p>
+          <p className="text-xs text-muted-foreground">{supplier.tradeName ?? "-"}</p>
+        </>
+      ),
+      header: "Fornecedor",
+      key: "supplier",
+    },
+    {
+      cell: (supplier) => supplier.cnpj,
+      header: "CNPJ",
+      key: "cnpj",
+    },
+    {
+      cell: (supplier) => supplier.phone ?? "-",
+      header: "Contato",
+      key: "contact",
+    },
+    {
+      cell: (supplier) => (
+        <Badge variant={supplier.active ? "success" : "zero"}>
+          {supplier.active ? "Ativo" : "Inativo"}
+        </Badge>
+      ),
+      header: "Status",
+      key: "status",
+    },
+    ...(canEditSuppliers
+      ? [
+          {
+            cell: (supplier) => (
+              <div className="flex justify-end">
+                <Button
+                  aria-label={`Editar fornecedor ${supplier.name}`}
+                  onClick={() => openEditSupplier(supplier)}
+                  size="icon"
+                  type="button"
+                  variant="outline"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </div>
+            ),
+            cellClassName: "text-right",
+            header: "Ações",
+            headerClassName: "text-right",
+            key: "actions",
+          } satisfies DataTableColumn<Supplier>,
+        ]
+      : []),
+  ];
+
   return (
     <>
       <Button onClick={() => setOpen(true)} type="button" variant="outline">
         <Building2 className="h-4 w-4" />
         Fornecedores
       </Button>
-      <Dialog onOpenChange={setOpen} open={open}>
+      <Dialog onOpenChange={closeListDialog} open={open}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>Fornecedores</DialogTitle>
             <DialogDescription>
-              Cadastre empresas para agilizar a criação de notas fiscais.
+              Consulte fornecedores cadastrados. O formulário de criação e edição abre em
+              uma janela própria para manter a tabela limpa.
             </DialogDescription>
           </DialogHeader>
-          {message ? <ResourceError message={message} /> : null}
-          <Form onSubmit={submit}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField>
-                <Label htmlFor="supplier-name">Razão social</Label>
-                <Input
-                  id="supplier-name"
-                  onChange={(event) =>
-                    setDraft({ ...draft, name: event.target.value })
-                  }
-                  required
-                  value={draft.name}
-                />
-              </FormField>
-              <FormField>
-                <Label htmlFor="supplier-trade-name">Nome fantasia</Label>
-                <Input
-                  id="supplier-trade-name"
-                  onChange={(event) =>
-                    setDraft({ ...draft, tradeName: event.target.value })
-                  }
-                  value={draft.tradeName}
-                />
-              </FormField>
-              <FormField>
-                <Label htmlFor="supplier-cnpj">CNPJ</Label>
-                <MaskedInput
-                  id="supplier-cnpj"
-                  mask="cnpj"
-                  onChange={(event) =>
-                    setDraft({ ...draft, cnpj: event.target.value })
-                  }
-                  required
-                  value={draft.cnpj}
-                />
-              </FormField>
-              <FormField>
-                <Label htmlFor="supplier-phone">Telefone</Label>
-                <MaskedInput
-                  id="supplier-phone"
-                  mask="phone"
-                  onChange={(event) =>
-                    setDraft({ ...draft, phone: event.target.value })
-                  }
-                  value={draft.phone}
-                />
-              </FormField>
+          {listMessage ? (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+              {listMessage}
             </div>
-            <Button disabled={saving} type="submit">
-              {saving ? "Salvando..." : "Salvar fornecedor"}
-            </Button>
-          </Form>
+          ) : null}
           <DataTable
-            columns={[
-              {
-                cell: (supplier) => (
-                  <>
-                    <p className="font-medium">{supplier.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {supplier.tradeName ?? "-"}
-                    </p>
-                  </>
-                ),
-                header: "Fornecedor",
-                key: "supplier",
-              },
-              {
-                cell: (supplier) => supplier.cnpj,
-                header: "CNPJ",
-                key: "cnpj",
-              },
-              {
-                cell: (supplier) => supplier.phone ?? "-",
-                header: "Contato",
-                key: "contact",
-              },
-              {
-                cell: (supplier) => (supplier.active ? "Ativo" : "Inativo"),
-                header: "Status",
-                key: "status",
-              },
-            ]}
+            columns={supplierColumns}
             data={suppliers}
             emptyMessage="Nenhum fornecedor cadastrado."
             getRowId={(supplier) => supplier.id}
             searchPlaceholder="Buscar fornecedor..."
             searchText={(supplier) =>
-              [
-                supplier.name,
-                supplier.tradeName,
-                supplier.cnpj,
-                supplier.phone,
-              ].join(" ")
+              [supplier.name, supplier.tradeName, supplier.cnpj, supplier.phone].join(" ")
+            }
+            toolbar={
+              <Button onClick={openCreateSupplier} type="button" variant="outline">
+                <Plus className="h-4 w-4" />
+                Novo fornecedor
+              </Button>
             }
           />
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        onOpenChange={(editorOpen) => {
+          if (!editorOpen) {
+            setEditorDraft(null);
+            setEditorMessage(null);
+          }
+        }}
+        open={Boolean(editorDraft)}
+      >
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editorDraft?.id ? "Editar fornecedor" : "Novo fornecedor"}
+            </DialogTitle>
+            <DialogDescription>
+              Informe os dados cadastrais do fornecedor usado nas notas fiscais.
+            </DialogDescription>
+          </DialogHeader>
+          {editorDraft ? (
+            <Form onSubmit={submitSupplier}>
+              {editorMessage ? <ResourceError message={editorMessage} /> : null}
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField>
+                  <Label htmlFor="supplier-name">Razão social</Label>
+                  <Input
+                    id="supplier-name"
+                    onChange={(event) =>
+                      setEditorDraft({ ...editorDraft, name: event.target.value })
+                    }
+                    required
+                    value={editorDraft.name}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="supplier-trade-name">Nome fantasia</Label>
+                  <Input
+                    id="supplier-trade-name"
+                    onChange={(event) =>
+                      setEditorDraft({ ...editorDraft, tradeName: event.target.value })
+                    }
+                    value={editorDraft.tradeName}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="supplier-cnpj">CNPJ</Label>
+                  <MaskedInput
+                    id="supplier-cnpj"
+                    mask="cnpj"
+                    onChange={(event) =>
+                      setEditorDraft({ ...editorDraft, cnpj: event.target.value })
+                    }
+                    required
+                    value={editorDraft.cnpj}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="supplier-phone">Telefone</Label>
+                  <MaskedInput
+                    id="supplier-phone"
+                    mask="phone"
+                    onChange={(event) =>
+                      setEditorDraft({ ...editorDraft, phone: event.target.value })
+                    }
+                    value={editorDraft.phone}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="supplier-email">E-mail</Label>
+                  <Input
+                    id="supplier-email"
+                    onChange={(event) =>
+                      setEditorDraft({ ...editorDraft, email: event.target.value })
+                    }
+                    type="email"
+                    value={editorDraft.email}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="supplier-state-registration">Inscrição estadual</Label>
+                  <Input
+                    id="supplier-state-registration"
+                    onChange={(event) =>
+                      setEditorDraft({
+                        ...editorDraft,
+                        stateRegistration: event.target.value,
+                      })
+                    }
+                    value={editorDraft.stateRegistration}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="supplier-municipal-registration">
+                    Inscrição municipal
+                  </Label>
+                  <Input
+                    id="supplier-municipal-registration"
+                    onChange={(event) =>
+                      setEditorDraft({
+                        ...editorDraft,
+                        municipalRegistration: event.target.value,
+                      })
+                    }
+                    value={editorDraft.municipalRegistration}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="supplier-zip-code">CEP</Label>
+                  <Input
+                    id="supplier-zip-code"
+                    onChange={(event) =>
+                      setEditorDraft({ ...editorDraft, zipCode: event.target.value })
+                    }
+                    value={editorDraft.zipCode}
+                  />
+                </FormField>
+                <FormField>
+                  <Label htmlFor="supplier-address">Endereço</Label>
+                  <Input
+                    id="supplier-address"
+                    onChange={(event) =>
+                      setEditorDraft({ ...editorDraft, address: event.target.value })
+                    }
+                    value={editorDraft.address}
+                  />
+                </FormField>
+                <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_6rem]">
+                  <FormField>
+                    <Label htmlFor="supplier-city">Cidade</Label>
+                    <Input
+                      id="supplier-city"
+                      onChange={(event) =>
+                        setEditorDraft({ ...editorDraft, city: event.target.value })
+                      }
+                      value={editorDraft.city}
+                    />
+                  </FormField>
+                  <FormField>
+                    <Label htmlFor="supplier-state">UF</Label>
+                    <Input
+                      id="supplier-state"
+                      maxLength={2}
+                      onChange={(event) =>
+                        setEditorDraft({
+                          ...editorDraft,
+                          state: event.target.value.toUpperCase(),
+                        })
+                      }
+                      value={editorDraft.state}
+                    />
+                  </FormField>
+                </div>
+              </div>
+              <FormField>
+                <Label htmlFor="supplier-notes">Observações</Label>
+                <Textarea
+                  id="supplier-notes"
+                  onChange={(event) =>
+                    setEditorDraft({ ...editorDraft, notes: event.target.value })
+                  }
+                  value={editorDraft.notes}
+                />
+              </FormField>
+              <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                <input
+                  checked={editorDraft.active}
+                  onChange={(event) =>
+                    setEditorDraft({ ...editorDraft, active: event.target.checked })
+                  }
+                  type="checkbox"
+                />
+                Fornecedor ativo
+              </label>
+              <div className="flex justify-end gap-2">
+                <Button
+                  onClick={() => setEditorDraft(null)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancelar
+                </Button>
+                <Button disabled={saving} type="submit">
+                  {saving ? "Salvando..." : "Salvar fornecedor"}
+                </Button>
+              </div>
+            </Form>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>

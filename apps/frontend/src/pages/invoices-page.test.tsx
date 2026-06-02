@@ -53,6 +53,38 @@ const invoice: Invoice = {
   totalValue: 120.5,
 };
 
+function storeAdminSession() {
+  localStorage.setItem(
+    "almoxarifado-session",
+    JSON.stringify({
+      token: "admin-token",
+      user: {
+        email: "admin@prefeitura.local",
+        id: "admin",
+        name: "Administrador",
+        role: "ADMIN",
+      },
+    }),
+  );
+}
+
+const supplier = {
+  active: true,
+  address: "Rua do Comércio, 50",
+  city: "Curitiba",
+  cnpj: "04252011000110",
+  email: "fornecedor@municipal.test",
+  id: "supplier-1",
+  municipalRegistration: "IM-55",
+  name: "Fornecedor Municipal LTDA",
+  notes: "Entrega pela manhã",
+  phone: "4133334444",
+  state: "PR",
+  stateRegistration: "IE-99",
+  tradeName: "Fornecedor Municipal",
+  zipCode: "80000000",
+};
+
 describe("InvoiceMovementsDialog", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -265,6 +297,152 @@ describe("InvoiceMovementsDialog", () => {
         warehouseId: "central",
         xml: "<xml />",
       });
+    });
+  });
+});
+
+describe("SupplierManagementDialog inside InvoicesPage", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  function stubInvoicePageFetch() {
+    let supplierRows = [supplier];
+    const calls: Array<{ body: unknown; method: string; pathname: string }> = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input));
+        const method = init?.method ?? "GET";
+
+        if (method === "POST" && url.pathname === "/suppliers") {
+          const body = JSON.parse(String(init?.body));
+          calls.push({ body, method, pathname: url.pathname });
+          const createdSupplier = {
+            ...body,
+            cnpj: "04252011000110",
+            id: "supplier-2",
+          };
+          supplierRows = [...supplierRows, createdSupplier];
+
+          return new Response(JSON.stringify(createdSupplier), {
+            headers: { "Content-Type": "application/json" },
+            status: 201,
+          });
+        }
+
+        if (method === "PUT" && url.pathname === "/suppliers/supplier-1") {
+          const body = JSON.parse(String(init?.body));
+          calls.push({ body, method, pathname: url.pathname });
+          const updatedSupplier = { ...supplier, ...body, id: supplier.id };
+          supplierRows = supplierRows.map((row) =>
+            row.id === supplier.id ? updatedSupplier : row,
+          );
+
+          return new Response(JSON.stringify(updatedSupplier), {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          });
+        }
+
+        const payloadByPath: Record<string, unknown> = {
+          "/invoices": [],
+          "/product-categories": [],
+          "/products": [],
+          "/suppliers": supplierRows,
+          "/warehouses": [],
+        };
+
+        return new Response(JSON.stringify(payloadByPath[url.pathname] ?? []), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+
+    return calls;
+  }
+
+  it("keeps the supplier list modal separate from the create form", async () => {
+    storeAdminSession();
+    const calls = stubInvoicePageFetch();
+
+    render(
+      <MemoryRouter>
+        <InvoicesPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Fornecedores" }));
+
+    expect(screen.getByRole("dialog", { name: "Fornecedores" })).toBeInTheDocument();
+    expect(screen.getByText("Fornecedor Municipal LTDA")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Novo fornecedor" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Salvar fornecedor" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Novo fornecedor" }));
+
+    expect(screen.getByRole("dialog", { name: "Novo fornecedor" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Razão social"), {
+      target: { value: "Fornecedor Novo LTDA" },
+    });
+    fireEvent.change(screen.getByLabelText("CNPJ"), {
+      target: { value: "04.252.011/0001-10" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar fornecedor" }));
+
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          method: "POST",
+          pathname: "/suppliers",
+        }),
+      );
+    });
+  });
+
+  it("edits suppliers in a dedicated form modal and preserves optional fields", async () => {
+    storeAdminSession();
+    const calls = stubInvoicePageFetch();
+
+    render(
+      <MemoryRouter>
+        <InvoicesPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Fornecedores" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Editar fornecedor Fornecedor Municipal LTDA" }),
+    );
+
+    expect(screen.getByRole("dialog", { name: "Editar fornecedor" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Razão social"), {
+      target: { value: "Fornecedor Atualizado LTDA" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar fornecedor" }));
+
+    await waitFor(() => {
+      expect(calls).toContainEqual(
+        expect.objectContaining({
+          method: "PUT",
+          pathname: "/suppliers/supplier-1",
+        }),
+      );
+    });
+
+    expect(calls.at(-1)?.body).toMatchObject({
+      address: "Rua do Comércio, 50",
+      city: "Curitiba",
+      email: "fornecedor@municipal.test",
+      municipalRegistration: "IM-55",
+      name: "Fornecedor Atualizado LTDA",
+      notes: "Entrega pela manhã",
+      state: "PR",
+      stateRegistration: "IE-99",
+      zipCode: "80000000",
     });
   });
 });

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { HelpAssistant } from "@/components/domain/help-assistant";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -547,6 +548,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+      {!isManagerSystem && !isFleetSystem && !isSiteSystem ? (
+        <HelpAssistant onNavigate={(path) => navigate(path)} />
+      ) : null}
     </div>
   );
 }
