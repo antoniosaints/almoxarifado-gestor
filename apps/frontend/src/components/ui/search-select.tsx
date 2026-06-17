@@ -260,6 +260,7 @@ export function SearchSelect({
       >
         {filteredOptions.map((option) => (
           <button
+            title={option.label}
             className="flex min-h-9 w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
             key={`${option.value}-${option.label}`}
             onClick={() => selectValue(option.value)}

@@ -683,7 +683,7 @@ function isCompleteOfficeDocument(html: string) {
 
 function wrapOfficeDocument(contentHtml: string) {
   return [
-    `<article ${officeDocumentAttribute} class="office-letter-document" style="min-height:297mm;width:210mm;margin:0 auto;padding:18mm 20mm;background:#fff;color:#111827;font-family:'Times New Roman',serif;font-size:12pt;line-height:1.45;">`,
+    `<article ${officeDocumentAttribute} class="office-letter-document" style="min-height:297mm;width:210mm;margin:0 auto;padding:6mm 20mm;background:#fff;color:#111827;font-family:arial,serif;font-size:12pt;line-height:1.45;">`,
     contentHtml,
     "</article>",
   ].join("");
