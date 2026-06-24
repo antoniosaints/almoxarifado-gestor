@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "../lib/prisma.js";
 import { createBaseFixture, resetDatabase } from "../test/database.js";
-import { createEntry, createOutput } from "./movement-service.js";
+import { createEntry, createOutput, deleteStockMovement } from "./movement-service.js";
 
 describe("movement service", () => {
   beforeEach(async () => {
@@ -468,5 +468,148 @@ describe("movement service", () => {
         userId: user.id,
       }),
     ).rejects.toThrow("Quantidade insuficiente em estoque.");
+  });
+
+  it("reverts stock quantity and value when deleting an entry movement", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const { movement } = await createEntry(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 10,
+      unitPrice: 20,
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    await deleteStockMovement(prisma, {
+      movementId: movement.id,
+      userId: user.id,
+    });
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+      },
+    });
+
+    expect(stock.currentQuantity).toBe(0);
+    expect(Number(stock.unitPriceAverage)).toBe(0);
+    expect(Number(stock.totalValue)).toBe(0);
+    await expect(
+      prisma.stockMovement.findUnique({ where: { id: movement.id } }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.auditLog.findFirst({
+        where: {
+          action: "DELETE",
+          entity: "StockMovement",
+          entityId: movement.id,
+        },
+      }),
+    ).resolves.toMatchObject({ userId: user.id });
+  });
+
+  it("reverts stock quantity and keeps average price stable when deleting an output movement", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    await createEntry(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 50,
+      unitPrice: 10,
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+    const { movement } = await createOutput(prisma, {
+      destinationNote: "Unidade basica",
+      movementDate: new Date("2026-05-23T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 30,
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    await deleteStockMovement(prisma, {
+      movementId: movement.id,
+      userId: user.id,
+    });
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+      },
+    });
+
+    expect(stock.currentQuantity).toBe(50);
+    expect(Number(stock.unitPriceAverage)).toBe(10);
+    expect(Number(stock.totalValue)).toBe(500);
+    await expect(
+      prisma.stockMovement.findUnique({ where: { id: movement.id } }),
+    ).resolves.toBeNull();
+  });
+
+  it("rejects deleting an entry movement when it would make stock negative", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+    const { movement } = await createEntry(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 10,
+      unitPrice: 20,
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+    await createOutput(prisma, {
+      destinationNote: "Unidade basica",
+      movementDate: new Date("2026-05-23T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 8,
+      userId: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    await expect(
+      deleteStockMovement(prisma, {
+        movementId: movement.id,
+        userId: user.id,
+      }),
+    ).rejects.toThrow("geraria estoque negativo");
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+      },
+    });
+
+    expect(stock.currentQuantity).toBe(2);
+    expect(Number(stock.totalValue)).toBe(40);
+    await expect(
+      prisma.stockMovement.findUnique({ where: { id: movement.id } }),
+    ).resolves.toBeTruthy();
   });
 });

@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
 import { api, apiFile, useApiResource } from "@/lib/api";
+import { hasPermission } from "@/lib/permissions";
 import { useSession } from "@/lib/session";
 import type { Movement, MovementType, Product, Warehouse } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -408,7 +409,7 @@ export function MovementsPage() {
   }, [from, productId, to, type, warehouseId]);
 
   const movements = useApiResource<Movement[]>(path, []);
-  const canDeleteMovements = session?.user.role === "ADMIN";
+  const canDeleteMovements = hasPermission(session?.user, "DELETE_STOCKS");
 
   async function deleteMovement() {
     if (!movementToDelete) {
@@ -424,7 +425,7 @@ export function MovementsPage() {
       movements.setData((current) =>
         current.filter((movement) => movement.id !== movementToDelete.id),
       );
-      setActionMessage("Movimentação excluída.");
+      setActionMessage("Movimentacao excluida e estoque atualizado.");
       setMovementToDelete(null);
     } catch (caughtError) {
       setActionError(
@@ -545,7 +546,8 @@ export function MovementsPage() {
           <DialogHeader>
             <DialogTitle>Excluir movimentação</DialogTitle>
             <DialogDescription>
-              Esta movimentação sera removida do histórico do estoque.
+              Esta movimentacao sera removida e o estoque sera revertido
+              conforme a operacao.
             </DialogDescription>
           </DialogHeader>
           {movementToDelete ? (

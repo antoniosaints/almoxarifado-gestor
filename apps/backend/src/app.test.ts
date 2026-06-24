@@ -707,6 +707,11 @@ describe("api", () => {
       prisma.stockMovement.findUnique({ where: { id: movement.id } }),
     ).resolves.toBeNull();
     await expect(
+      prisma.stock.findUniqueOrThrow({ where: { id: stock.id } }),
+    ).resolves.toMatchObject({
+      currentQuantity: 0,
+    });
+    await expect(
       prisma.auditLog.findFirst({
         where: {
           action: "DELETE",

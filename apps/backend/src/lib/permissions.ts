@@ -83,8 +83,8 @@ export const appPermissionDefinitions = [
   },
   {
     key: "DELETE_STOCKS",
-    label: "Apagar estoques",
-    description: "Apagar registros de estoque e suas movimentacoes vinculadas.",
+    label: "Apagar estoques e movimentacoes",
+    description: "Apagar registros de estoque e movimentacoes de estoque.",
     group: "Estoque",
   },
 ] as const;

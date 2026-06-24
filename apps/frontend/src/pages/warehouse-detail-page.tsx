@@ -1357,10 +1357,14 @@ function movementSummary(movement: Movement | null) {
 }
 
 function StockMovementsDialog({
+  deletingMovementId = null,
   movements,
+  onDeleteMovement,
   stock,
 }: {
+  deletingMovementId?: string | null;
   movements: Movement[];
+  onDeleteMovement?: (movement: Movement) => void;
   stock: Stock;
 }) {
   const [open, setOpen] = useState(false);
@@ -1434,7 +1438,12 @@ function StockMovementsDialog({
             <Switch checked={invoiceOnly} onCheckedChange={setInvoiceOnly} />
           </div>
           {message ? <ResourceError message={message} /> : null}
-          <MovementsTable movements={visibleMovements} showInvoiceAction />
+          <MovementsTable
+            deletingMovementId={deletingMovementId}
+            movements={visibleMovements}
+            onDeleteMovement={onDeleteMovement}
+            showInvoiceAction
+          />
           <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               {visibleMovements.length} movimentação(ões) no filtro atual.
@@ -1805,16 +1814,20 @@ function BulkStockActionDialog({
 }
 
 function StockTable({
+  deletingMovementId,
   movements,
   onMinimumChange,
+  onDeleteMovement,
   onMovementSaved,
   onStockDeleted,
   stocks,
   warehouse,
   warehouses,
 }: {
+  deletingMovementId?: string | null;
   movements: Movement[];
   onMinimumChange: (stockId: string, minimumQuantity: number) => Promise<void>;
+  onDeleteMovement?: (movement: Movement) => void;
   onMovementSaved: () => Promise<void>;
   onStockDeleted: (stockId: string) => Promise<void>;
   stocks: Stock[];
@@ -1902,7 +1915,12 @@ function StockTable({
           {
             cell: (stock) => (
               <div className="flex justify-center">
-                <StockMovementsDialog movements={movements} stock={stock} />
+                <StockMovementsDialog
+                  deletingMovementId={deletingMovementId}
+                  movements={movements}
+                  onDeleteMovement={canDeleteStocks ? onDeleteMovement : undefined}
+                  stock={stock}
+                />
               </div>
             ),
             header: "Mov.",
@@ -2734,7 +2752,9 @@ function WarehouseCsvImportDialog({
 }
 
 export function WarehouseTabs({
+  deletingMovementId = null,
   movements,
+  onDeleteMovement,
   onMinimumChange,
   onMovementSaved,
   onProductCreated,
@@ -2745,7 +2765,9 @@ export function WarehouseTabs({
   warehouse,
   warehouses,
 }: {
+  deletingMovementId?: string | null;
   movements: Movement[];
+  onDeleteMovement?: (movement: Movement) => void;
   onMinimumChange: (stockId: string, minimumQuantity: number) => Promise<void>;
   onMovementSaved: () => Promise<void>;
   onProductCreated?: (product: Product) => Promise<void> | void;
@@ -2759,6 +2781,7 @@ export function WarehouseTabs({
   const { session } = useSession();
   const operator = session?.user.role === "OPERATOR";
   const canCreateProducts = hasPermission(session?.user, "CREATE_PRODUCTS");
+  const canDeleteMovements = hasPermission(session?.user, "DELETE_STOCKS");
   const [activeTab, setActiveTab] = useState(() =>
     readStoredWarehouseTab(warehouse.id),
   );
@@ -2857,7 +2880,9 @@ export function WarehouseTabs({
       </div>
       <TabsContent value="stock">
         <StockTable
+          deletingMovementId={deletingMovementId}
           movements={movements}
+          onDeleteMovement={onDeleteMovement}
           onMinimumChange={onMinimumChange}
           onMovementSaved={onMovementSaved}
           onStockDeleted={onStockDeleted}
@@ -2870,7 +2895,11 @@ export function WarehouseTabs({
         <WarehouseOverview movements={movements} stocks={warehouse.stocks} />
       </TabsContent>
       <TabsContent value="history">
-        <MovementsTable movements={movements} />
+        <MovementsTable
+          deletingMovementId={deletingMovementId}
+          movements={movements}
+          onDeleteMovement={canDeleteMovements ? onDeleteMovement : undefined}
+        />
       </TabsContent>
     </Tabs>
   );
@@ -2894,6 +2923,8 @@ export function WarehouseDetailPage() {
     [],
   );
   const [message, setMessage] = useState<string | null>(null);
+  const [movementToDelete, setMovementToDelete] = useState<Movement | null>(null);
+  const [deletingMovementId, setDeletingMovementId] = useState<string | null>(null);
 
   async function reloadOperations() {
     await Promise.all([
@@ -2942,6 +2973,32 @@ export function WarehouseDetailPage() {
           ? caughtError.message
           : "Falha ao remover estoque.",
       );
+    }
+  }
+
+  async function deleteMovement() {
+    if (!movementToDelete) {
+      return;
+    }
+
+    setDeletingMovementId(movementToDelete.id);
+    setMessage(null);
+
+    try {
+      await api(`/movements/${movementToDelete.id}`, {
+        method: "DELETE",
+      });
+      setMovementToDelete(null);
+      setMessage("Movimentacao excluida e estoque atualizado.");
+      await reloadOperations();
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao excluir movimentacao.",
+      );
+    } finally {
+      setDeletingMovementId(null);
     }
   }
 
@@ -3060,7 +3117,9 @@ export function WarehouseDetailPage() {
       </div>
 
       <WarehouseTabs
+        deletingMovementId={deletingMovementId}
         movements={movements.data}
+        onDeleteMovement={setMovementToDelete}
         onMinimumChange={updateMinimum}
         onMovementSaved={reloadOperations}
         onProductCreated={addProductToOptions}
@@ -3071,6 +3130,53 @@ export function WarehouseDetailPage() {
         warehouse={warehouse.data}
         warehouses={warehouses.data}
       />
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open && !deletingMovementId) {
+            setMovementToDelete(null);
+          }
+        }}
+        open={Boolean(movementToDelete)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir movimentacao</DialogTitle>
+            <DialogDescription>
+              Esta movimentacao sera removida e o estoque deste almoxarifado sera
+              revertido conforme a operacao.
+            </DialogDescription>
+          </DialogHeader>
+          {movementToDelete ? (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <p className="font-medium">{movementToDelete.product.name}</p>
+              <p className="text-muted-foreground">
+                {movementLabels[movementToDelete.type]} em{" "}
+                {movementToDelete.warehouse.name} no dia{" "}
+                {formatDate(movementToDelete.movementDate)}
+              </p>
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button
+              disabled={Boolean(deletingMovementId)}
+              onClick={() => setMovementToDelete(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={Boolean(deletingMovementId)}
+              onClick={() => void deleteMovement()}
+              type="button"
+              variant="destructive"
+            >
+              {deletingMovementId ? "Excluindo..." : "Excluir"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

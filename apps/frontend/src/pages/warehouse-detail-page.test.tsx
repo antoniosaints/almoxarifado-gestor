@@ -917,6 +917,59 @@ describe("WarehouseTabs", () => {
     );
   });
 
+  it("offers movement deletion from the warehouse history for users with stock delete permission", () => {
+    const onDeleteMovement = vi.fn();
+    const movement = {
+      id: "movement-1",
+      movementDate: "2026-05-23T12:00:00.000Z",
+      product: warehouseWithStock.stocks[0].product,
+      productId: "paper",
+      quantity: 8,
+      type: "ENTRADA" as const,
+      warehouse: {
+        id: "health",
+        name: "Almoxarifado da Saude",
+      },
+      warehouseId: "health",
+    };
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "operator-token",
+            user: {
+              email: "operador@prefeitura.local",
+              id: "operator",
+              name: "Operador",
+              permissions: ["DELETE_STOCKS"],
+              role: "OPERATOR",
+            },
+          }}
+        >
+          <WarehouseTabs
+            deletingMovementId={null}
+            movements={[movement]}
+            onDeleteMovement={onDeleteMovement}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={() => Promise.resolve()}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    openHistoryTab();
+    fireEvent.click(
+      screen.getByRole("button", { name: /excluir movimenta.+o de papel a4/i }),
+    );
+
+    expect(onDeleteMovement).toHaveBeenCalledWith(movement);
+  });
+
   it("selects all stocks in bulk admin dialogs", () => {
     render(
       <MemoryRouter>

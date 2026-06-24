@@ -1,11 +1,12 @@
 import { UserRole } from "@prisma/client";
 import { Router } from "express";
-import { asyncHandler, currentUser, requireRole } from "../lib/http.js";
+import { asyncHandler, currentUser, requirePermission, requireRole } from "../lib/http.js";
 import { assertWarehouseAccess, warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import {
   createEntry,
   createOutput,
+  deleteStockMovement,
 } from "../services/movement-service.js";
 import { createTransferRequest } from "../services/transfer-request-service.js";
 import {
@@ -113,78 +114,19 @@ movementRoutes.post(
 
 movementRoutes.delete(
   "/:id",
-  requireRole(UserRole.ADMIN),
+  requirePermission("DELETE_STOCKS"),
   asyncHandler(async (request, response) => {
     const { id } = idParam.parse(request.params);
     const user = currentUser(response);
     const movement = await prisma.stockMovement.findUniqueOrThrow({
       where: { id },
-      include: {
-        destinationWarehouse: true,
-        invoice: true,
-        product: true,
-        sourceWarehouse: true,
-        sourceUnit: true,
-        warehouse: true,
-      },
+      select: { warehouseId: true },
     });
 
-    await prisma.$transaction(async (transaction) => {
-      await transaction.auditLog.create({
-        data: {
-          action: "DELETE",
-          details: JSON.stringify({
-            destinationNote: movement.destinationNote,
-            destinationWarehouse: movement.destinationWarehouse
-              ? {
-                  id: movement.destinationWarehouse.id,
-                  name: movement.destinationWarehouse.name,
-                }
-              : null,
-            invoice: movement.invoice
-              ? {
-                  id: movement.invoice.id,
-                  number: movement.invoice.number,
-                }
-              : null,
-            movementDate: movement.movementDate,
-            product: {
-              code: movement.product.code,
-              id: movement.product.id,
-              name: movement.product.name,
-            },
-            quantity: movement.quantity,
-            conversionFactor: movement.conversionFactor,
-            sourceQuantity: movement.sourceQuantity,
-            sourceUnit: movement.sourceUnit
-              ? {
-                  abbreviation: movement.sourceUnit.abbreviation,
-                  id: movement.sourceUnit.id,
-                  name: movement.sourceUnit.name,
-                }
-              : null,
-            sourceUnitPrice: movement.sourceUnitPrice,
-            sourceWarehouse: movement.sourceWarehouse
-              ? {
-                  id: movement.sourceWarehouse.id,
-                  name: movement.sourceWarehouse.name,
-                }
-              : null,
-            stockId: movement.stockId,
-            type: movement.type,
-            unitPrice: movement.unitPrice,
-            warehouse: {
-              id: movement.warehouse.id,
-              name: movement.warehouse.name,
-            },
-          }),
-          entity: "StockMovement",
-          entityId: movement.id,
-          userId: user.id,
-        },
-      });
-
-      await transaction.stockMovement.delete({ where: { id } });
+    await assertWarehouseAccess(prisma, user, movement.warehouseId);
+    await deleteStockMovement(prisma, {
+      movementId: id,
+      userId: user.id,
     });
 
     response.status(204).send();
