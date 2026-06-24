@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { AdHocOutputRequestDialog } from "@/components/domain/ad-hoc-output-request-dialog";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -171,6 +172,10 @@ function entryRequestProductSummary(request: EntryRequest) {
     : `${firstItem.product.name} + ${items.length - 1} item(ns)`;
 }
 
+function entryRequestTypeLabel(request: EntryRequest) {
+  return request.type === "AD_HOC_OUTPUT" ? "Saída avulsa" : "Entrada solicitada";
+}
+
 function requestSourceQuantityLabel(item: {
   sourceQuantity?: number | string | null;
   sourceUnit?: { abbreviation: string } | null;
@@ -297,6 +302,7 @@ function ApprovalDialog({
   const [invoiceId, setInvoiceId] = useState("");
   const [open, setOpen] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const adHocOutput = request.type === "AD_HOC_OUTPUT";
   const items = entryRequestItems(request);
   const approvalItems = items.map((item) => {
     const quantity = Number.parseInt(quantities[item.id] ?? String(item.quantity), 10);
@@ -310,7 +316,9 @@ function ApprovalDialog({
   const canApprove = approvalItems.every(
     (item) => Number.isInteger(item.quantity) && item.quantity > 0,
   );
-  const sourceWarehouse = warehouses.find((warehouse) => warehouse.isGeneral);
+  const sourceWarehouse = adHocOutput
+    ? warehouses.find((warehouse) => warehouse.id === request.warehouse.id)
+    : warehouses.find((warehouse) => warehouse.isGeneral);
   const destinationWarehouse = warehouses.find(
     (warehouse) => warehouse.id === request.warehouse.id,
   );
@@ -334,9 +342,11 @@ function ApprovalDialog({
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Aprovar entrada</DialogTitle>
+            <DialogTitle>
+              {adHocOutput ? "Aprovar saída avulsa" : "Aprovar entrada"}
+            </DialogTitle>
             <DialogDescription>
-              {entryRequestProductSummary(request)} para {request.warehouse.name}
+              {entryRequestProductSummary(request)} em {request.warehouse.name}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -355,7 +365,9 @@ function ApprovalDialog({
                   (stock) => stock.productId === item.productId,
                 );
                 const sourceBefore = sourceStock?.currentQuantity ?? 0;
-                const destinationBefore = destinationStock?.currentQuantity ?? 0;
+                const destinationBefore = adHocOutput
+                  ? 0
+                  : destinationStock?.currentQuantity ?? 0;
                 const sourceAfter = sourceBefore - summaryQuantity;
                 const destinationAfter = destinationBefore + summaryQuantity;
 
@@ -416,24 +428,26 @@ function ApprovalDialog({
                 );
               })}
             </div>
-            <div>
-              <Label htmlFor={`invoice-${request.id}`}>Nota fiscal opcional</Label>
-              <SearchSelect
-                ariaLabel="Nota fiscal opcional"
-                id={`invoice-${request.id}`}
-                onValueChange={setInvoiceId}
-                options={[
-                  { label: "Sem nota vinculada", value: "" },
-                  ...invoices.map((invoice) => ({
-                    label: `${invoice.number} - ${invoice.companyName}`,
-                    searchText: invoice.cnpj,
-                    value: invoice.id,
-                  })),
-                ]}
-                placeholder="Sem nota vinculada"
-                value={invoiceId}
-              />
-            </div>
+            {adHocOutput ? null : (
+              <div>
+                <Label htmlFor={`invoice-${request.id}`}>Nota fiscal opcional</Label>
+                <SearchSelect
+                  ariaLabel="Nota fiscal opcional"
+                  id={`invoice-${request.id}`}
+                  onValueChange={setInvoiceId}
+                  options={[
+                    { label: "Sem nota vinculada", value: "" },
+                    ...invoices.map((invoice) => ({
+                      label: `${invoice.number} - ${invoice.companyName}`,
+                      searchText: invoice.cnpj,
+                      value: invoice.id,
+                    })),
+                  ]}
+                  placeholder="Sem nota vinculada"
+                  value={invoiceId}
+                />
+              </div>
+            )}
             <Button
               disabled={!canApprove}
               onClick={() => {
@@ -1141,6 +1155,7 @@ export function RequestsPage() {
   const admin = session?.user.role === "ADMIN";
   const canApproveRequests = hasPermission(session?.user, "APPROVE_REQUESTS");
   const canApproveTransfers = hasPermission(session?.user, "APPROVE_TRANSFERS");
+  const generalWarehouse = warehouses.data.find((warehouse) => warehouse.isGeneral);
 
   async function approve(
     requestId: string,
@@ -1264,10 +1279,16 @@ export function RequestsPage() {
             warehouses={warehouses.data}
           />
           {admin ? (
-            <DirectTransferDialog
-              onCreated={transferCreated}
-              warehouses={warehouses.data}
-            />
+            <>
+              <AdHocOutputRequestDialog
+                generalWarehouse={generalWarehouse}
+                onCreated={requestCreated}
+              />
+              <DirectTransferDialog
+                onCreated={transferCreated}
+                warehouses={warehouses.data}
+              />
+            </>
           ) : null}
         </div>
       </div>
@@ -1290,7 +1311,7 @@ export function RequestsPage() {
       <Tabs onValueChange={setActiveTab} value={activeTab}>
         <TabsList>
           <TabsTrigger onClick={() => setActiveTab("entries")} value="entries">
-            Entradas solicitadas
+            Solicitações
           </TabsTrigger>
           <TabsTrigger onClick={() => setActiveTab("transfers")} value="transfers">
             Recebimentos
@@ -1306,7 +1327,7 @@ export function RequestsPage() {
                       {entryRequestProductSummary(request)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatDate(request.movementDate)}
+                      {entryRequestTypeLabel(request)} | {formatDate(request.movementDate)}
                     </p>
                   </>
                 ),
@@ -1340,7 +1361,8 @@ export function RequestsPage() {
               {
                 cell: (request) => (
                   <div className="flex justify-end gap-2">
-                    {request.warehouse.isGeneral !== true ? (
+                    {request.warehouse.isGeneral !== true ||
+                    request.type === "AD_HOC_OUTPUT" ? (
                       <OfficeLetterDialog request={request} />
                     ) : null}
                     <Button asChild size="sm" variant="outline">
@@ -1379,9 +1401,9 @@ export function RequestsPage() {
               },
             ]}
             data={entries.data}
-            emptyMessage="Nenhuma solicitação de entrada encontrada."
+            emptyMessage="Nenhuma solicitação encontrada."
             getRowId={(request) => request.id}
-            searchPlaceholder="Buscar entrada solicitada..."
+            searchPlaceholder="Buscar solicitação..."
             searchText={(request) =>
               [
                 ...entryRequestItems(request).flatMap((item) => [

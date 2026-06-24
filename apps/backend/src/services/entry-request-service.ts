@@ -1,4 +1,5 @@
 import {
+  EntryRequestType,
   MovementType,
   Prisma,
   RequestStatus,
@@ -10,6 +11,8 @@ import { defaultSettings, settingsId } from "./settings-service.js";
 import {
   convertQuantityToBase,
   quantityConversionAuditData,
+  roundCurrency,
+  toNumber,
 } from "./unit-conversion-service.js";
 
 type EntryRequestInput = {
@@ -223,6 +226,43 @@ async function nextOfficeNumber(
   return (lastRequest?.officeNumber ?? 0) + 1;
 }
 
+async function assertAvailableGeneralStock(
+  prisma: Prisma.TransactionClient,
+  warehouseId: string,
+  items: Array<{ productId: string; quantity: number }>,
+) {
+  const quantitiesByProduct = new Map<string, number>();
+
+  for (const item of items) {
+    quantitiesByProduct.set(
+      item.productId,
+      (quantitiesByProduct.get(item.productId) ?? 0) + item.quantity,
+    );
+  }
+
+  const stocks = await prisma.stock.findMany({
+    select: {
+      currentQuantity: true,
+      productId: true,
+    },
+    where: {
+      productId: {
+        in: [...quantitiesByProduct.keys()],
+      },
+      warehouseId,
+    },
+  });
+  const stockByProduct = new Map(stocks.map((stock) => [stock.productId, stock]));
+
+  for (const [productId, quantity] of quantitiesByProduct) {
+    const stock = stockByProduct.get(productId);
+
+    if (!stock || stock.currentQuantity < quantity) {
+      throw new AppError(409, "Quantidade insuficiente no estoque geral.");
+    }
+  }
+}
+
 export function formatOfficeNumber(
   officeNumber: number | null | undefined,
   officeYear: number | null | undefined,
@@ -316,6 +356,87 @@ export async function createEntryRequest(
   });
 }
 
+export async function createAdHocOutputRequest(
+  prisma: PrismaClient,
+  input: EntryRequestInput,
+) {
+  const items = normalizeEntryRequestItems(input);
+  const primaryItem = items[0];
+
+  if (!primaryItem) {
+    throw new AppError(400, "Informe ao menos um item para solicitar.");
+  }
+
+  return prisma.$transaction(async (transaction) => {
+    const warehouse = await transaction.warehouse.findUnique({
+      select: {
+        active: true,
+        isGeneral: true,
+      },
+      where: {
+        id: input.warehouseId,
+      },
+    });
+
+    if (!warehouse?.active || !warehouse.isGeneral) {
+      throw new AppError(
+        400,
+        "Saida avulsa disponivel apenas no almoxarifado geral ativo.",
+      );
+    }
+
+    const convertedItems = await Promise.all(
+      items.map(async (item) => ({
+        ...item,
+        converted: await convertQuantityToBase(transaction, {
+          productId: item.productId,
+          quantity: item.quantity,
+          unitId: item.unitId,
+        }),
+      })),
+    );
+    const primaryConverted = convertedItems[0];
+
+    await assertAvailableGeneralStock(
+      transaction,
+      input.warehouseId,
+      convertedItems.map((item) => ({
+        productId: item.productId,
+        quantity: item.converted.baseQuantity,
+      })),
+    );
+
+    const officeYear = input.movementDate.getFullYear();
+    const officeNumber = await nextOfficeNumber(
+      transaction,
+      input.warehouseId,
+      officeYear,
+    );
+
+    return transaction.entryRequest.create({
+      data: {
+        items: {
+          create: convertedItems.map((item) => ({
+            ...quantityConversionAuditData(item.converted),
+            productId: item.productId,
+            quantity: item.converted.baseQuantity,
+          })),
+        },
+        movementDate: input.movementDate,
+        observation: input.observation,
+        officeNumber,
+        officeYear,
+        productId: primaryConverted.productId,
+        quantity: primaryConverted.converted.baseQuantity,
+        requestedById: input.requestedById,
+        ...quantityConversionAuditData(primaryConverted.converted),
+        type: EntryRequestType.AD_HOC_OUTPUT,
+        warehouseId: input.warehouseId,
+      },
+    });
+  });
+}
+
 async function createEntryRequestLegacy(
   prisma: PrismaClient,
   input: EntryRequestInput,
@@ -392,6 +513,10 @@ export async function approveEntryRequest(
 
     if (request.status !== RequestStatus.PENDING) {
       throw new AppError(409, "Esta solicitação já foi analisada.");
+    }
+
+    if (request.type === EntryRequestType.AD_HOC_OUTPUT) {
+      return approveAdHocOutputRequestInTransaction(transaction, request, input);
     }
 
     const approvedItems = normalizeApprovalItems(request, input);
@@ -552,6 +677,119 @@ export async function approveEntryRequest(
       summary: firstSummary,
     };
   });
+}
+
+async function approveAdHocOutputRequestInTransaction(
+  transaction: Prisma.TransactionClient,
+  request: Prisma.EntryRequestGetPayload<{ include: { items: true } }>,
+  input: ApprovalInput,
+) {
+  const warehouse = await transaction.warehouse.findUnique({
+    select: {
+      active: true,
+      isGeneral: true,
+    },
+    where: {
+      id: request.warehouseId,
+    },
+  });
+
+  if (!warehouse?.active || !warehouse.isGeneral) {
+    throw new AppError(
+      400,
+      "Saida avulsa disponivel apenas no almoxarifado geral ativo.",
+    );
+  }
+
+  const approvedItems = normalizeApprovalItems(request, input);
+  const primaryItem = approvedItems[0];
+
+  if (!primaryItem) {
+    throw new AppError(400, "Informe ao menos um item para aprovar.");
+  }
+
+  const movements = [];
+  const stocks = [];
+  const summaries = [];
+
+  for (const item of approvedItems) {
+    const stock = await transaction.stock.findUnique({
+      where: {
+        warehouseId_productId: {
+          warehouseId: request.warehouseId,
+          productId: item.productId,
+        },
+      },
+    });
+
+    if (!stock || stock.currentQuantity < item.quantity) {
+      throw new AppError(409, "Quantidade insuficiente no estoque geral.");
+    }
+
+    const updatedStock = await transaction.stock.update({
+      where: { id: stock.id },
+      data: {
+        currentQuantity: stock.currentQuantity - item.quantity,
+        lastMovementAt: request.movementDate,
+        totalValue: roundCurrency(
+          (stock.currentQuantity - item.quantity) *
+            toNumber(stock.unitPriceAverage),
+        ),
+      },
+    });
+
+    const movement = await transaction.stockMovement.create({
+      data: {
+        movementDate: request.movementDate,
+        observation: request.observation,
+        productId: item.productId,
+        quantity: item.quantity,
+        responsibleUserId: input.reviewedById,
+        stockId: stock.id,
+        type: MovementType.SAIDA,
+        warehouseId: request.warehouseId,
+      },
+    });
+
+    if (item.id) {
+      await transaction.entryRequestItem.update({
+        data: {
+          quantity: item.quantity,
+        },
+        where: { id: item.id },
+      });
+    }
+
+    movements.push(movement);
+    stocks.push(updatedStock);
+    summaries.push({
+      approvedQuantity: item.quantity,
+      productId: item.productId,
+      sourceAfter: stock.currentQuantity - item.quantity,
+      sourceBefore: stock.currentQuantity,
+    });
+  }
+
+  const approvedRequest = await transaction.entryRequest.update({
+    where: { id: request.id },
+    data: {
+      productId: primaryItem.productId,
+      quantity: primaryItem.quantity,
+      reviewedAt: new Date(),
+      reviewedById: input.reviewedById,
+      status: RequestStatus.APPROVED,
+    },
+  });
+
+  return {
+    itemSummaries: summaries,
+    movement: movements[0],
+    movements,
+    request: approvedRequest,
+    stock: stocks[0],
+    stocks,
+    summary: summaries[0],
+  };
 }
 
 export async function rejectEntryRequest(
@@ -844,7 +1082,10 @@ export async function getEntryRequestOfficeLetter(
       throw new AppError(404, "Solicitação não encontrada.");
     }
 
-    if (foundRequest.warehouse.isGeneral) {
+    if (
+      foundRequest.warehouse.isGeneral &&
+      foundRequest.type !== EntryRequestType.AD_HOC_OUTPUT
+    ) {
       throw new AppError(
         400,
         "Ofício disponível apenas para almoxarifados solicitantes.",

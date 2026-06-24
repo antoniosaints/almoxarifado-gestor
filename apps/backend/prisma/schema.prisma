@@ -25,6 +25,11 @@ enum RequestStatus {
   REJECTED
 }
 
+enum EntryRequestType {
+  ENTRY
+  AD_HOC_OUTPUT
+}
+
 enum TransferRequestStatus {
   PENDING_RECEIPT
   RECEIVED
@@ -313,6 +318,7 @@ model StockMovement {
 
 model EntryRequest {
   id               String        @id @default(cuid())
+  type             EntryRequestType @default(ENTRY)
   warehouseId      String
   productId        String
   quantity         Int

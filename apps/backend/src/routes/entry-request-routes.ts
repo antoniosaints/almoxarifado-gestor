@@ -6,6 +6,7 @@ import { assertWarehouseAccess, warehouseScope } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import {
   approveEntryRequest,
+  createAdHocOutputRequest,
   createEntryRequest,
   getEntryRequestOfficeLetter,
   rejectEntryRequest,
@@ -124,6 +125,23 @@ entryRequestRoutes.post(
 
     response.status(201).json(
       await createEntryRequest(prisma, {
+        ...input,
+        requestedById: user.id,
+      }),
+    );
+  }),
+);
+
+entryRequestRoutes.post(
+  "/ad-hoc-output",
+  requireRole(UserRole.ADMIN, UserRole.OPERATOR),
+  asyncHandler(async (request, response) => {
+    const user = currentUser(response);
+    const input = entryRequestInput.parse(request.body);
+    await assertWarehouseAccess(prisma, user, input.warehouseId);
+
+    response.status(201).json(
+      await createAdHocOutputRequest(prisma, {
         ...input,
         requestedById: user.id,
       }),

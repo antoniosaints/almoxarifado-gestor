@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-01T17:51:01.977Z",
+  "generatedAt": "2026-06-24T18:49:05.097Z",
   "provider": "sqlite",
   "trustedMigrations": {
     "20260522100000_init": {
@@ -175,6 +175,10 @@
         "redefine-tables"
       ],
       "sha256": "6982a47b809c51946db0339becd4d1ea58d1be3a3881f370778d3e712af89486"
+    },
+    "20260624153000_entry_request_ad_hoc_output": {
+      "risks": [],
+      "sha256": "676b10fc9f2b6d836c5a5365dafef294c25aa6559b792f1adce82880718fc85e"
     }
   },
   "version": 1

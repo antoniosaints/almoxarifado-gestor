@@ -23,6 +23,7 @@ import {
   CategoryCreateDialog,
   UnitCreateDialog,
 } from "@/components/domain/catalog-quick-create-dialog";
+import { AdHocOutputRequestDialog } from "@/components/domain/ad-hoc-output-request-dialog";
 import { DataTable } from "@/components/domain/data-table";
 import { LoadingLine, ResourceError } from "@/components/domain/feedback";
 import { StockBadge } from "@/components/domain/stock-badge";
@@ -2861,13 +2862,19 @@ export function WarehouseTabs({
             />
           ) : null}
           {warehouse.isGeneral && activeTab === "stock" && !operator ? (
-            <MovementDialog
-              kind="transfer"
-              onSaved={onMovementSaved}
-              products={transferableProducts}
-              warehouse={warehouse}
-              warehouses={warehouses}
-            />
+            <>
+              <AdHocOutputRequestDialog
+                generalWarehouse={warehouse}
+                onCreated={onMovementSaved}
+              />
+              <MovementDialog
+                kind="transfer"
+                onSaved={onMovementSaved}
+                products={transferableProducts}
+                warehouse={warehouse}
+                warehouses={warehouses}
+              />
+            </>
           ) : null}
           {activeTab === "history" ? (
             <WarehouseMovementsExportDialog

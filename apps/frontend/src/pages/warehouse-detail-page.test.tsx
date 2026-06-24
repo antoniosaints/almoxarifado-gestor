@@ -450,6 +450,84 @@ describe("WarehouseTabs", () => {
     expect(screen.queryByText("0000003 - Detergente")).not.toBeInTheDocument();
   });
 
+  it("creates an ad hoc output request from the general warehouse after stock validation", async () => {
+    let requestPayload: unknown;
+    const onMovementSaved = vi.fn(async () => undefined);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/entry-requests/ad-hoc-output" && init?.method === "POST") {
+        requestPayload = JSON.parse(String(init.body));
+
+        return new Response(JSON.stringify({ id: "ad-hoc-output" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+
+      return new Response(JSON.stringify([]), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={onMovementSaved}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product, outsideProduct]}
+            warehouse={generalWarehouseWithStock}
+            warehouses={[generalWarehouseWithStock, warehouse]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Solicitar saída avulsa" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Saída avulsa" });
+    expect(within(dialog).getByText("Saldo disponível: 8 RSM")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Detergente")).not.toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Quantidade"), {
+      target: { value: "9" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitação" }));
+
+    expect(
+      within(dialog).getByText("Quantidade solicitada excede o saldo disponível."),
+    ).toBeInTheDocument();
+    expect(requestPayload).toBeUndefined();
+
+    fireEvent.change(within(dialog).getByLabelText("Quantidade"), {
+      target: { value: "3" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitação" }));
+
+    await waitFor(() => expect(onMovementSaved).toHaveBeenCalled());
+    expect(requestPayload).toMatchObject({
+      items: [{ productId: "paper", quantity: 3, unitId: "ream" }],
+      productId: "paper",
+      quantity: 3,
+      warehouseId: "central",
+    });
+  });
+
   it("shows the converted base quantity in movement forms", () => {
     render(
       <MemoryRouter>

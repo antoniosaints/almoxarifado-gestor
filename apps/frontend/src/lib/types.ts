@@ -297,6 +297,7 @@ export type ManagedUser = User & {
 };
 
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type EntryRequestType = "ENTRY" | "AD_HOC_OUTPUT";
 
 export type TransferRequestStatus =
   | "PENDING_RECEIPT"
@@ -319,6 +320,7 @@ export type EntryRequest = {
   sourceUnit?: UnitOfMeasure | null;
   sourceUnitId?: string | null;
   status: RequestStatus;
+  type?: EntryRequestType;
   warehouse: Pick<Warehouse, "category" | "id" | "isGeneral" | "name">;
 };
 

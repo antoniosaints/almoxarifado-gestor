@@ -4,7 +4,9 @@ import { prisma } from "../lib/prisma.js";
 import { createBaseFixture, resetDatabase } from "../test/database.js";
 import {
   approveEntryRequest,
+  createAdHocOutputRequest,
   createEntryRequest,
+  getEntryRequestOfficeLetter,
 } from "./entry-request-service.js";
 
 describe("entry request service", () => {
@@ -427,6 +429,198 @@ describe("entry request service", () => {
     ).resolves.toMatchObject({
       quantity: 6,
       status: RequestStatus.APPROVED,
+    });
+  });
+
+  it("creates an ad hoc output request from the general warehouse without debiting stock", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        totalValue: 100,
+        unitPriceAverage: 10,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+
+    const request = await createAdHocOutputRequest(prisma, {
+      items: [{ productId: product.id, quantity: 4 }],
+      movementDate: new Date("2026-06-24T12:00:00.000Z"),
+      observation: "Saida para evento municipal",
+      productId: product.id,
+      quantity: 4,
+      requestedById: user.id,
+      warehouseId: generalWarehouse.id,
+    });
+
+    expect(request).toMatchObject({
+      quantity: 4,
+      status: RequestStatus.PENDING,
+      type: "AD_HOC_OUTPUT",
+    });
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: generalWarehouse.id,
+        },
+      },
+    });
+    expect(stock.currentQuantity).toBe(10);
+    expect(Number(stock.totalValue)).toBe(100);
+    expect(await prisma.stockMovement.count()).toBe(0);
+  });
+
+  it("approves an ad hoc output request by debiting only the general warehouse", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        totalValue: 100,
+        unitPriceAverage: 10,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+    const request = await createAdHocOutputRequest(prisma, {
+      items: [{ productId: product.id, quantity: 4 }],
+      movementDate: new Date("2026-06-24T12:00:00.000Z"),
+      observation: "Saida para evento municipal",
+      productId: product.id,
+      quantity: 4,
+      requestedById: user.id,
+      warehouseId: generalWarehouse.id,
+    });
+
+    const result = await approveEntryRequest(prisma, {
+      requestId: request.id,
+      reviewedById: user.id,
+    });
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: generalWarehouse.id,
+        },
+      },
+    });
+    const movements = await prisma.stockMovement.findMany();
+
+    expect(result.summary).toMatchObject({
+      approvedQuantity: 4,
+      sourceAfter: 6,
+      sourceBefore: 10,
+    });
+    expect(stock.currentQuantity).toBe(6);
+    expect(Number(stock.totalValue)).toBe(60);
+    expect(movements).toHaveLength(1);
+    expect(movements[0]).toMatchObject({
+      productId: product.id,
+      quantity: 4,
+      type: "SAIDA",
+      warehouseId: generalWarehouse.id,
+    });
+    await expect(
+      prisma.entryRequest.findUniqueOrThrow({ where: { id: request.id } }),
+    ).resolves.toMatchObject({
+      quantity: 4,
+      status: RequestStatus.APPROVED,
+      type: "AD_HOC_OUTPUT",
+    });
+  });
+
+  it("generates an office letter for an ad hoc output request", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+    const request = await createAdHocOutputRequest(prisma, {
+      items: [{ productId: product.id, quantity: 4 }],
+      movementDate: new Date("2026-06-24T12:00:00.000Z"),
+      observation: "Saida para evento municipal",
+      productId: product.id,
+      quantity: 4,
+      requestedById: user.id,
+      warehouseId: generalWarehouse.id,
+    });
+
+    const letter = await getEntryRequestOfficeLetter(prisma, request.id, user.name);
+
+    expect(letter).toMatchObject({
+      items: [
+        {
+          productName: product.name,
+          quantity: 4,
+          unit: "UN",
+        },
+      ],
+      numberFormatted: "001/2026",
+      request: {
+        id: request.id,
+        status: RequestStatus.PENDING,
+        warehouseId: generalWarehouse.id,
+      },
+      year: 2026,
+    });
+    expect(letter.contentHtml).toContain("Papel A4");
+  });
+
+  it("rejects an ad hoc output request above the current general stock", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 2,
+        productId: product.id,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+
+    await expect(
+      createAdHocOutputRequest(prisma, {
+        items: [{ productId: product.id, quantity: 3 }],
+        movementDate: new Date("2026-06-24T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 3,
+        requestedById: user.id,
+        warehouseId: generalWarehouse.id,
+      }),
+    ).rejects.toMatchObject({
+      message: "Quantidade insuficiente no estoque geral.",
+      status: 409,
     });
   });
 });

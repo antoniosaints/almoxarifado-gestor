@@ -559,4 +559,77 @@ describe("RequestsPage", () => {
     expect(screen.getByLabelText("Almoxarifado destino")).toBeInTheDocument();
     expect(screen.getByLabelText("Produto")).toBeInTheDocument();
   });
+
+  it("creates an ad hoc output request from the requests page", async () => {
+    let requestPayload: unknown;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/entry-requests/ad-hoc-output" && init?.method === "POST") {
+        requestPayload = JSON.parse(String(init.body));
+
+        return new Response(JSON.stringify({ id: "ad-hoc-output" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+
+      const payload =
+        url.pathname === "/entry-requests"
+          ? []
+          : url.pathname === "/transfer-requests"
+            ? []
+            : url.pathname === "/warehouses"
+              ? warehousesPayload
+              : url.pathname === "/invoices"
+                ? []
+                : [];
+
+      return new Response(JSON.stringify(payload), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <RequestsPage />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Solicitar saída avulsa" }),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Saída avulsa" });
+    expect(within(dialog).getByText("Saldo disponível: 10 PCT")).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Quantidade"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitação" }));
+
+    await waitFor(() => {
+      expect(requestPayload).toMatchObject({
+        items: [{ productId: product.id, quantity: 2, unitId: product.unit.id }],
+        productId: product.id,
+        quantity: 2,
+        warehouseId: centralWarehouse.id,
+      });
+    });
+  });
 });
