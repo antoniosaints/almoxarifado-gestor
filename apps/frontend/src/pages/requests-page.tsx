@@ -3,7 +3,9 @@ import {
   Check,
   FileText,
   PackagePlus,
+  Pencil,
   Plus,
+  RotateCcw,
   Trash2,
   Warehouse,
   X,
@@ -39,6 +41,7 @@ import type {
   Invoice,
   OfficeLetter,
   Product,
+  RequestStatus,
   TransferRequest,
   Warehouse as WarehouseType,
 } from "@/lib/types";
@@ -68,6 +71,14 @@ function StatusBadge({ status }: { status: string }) {
     </Badge>
   );
 }
+
+const entryStatusFilters: Array<{ label: string; value: RequestStatus }> = [
+  { label: "Aprovado", value: "APPROVED" },
+  { label: "Pendente", value: "PENDING" },
+  { label: "Rejeitado", value: "REJECTED" },
+];
+
+const defaultEntryStatusFilter: RequestStatus[] = ["PENDING", "APPROVED"];
 
 type EntryRequestItemDraft = {
   id: string;
@@ -877,6 +888,364 @@ function DirectEntryRequestDialog({
   );
 }
 
+function dateTimeInputValue(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return todayInputValue();
+  }
+
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function editableItemDrafts(request: EntryRequest): EntryRequestItemDraft[] {
+  return entryRequestItems(request).map((item) => {
+    const hasSource =
+      Boolean(item.sourceUnitId) &&
+      item.sourceQuantity !== null &&
+      item.sourceQuantity !== undefined;
+
+    return createEntryRequestItemDraft(
+      item.productId,
+      hasSource ? String(item.sourceQuantity) : String(item.quantity),
+      hasSource ? (item.sourceUnitId as string) : "",
+    );
+  });
+}
+
+function EditEntryRequestDialog({
+  onSaved,
+  request,
+}: {
+  onSaved: () => Promise<void>;
+  request: EntryRequest;
+}) {
+  const [open, setOpen] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [items, setItems] = useState<EntryRequestItemDraft[]>([]);
+  const [movementDate, setMovementDate] = useState(todayInputValue());
+  const [reason, setReason] = useState("");
+  const [observation, setObservation] = useState("");
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const isAdHocOutput = request.type === "AD_HOC_OUTPUT";
+  const validItems = items
+    .map((item) => {
+      const product = products.find((currentProduct) => currentProduct.id === item.productId);
+
+      return {
+        productId: item.productId,
+        quantity: Number(item.quantity),
+        unitId: item.unitId || product?.unitId,
+      };
+    })
+    .filter(
+      (item) =>
+        item.productId && Number.isFinite(item.quantity) && item.quantity > 0,
+    );
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadProducts() {
+      setLoadingProducts(true);
+
+      try {
+        const params = new URLSearchParams({ warehouseId: request.warehouse.id });
+        const nextProducts = await api<Product[]>(
+          `/entry-requests/available-products?${params.toString()}`,
+        );
+
+        if (!ignore) {
+          setProducts(nextProducts);
+        }
+      } catch (caughtError) {
+        if (!ignore) {
+          setMessage(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Falha ao carregar produtos.",
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingProducts(false);
+        }
+      }
+    }
+
+    void loadProducts();
+
+    return () => {
+      ignore = true;
+    };
+  }, [open, request.warehouse.id]);
+
+  function openDialog() {
+    setMessage(null);
+    setItems(editableItemDrafts(request));
+    setMovementDate(dateTimeInputValue(request.movementDate));
+    setReason(request.reason ?? "");
+    setObservation(request.observation ?? "");
+    setOpen(true);
+  }
+
+  function updateItem(
+    itemId: string,
+    field: "productId" | "quantity" | "unitId",
+    value: string,
+  ) {
+    setItems((current) =>
+      current.map((item) => {
+        if (item.id !== itemId) {
+          return item;
+        }
+
+        if (field === "productId") {
+          const product = products.find((currentProduct) => currentProduct.id === value);
+
+          return {
+            ...item,
+            productId: value,
+            unitId: product?.unitId ?? "",
+          };
+        }
+
+        return {
+          ...item,
+          [field]: value,
+        };
+      }),
+    );
+  }
+
+  function addItem() {
+    const product = products[0];
+
+    setItems((current) => [
+      ...current,
+      createEntryRequestItemDraft(product?.id ?? "", "1", product?.unitId ?? ""),
+    ]);
+  }
+
+  function removeItem(itemId: string) {
+    setItems((current) =>
+      current.length > 1 ? current.filter((item) => item.id !== itemId) : current,
+    );
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!validItems.length) {
+      setMessage("Informe ao menos um produto com quantidade maior que zero.");
+      return;
+    }
+
+    if (isAdHocOutput && !reason.trim()) {
+      setMessage("Informe o motivo da solicitação.");
+      return;
+    }
+
+    const primaryItem = validItems[0];
+
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      await api(`/entry-requests/${request.id}`, {
+        body: JSON.stringify({
+          items: validItems,
+          movementDate,
+          observation,
+          productId: primaryItem.productId,
+          quantity: primaryItem.quantity,
+          reason,
+          warehouseId: request.warehouse.id,
+        }),
+        method: "PUT",
+      });
+      await onSaved();
+      setOpen(false);
+    } catch (caughtError) {
+      setMessage(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Falha ao salvar solicitação.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={openDialog} size="sm" type="button" variant="outline">
+        <Pencil className="h-4 w-4" />
+        Editar
+      </Button>
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar solicitação</DialogTitle>
+            <DialogDescription>
+              {request.warehouse.name} — {entryRequestTypeLabel(request)}
+            </DialogDescription>
+          </DialogHeader>
+          <Form onSubmit={submit}>
+            {message ? <ResourceError message={message} /> : null}
+            <div className="space-y-3">
+              {items.map((item, index) => {
+                const itemProduct = products.find(
+                  (product) => product.id === item.productId,
+                );
+                const itemConversionPreview = conversionPreviewForProduct(
+                  itemProduct,
+                  item.unitId,
+                  item.quantity,
+                );
+
+                return (
+                  <div
+                    className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_9rem_9rem_auto]"
+                    key={item.id}
+                  >
+                    <FormField>
+                      <Label htmlFor={`edit-product-${item.id}`}>
+                        {items.length === 1 ? "Produto" : `Produto ${index + 1}`}
+                      </Label>
+                      <SearchSelect
+                        ariaLabel={
+                          items.length === 1 ? "Produto" : `Produto ${index + 1}`
+                        }
+                        disabled={loadingProducts}
+                        emptyMessage={
+                          loadingProducts
+                            ? "Carregando produtos..."
+                            : "Nenhum produto disponível."
+                        }
+                        id={`edit-product-${item.id}`}
+                        onValueChange={(value) => updateItem(item.id, "productId", value)}
+                        options={products.map((product) => ({
+                          label: `${product.code} - ${product.name}`,
+                          searchText: `${product.category.name} ${product.unit.abbreviation}`,
+                          value: product.id,
+                        }))}
+                        placeholder={loadingProducts ? "Carregando..." : "Selecione"}
+                        value={item.productId}
+                      />
+                    </FormField>
+                    <FormField>
+                      <Label htmlFor={`edit-quantity-${item.id}`}>Quantidade</Label>
+                      <Input
+                        id={`edit-quantity-${item.id}`}
+                        min="0.000001"
+                        onChange={(event) =>
+                          updateItem(item.id, "quantity", event.target.value)
+                        }
+                        required
+                        step="any"
+                        type="number"
+                        value={item.quantity}
+                      />
+                    </FormField>
+                    <FormField>
+                      <Label htmlFor={`edit-unit-${item.id}`}>Unidade</Label>
+                      <SearchSelect
+                        ariaLabel={`Unidade ${index + 1}`}
+                        disabled={!itemProduct}
+                        id={`edit-unit-${item.id}`}
+                        onValueChange={(value) => updateItem(item.id, "unitId", value)}
+                        options={unitOptionsForProduct(itemProduct)}
+                        placeholder="Selecione"
+                        value={item.unitId || itemProduct?.unitId || ""}
+                      />
+                    </FormField>
+                    <div className="flex items-end">
+                      <Button
+                        aria-label={`Remover item ${index + 1}`}
+                        disabled={items.length === 1}
+                        onClick={() => removeItem(item.id)}
+                        size="icon"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {itemConversionPreview ? (
+                      <p className="sm:col-span-4 rounded-md border bg-background p-2 text-sm text-muted-foreground">
+                        {itemConversionPreview}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+              <Button
+                disabled={loadingProducts}
+                onClick={addItem}
+                type="button"
+                variant="outline"
+              >
+                <Plus className="h-4 w-4" />
+                Adicionar item
+              </Button>
+            </div>
+            <FormField>
+              <Label htmlFor="edit-date">Data da movimentação</Label>
+              <Input
+                id="edit-date"
+                onChange={(event) => setMovementDate(event.target.value)}
+                required
+                type="datetime-local"
+                value={movementDate}
+              />
+            </FormField>
+            {isAdHocOutput ? (
+              <FormField>
+                <Label htmlFor="edit-reason">Motivo da solicitação</Label>
+                <Textarea
+                  id="edit-reason"
+                  onChange={(event) => setReason(event.target.value)}
+                  placeholder="Descreva o motivo desta saída avulsa."
+                  required
+                  value={reason}
+                />
+              </FormField>
+            ) : null}
+            <FormField>
+              <Label htmlFor="edit-observation">Observação</Label>
+              <Textarea
+                id="edit-observation"
+                onChange={(event) => setObservation(event.target.value)}
+                value={observation}
+              />
+            </FormField>
+            <Button
+              disabled={
+                !validItems.length ||
+                saving ||
+                loadingProducts ||
+                (isAdHocOutput && !reason.trim())
+              }
+              type="submit"
+            >
+              <Check className="h-4 w-4" />
+              {saving ? "Salvando..." : "Salvar alterações"}
+            </Button>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function DirectTransferDialog({
   onCreated,
   warehouses,
@@ -1148,11 +1517,16 @@ export function RequestsPage() {
   const invoices = useApiResource<Invoice[]>("/invoices", []);
   const warehouses = useApiResource<WarehouseType[]>("/warehouses", []);
   const [activeTab, setActiveTab] = useState("entries");
+  const [entryStatusFilter, setEntryStatusFilter] = useState<RequestStatus[]>(
+    defaultEntryStatusFilter,
+  );
   const [message, setMessage] = useState<{
     error: boolean;
     text: string;
   } | null>(null);
   const admin = session?.user.role === "ADMIN";
+  const canManageRequests =
+    session?.user.role === "ADMIN" || session?.user.role === "OPERATOR";
   const canApproveRequests = hasPermission(session?.user, "APPROVE_REQUESTS");
   const canApproveTransfers = hasPermission(session?.user, "APPROVE_TRANSFERS");
   const generalWarehouse = warehouses.data.find((warehouse) => warehouse.isGeneral);
@@ -1196,6 +1570,27 @@ export function RequestsPage() {
     }
   }
 
+  async function undo(requestId: string) {
+    try {
+      await api(`/entry-requests/${requestId}/undo`, { method: "POST" });
+      setMessage({
+        error: false,
+        text: "Solicitação retornada para pendente.",
+      });
+      await entries.reload();
+    } catch (caughtError) {
+      setMessage({
+        error: true,
+        text: caughtError instanceof Error ? caughtError.message : "Falha ao desfazer.",
+      });
+    }
+  }
+
+  async function requestUpdated() {
+    setMessage({ error: false, text: "Solicitação atualizada." });
+    await entries.reload();
+  }
+
   async function receive(requestId: string) {
     try {
       await api(`/transfer-requests/${requestId}/receive`, { method: "POST" });
@@ -1226,6 +1621,14 @@ export function RequestsPage() {
             : "Falha ao cancelar transferencia.",
       });
     }
+  }
+
+  function toggleEntryStatusFilter(status: RequestStatus) {
+    setEntryStatusFilter((current) =>
+      current.includes(status)
+        ? current.filter((value) => value !== status)
+        : [...current, status],
+    );
   }
 
   async function requestCreated() {
@@ -1329,6 +1732,14 @@ export function RequestsPage() {
                     <p className="text-xs text-muted-foreground">
                       {entryRequestTypeLabel(request)} | {formatDate(request.movementDate)}
                     </p>
+                    {request.reason ? (
+                      <p
+                        className="max-w-xs truncate text-xs text-muted-foreground"
+                        title={request.reason}
+                      >
+                        Motivo: {request.reason}
+                      </p>
+                    ) : null}
                   </>
                 ),
                 header: "Produto",
@@ -1374,6 +1785,12 @@ export function RequestsPage() {
                         Almoxarifado
                       </Link>
                     </Button>
+                    {canManageRequests && request.status === "PENDING" ? (
+                      <EditEntryRequestDialog
+                        onSaved={requestUpdated}
+                        request={request}
+                      />
+                    ) : null}
                     {canApproveRequests && request.status === "PENDING" ? (
                       <>
                         <ApprovalDialog
@@ -1392,6 +1809,24 @@ export function RequestsPage() {
                         </Button>
                       </>
                     ) : null}
+                    {canApproveRequests && request.status !== "PENDING" ? (
+                      <Button
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "Desfazer esta solicitação? O estoque movimentado será estornado e ela voltará para pendente.",
+                            )
+                          ) {
+                            void undo(request.id);
+                          }
+                        }}
+                        size="sm"
+                        variant="outline"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Desfazer
+                      </Button>
+                    ) : null}
                   </div>
                 ),
                 cellClassName: "text-right",
@@ -1400,10 +1835,32 @@ export function RequestsPage() {
                 key: "actions",
               },
             ]}
-            data={entries.data}
+            data={entries.data.filter((request) =>
+              entryStatusFilter.includes(request.status),
+            )}
             emptyMessage="Nenhuma solicitação encontrada."
             getRowId={(request) => request.id}
             searchPlaceholder="Buscar solicitação..."
+            toolbar={
+              <div className="flex flex-wrap items-center gap-2">
+                {entryStatusFilters.map((filter) => {
+                  const active = entryStatusFilter.includes(filter.value);
+
+                  return (
+                    <Button
+                      aria-pressed={active}
+                      key={filter.value}
+                      onClick={() => toggleEntryStatusFilter(filter.value)}
+                      size="sm"
+                      type="button"
+                      variant={active ? "default" : "outline"}
+                    >
+                      {filter.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            }
             searchText={(request) =>
               [
                 ...entryRequestItems(request).flatMap((item) => [

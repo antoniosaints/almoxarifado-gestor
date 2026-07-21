@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-24T18:49:05.097Z",
+  "generatedAt": "2026-07-20T20:44:01.619Z",
   "provider": "sqlite",
   "trustedMigrations": {
     "20260522100000_init": {
@@ -179,6 +179,22 @@
     "20260624153000_entry_request_ad_hoc_output": {
       "risks": [],
       "sha256": "676b10fc9f2b6d836c5a5365dafef294c25aa6559b792f1adce82880718fc85e"
+    },
+    "20260720195105_add_entry_request_reason_and_movement_link": {
+      "risks": [
+        "drop-table",
+        "foreign-keys-off",
+        "redefine-tables"
+      ],
+      "sha256": "b35cef63e1d5e45a39c8f40b4c739504b9522428f3018a87eef2e08ac4c7868c"
+    },
+    "20260720204340_office_template_layout_settings": {
+      "risks": [
+        "drop-table",
+        "foreign-keys-off",
+        "redefine-tables"
+      ],
+      "sha256": "77f2efe8bf523d54aad8ba809de8fb9ae648422e494d48122325ec867a520b18"
     }
   },
   "version": 1

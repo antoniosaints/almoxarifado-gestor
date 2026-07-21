@@ -1308,11 +1308,6 @@ describe("api", () => {
 
     expect(office.status).toBe(200);
     expect(office.body).toMatchObject({
-      header: {
-        logoUrl: expect.stringMatching(/^\/uploads\/settings\/office-logo\.png\?v=\d+$/),
-        subtitle: "Almoxarifado da Saude",
-        title: "Teste",
-      },
       items: [
         {
           productName: "Papel A4",
@@ -1329,6 +1324,8 @@ describe("api", () => {
       subject: "Solicitacao de material/equipamento",
       year: 2026,
     });
+    // O objeto `header` institucional foi removido (era código morto).
+    expect(office.body.header).toBeUndefined();
     expect(office.body.contentHtml).toContain("OFICIO Nº 001/2026");
     expect(office.body.contentHtml).toContain("Papel A4 - 4 Unidade;");
     expect(office.body.contentHtml).toContain("Caneta azul - 2 Unidade.");

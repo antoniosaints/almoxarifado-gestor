@@ -71,6 +71,11 @@ export function OfficeLetterPrintPage() {
               ? `Ofício ${letter.numberFormatted}`
               : "Documento A4"}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Para o PDF sair idêntico ao preview, no diálogo de impressão use
+            Margens: <strong>Padrão</strong> e desative
+            {" "}<strong>Cabeçalhos e rodapés</strong>.
+          </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <Button
@@ -88,7 +93,7 @@ export function OfficeLetterPrintPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl">
+      <div className="office-letter-print-frame mx-auto max-w-5xl">
         {loading ? <LoadingLine label="Carregando ofício..." /> : null}
         {error ? <ResourceError message={error} /> : null}
         {letter ? (

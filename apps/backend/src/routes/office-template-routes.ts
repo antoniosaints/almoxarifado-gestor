@@ -3,9 +3,14 @@ import { AppError } from "../lib/errors.js";
 import { asyncHandler, requirePermission } from "../lib/http.js";
 import { prisma } from "../lib/prisma.js";
 import {
+  renderOfficeLetterDocument,
+  sampleOfficeVariables,
+} from "../services/entry-request-service.js";
+import {
   extractOfficeTemplateVariables,
   idParam,
   officeTemplateInput,
+  officeTemplatePreviewInput,
 } from "../validators/inputs.js";
 
 export const officeTemplateRoutes = Router();
@@ -48,6 +53,19 @@ officeTemplateRoutes.get(
     });
 
     response.json(templates.map(parseTemplate));
+  }),
+);
+
+officeTemplateRoutes.post(
+  "/preview",
+  asyncHandler(async (request, response) => {
+    const input = officeTemplatePreviewInput.parse(request.body ?? {});
+    const rendered = renderOfficeLetterDocument({
+      template: input,
+      variables: sampleOfficeVariables(),
+    });
+
+    response.json(rendered);
   }),
 );
 

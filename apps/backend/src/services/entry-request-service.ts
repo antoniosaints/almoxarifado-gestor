@@ -7,7 +7,6 @@ import {
 } from "@prisma/client";
 import { JSDOM } from "jsdom";
 import { AppError } from "../lib/errors.js";
-import { defaultSettings, settingsId } from "./settings-service.js";
 import {
   convertQuantityToBase,
   quantityConversionAuditData,
@@ -23,6 +22,7 @@ type EntryRequestInput = {
   }>;
   movementDate: Date;
   observation?: string | null;
+  reason?: string | null;
   productId: string;
   quantity: number;
   unitId?: string | null;
@@ -208,13 +208,18 @@ function normalizeApprovalItems(
   });
 }
 
+/**
+ * Retorna o menor número de ofício livre do almoxarifado no ano. Usar o menor
+ * livre (em vez de "maior + 1") faz com que um número liberado por uma
+ * rejeição volte a ser usado, mantendo a numeração contínua.
+ */
 async function nextOfficeNumber(
   prisma: Prisma.TransactionClient,
   warehouseId: string,
   year: number,
 ) {
-  const lastRequest = await prisma.entryRequest.findFirst({
-    orderBy: { officeNumber: "desc" },
+  const usedNumbers = await prisma.entryRequest.findMany({
+    orderBy: { officeNumber: "asc" },
     select: { officeNumber: true },
     where: {
       officeNumber: { not: null },
@@ -223,7 +228,19 @@ async function nextOfficeNumber(
     },
   });
 
-  return (lastRequest?.officeNumber ?? 0) + 1;
+  let candidate = 1;
+
+  for (const { officeNumber } of usedNumbers) {
+    if (officeNumber === null || officeNumber > candidate) {
+      break;
+    }
+
+    if (officeNumber === candidate) {
+      candidate += 1;
+    }
+  }
+
+  return candidate;
 }
 
 async function assertAvailableGeneralStock(
@@ -344,6 +361,7 @@ export async function createEntryRequest(
         },
         movementDate: input.movementDate,
         observation: input.observation,
+        reason: input.reason ?? null,
         officeNumber,
         officeYear: shouldCreateOffice ? officeYear : null,
         productId: primaryConverted.productId,
@@ -360,6 +378,12 @@ export async function createAdHocOutputRequest(
   prisma: PrismaClient,
   input: EntryRequestInput,
 ) {
+  const reason = input.reason?.trim();
+
+  if (!reason) {
+    throw new AppError(400, "Informe o motivo da solicitação.");
+  }
+
   const items = normalizeEntryRequestItems(input);
   const primaryItem = items[0];
 
@@ -424,6 +448,7 @@ export async function createAdHocOutputRequest(
         },
         movementDate: input.movementDate,
         observation: input.observation,
+        reason,
         officeNumber,
         officeYear,
         productId: primaryConverted.productId,
@@ -432,6 +457,130 @@ export async function createAdHocOutputRequest(
         ...quantityConversionAuditData(primaryConverted.converted),
         type: EntryRequestType.AD_HOC_OUTPUT,
         warehouseId: input.warehouseId,
+      },
+    });
+  });
+}
+
+export async function updateEntryRequest(
+  prisma: PrismaClient,
+  requestId: string,
+  input: EntryRequestInput,
+) {
+  const items = normalizeEntryRequestItems(input);
+  const primaryItem = items[0];
+
+  if (!primaryItem) {
+    throw new AppError(400, "Informe ao menos um item para solicitar.");
+  }
+
+  return prisma.$transaction(async (transaction) => {
+    const request = await transaction.entryRequest.findUniqueOrThrow({
+      select: {
+        id: true,
+        status: true,
+        type: true,
+        warehouseId: true,
+      },
+      where: { id: requestId },
+    });
+
+    if (request.status !== RequestStatus.PENDING) {
+      throw new AppError(409, "Só é possível editar solicitações pendentes.");
+    }
+
+    const warehouse = await transaction.warehouse.findUnique({
+      select: {
+        active: true,
+        isGeneral: true,
+      },
+      where: { id: request.warehouseId },
+    });
+
+    if (!warehouse) {
+      throw new AppError(400, "Almoxarifado não encontrado.");
+    }
+
+    const isAdHocOutput = request.type === EntryRequestType.AD_HOC_OUTPUT;
+    const reason = input.reason?.trim() || null;
+
+    if (isAdHocOutput) {
+      if (!warehouse.active || !warehouse.isGeneral) {
+        throw new AppError(
+          400,
+          "Saida avulsa disponivel apenas no almoxarifado geral ativo.",
+        );
+      }
+
+      if (!reason) {
+        throw new AppError(400, "Informe o motivo da solicitação.");
+      }
+    }
+
+    const productIds = [...new Set(items.map((item) => item.productId))];
+    const stocks = await transaction.stock.findMany({
+      select: {
+        productId: true,
+      },
+      where: {
+        productId: {
+          in: productIds,
+        },
+        warehouseId: request.warehouseId,
+      },
+    });
+    const stockedProductIds = new Set(stocks.map((stock) => stock.productId));
+
+    if (productIds.some((productId) => !stockedProductIds.has(productId))) {
+      throw new AppError(
+        400,
+        "Solicite apenas produtos já cadastrados no estoque deste almoxarifado.",
+      );
+    }
+
+    const convertedItems = await Promise.all(
+      items.map(async (item) => ({
+        ...item,
+        converted: await convertQuantityToBase(transaction, {
+          productId: item.productId,
+          quantity: item.quantity,
+          unitId: item.unitId,
+        }),
+      })),
+    );
+    const primaryConverted = convertedItems[0];
+
+    if (isAdHocOutput) {
+      await assertAvailableGeneralStock(
+        transaction,
+        request.warehouseId,
+        convertedItems.map((item) => ({
+          productId: item.productId,
+          quantity: item.converted.baseQuantity,
+        })),
+      );
+    }
+
+    await transaction.entryRequestItem.deleteMany({
+      where: { requestId: request.id },
+    });
+
+    return transaction.entryRequest.update({
+      where: { id: request.id },
+      data: {
+        items: {
+          create: convertedItems.map((item) => ({
+            ...quantityConversionAuditData(item.converted),
+            productId: item.productId,
+            quantity: item.converted.baseQuantity,
+          })),
+        },
+        movementDate: input.movementDate,
+        observation: input.observation,
+        reason,
+        productId: primaryConverted.productId,
+        quantity: primaryConverted.converted.baseQuantity,
+        ...quantityConversionAuditData(primaryConverted.converted),
       },
     });
   });
@@ -598,6 +747,7 @@ export async function approveEntryRequest(
       const sourceMovement = await transaction.stockMovement.create({
         data: {
           destinationWarehouseId: request.warehouseId,
+          entryRequestId: request.id,
           movementDate: request.movementDate,
           observation: request.observation,
           productId: item.productId,
@@ -613,6 +763,7 @@ export async function approveEntryRequest(
       const movement = await transaction.stockMovement.create({
         data: {
           destinationWarehouseId: request.warehouseId,
+          entryRequestId: request.id,
           invoiceId: input.invoiceId,
           movementDate: request.movementDate,
           observation: request.observation,
@@ -740,6 +891,7 @@ async function approveAdHocOutputRequestInTransaction(
 
     const movement = await transaction.stockMovement.create({
       data: {
+        entryRequestId: request.id,
         movementDate: request.movementDate,
         observation: request.observation,
         productId: item.productId,
@@ -808,10 +960,104 @@ export async function rejectEntryRequest(
   return prisma.entryRequest.update({
     where: { id: request.id },
     data: {
+      // Libera o número do ofício para a próxima solicitação reaproveitar.
+      officeNumber: null,
+      officeYear: null,
       reviewedAt: new Date(),
       reviewedById,
       status: RequestStatus.REJECTED,
     },
+  });
+}
+
+export async function undoEntryRequest(
+  prisma: PrismaClient,
+  requestId: string,
+) {
+  return prisma.$transaction(async (transaction) => {
+    const request = await transaction.entryRequest.findUniqueOrThrow({
+      include: {
+        movements: true,
+      },
+      where: { id: requestId },
+    });
+
+    if (request.status === RequestStatus.PENDING) {
+      throw new AppError(409, "Esta solicitação já está pendente.");
+    }
+
+    const toPending = {
+      reviewedAt: null,
+      reviewedById: null,
+      status: RequestStatus.PENDING,
+    };
+
+    // Rejeitadas não movimentaram estoque: basta voltar para pendente.
+    if (request.status === RequestStatus.REJECTED) {
+      return transaction.entryRequest.update({
+        data: toPending,
+        where: { id: request.id },
+      });
+    }
+
+    // Aprovadas: estornar exatamente os efeitos das movimentações geradas.
+    for (const movement of request.movements) {
+      if (!movement.stockId) {
+        continue;
+      }
+
+      if (movement.type === MovementType.TRANSFERENCIA_SAIDA) {
+        // Saiu do estoque geral (origem) -> devolver.
+        await transaction.stock.update({
+          data: {
+            currentQuantity: { increment: movement.quantity },
+          },
+          where: { id: movement.stockId },
+        });
+        continue;
+      }
+
+      if (movement.type === MovementType.TRANSFERENCIA_ENTRADA) {
+        // Entrou no estoque destino -> retirar.
+        await transaction.stock.update({
+          data: {
+            currentQuantity: { decrement: movement.quantity },
+          },
+          where: { id: movement.stockId },
+        });
+        continue;
+      }
+
+      if (movement.type === MovementType.SAIDA) {
+        // Saída avulsa: devolver quantidade e recalcular o valor total.
+        const stock = await transaction.stock.findUnique({
+          where: { id: movement.stockId },
+        });
+
+        if (stock) {
+          const restoredQuantity = stock.currentQuantity + movement.quantity;
+
+          await transaction.stock.update({
+            data: {
+              currentQuantity: restoredQuantity,
+              totalValue: roundCurrency(
+                restoredQuantity * toNumber(stock.unitPriceAverage),
+              ),
+            },
+            where: { id: stock.id },
+          });
+        }
+      }
+    }
+
+    await transaction.stockMovement.deleteMany({
+      where: { entryRequestId: request.id },
+    });
+
+    return transaction.entryRequest.update({
+      data: toPending,
+      where: { id: request.id },
+    });
   });
 }
 
@@ -874,6 +1120,27 @@ function renderItemsText(items: OfficeRequestItem[]) {
     .join("\n");
 }
 
+function renderItemsTable(items: OfficeRequestItem[]) {
+  const cellStyle = "border:1px solid #111827;padding:4px 8px;text-align:left;";
+  const headerStyle = `${cellStyle}font-weight:bold;`;
+  const rows = items
+    .map(
+      (item) =>
+        `<tr><td style="${cellStyle}">${escapeHtml(item.productName)}</td>` +
+        `<td style="${cellStyle}text-align:center;">${item.quantity}</td>` +
+        `<td style="${cellStyle}">${escapeHtml(item.unitName)}</td></tr>`,
+    )
+    .join("");
+
+  return (
+    '<table style="border-collapse:collapse;width:100%;">' +
+    `<thead><tr><th style="${headerStyle}">Produto</th>` +
+    `<th style="${headerStyle}text-align:center;">Qtd</th>` +
+    `<th style="${headerStyle}">Unidade</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`
+  );
+}
+
 function renderTemplate(
   template: string,
   variables: Record<string, string>,
@@ -896,20 +1163,51 @@ function renderPlainTemplate(template: string, variables: Record<string, string>
   );
 }
 
-type OfficeHeaderAlignment = "LEFT" | "CENTER" | "RIGHT";
-
-type OfficeDocumentChrome = {
+type OfficeDocumentTemplate = {
+  contentHtml?: string | null;
   footerText?: string | null;
-  headerAlignment?: string | null;
-  headerImageUrl?: string | null;
-  headerText?: string | null;
+  fontFamily?: string | null;
+  fontSize?: number | null;
+  marginTop?: number | null;
+  marginRight?: number | null;
+  marginBottom?: number | null;
+  marginLeft?: number | null;
+  subject?: string | null;
 };
 
-const headerAlignmentStyles: Record<OfficeHeaderAlignment, string> = {
-  CENTER: "center",
-  LEFT: "left",
-  RIGHT: "right",
+const officeLayoutDefaults = {
+  fontFamily: "Arial",
+  fontSize: 12,
+  marginBottom: 20,
+  marginLeft: 20,
+  marginRight: 20,
+  marginTop: 25,
 };
+
+const officeFontStacks: Record<string, string> = {
+  Arial: "Arial, Helvetica, sans-serif",
+  Calibri: "Calibri, 'Segoe UI', sans-serif",
+  "Courier New": "'Courier New', Courier, monospace",
+  Georgia: "Georgia, 'Times New Roman', serif",
+  "Times New Roman": "'Times New Roman', Times, serif",
+  Verdana: "Verdana, Geneva, sans-serif",
+};
+
+function officeFontStack(fontFamily?: string | null) {
+  if (fontFamily && officeFontStacks[fontFamily]) {
+    return officeFontStacks[fontFamily];
+  }
+
+  return officeFontStacks.Arial;
+}
+
+function clampMargin(value: number | null | undefined, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(60, Math.max(0, Math.round(value)));
+}
 
 const officeDocumentAttribute = 'data-office-letter-document="true"';
 
@@ -919,24 +1217,27 @@ function isCompleteOfficeDocument(html: string) {
   );
 }
 
-function wrapOfficeDocument(contentHtml: string) {
+function wrapOfficeDocument(
+  contentHtml: string,
+  template?: OfficeDocumentTemplate | null,
+) {
+  const top = clampMargin(template?.marginTop, officeLayoutDefaults.marginTop);
+  const right = clampMargin(template?.marginRight, officeLayoutDefaults.marginRight);
+  const bottom = clampMargin(template?.marginBottom, officeLayoutDefaults.marginBottom);
+  const left = clampMargin(template?.marginLeft, officeLayoutDefaults.marginLeft);
+  const fontFamily = officeFontStack(template?.fontFamily);
+  const fontSize =
+    typeof template?.fontSize === "number" && Number.isFinite(template.fontSize)
+      ? Math.min(24, Math.max(8, Math.round(template.fontSize)))
+      : officeLayoutDefaults.fontSize;
+
+  // A geometria do papel (largura/altura A4) fica no CSS por mídia — inline vai
+  // apenas o que é do modelo (margens, fonte) para não brigar com a impressão.
   return [
-    `<article ${officeDocumentAttribute} class="office-letter-document" style="min-height:297mm;width:210mm;margin:0 auto;padding:6mm 20mm;background:#fff;color:#111827;font-family:arial,serif;font-size:12pt;line-height:1.45;">`,
+    `<article ${officeDocumentAttribute} class="office-letter-document" style="box-sizing:border-box;margin:0 auto;padding:${top}mm ${right}mm ${bottom}mm ${left}mm;background:#fff;color:#111827;font-family:${fontFamily};font-size:${fontSize}pt;line-height:1.45;-webkit-print-color-adjust:exact;print-color-adjust:exact;">`,
     contentHtml,
     "</article>",
   ].join("");
-}
-
-function hasOfficeChrome(chrome?: OfficeDocumentChrome | null) {
-  return Boolean(
-    chrome?.headerImageUrl?.trim() ||
-      chrome?.headerText?.trim() ||
-      chrome?.footerText?.trim(),
-  );
-}
-
-function normalizeHeaderAlignment(value?: string | null): OfficeHeaderAlignment {
-  return value === "CENTER" || value === "RIGHT" ? value : "LEFT";
 }
 
 function unwrapOfficeDocument(contentHtml: string) {
@@ -973,73 +1274,115 @@ function renderMultilineHtmlText(text: string, variables: Record<string, string>
 }
 
 
-function buildOfficeHeaderHtml(
-  chrome: OfficeDocumentChrome | null | undefined,
-  variables: Record<string, string>,
-) {
-  
-  const imageUrl = chrome?.headerImageUrl
-    ? renderPlainTemplate(chrome.headerImageUrl, variables).trim()
-    : "";
-  const headerText = chrome?.headerText?.trim() ?? "";
-
-  if (!imageUrl && !headerText) {
-    return "";
-  }
-
-  const alignment = headerAlignmentStyles[
-    normalizeHeaderAlignment(chrome?.headerAlignment)
-  ];
-  const imageHtml = imageUrl
-    ? `<div style="margin:0 0 8px 0;"><img src="${escapeHtml(
-        imageUrl,
-      )}" alt="" style="max-height:80px;max-width:180px;width:auto;height:auto;" /></div>`
-    : "";
-  const textHtml = headerText
-    ? `<div style="font-size:11pt;line-height:1.25;">${renderMultilineHtmlText(
-        headerText,
-        variables,
-      )}</div>`
-    : "";
-
-  return `<header data-office-letter-header="true" style="margin:0 0 18px 0;text-align:${alignment};">${imageHtml}${textHtml}</header>`;
-}
-
 function buildOfficeFooterHtml(
-  chrome: OfficeDocumentChrome | null | undefined,
+  footerText: string | null | undefined,
   variables: Record<string, string>,
 ) {
-  const footerText = chrome?.footerText?.trim() ?? "";
+  const text = footerText?.trim() ?? "";
 
-  if (!footerText) {
+  if (!text) {
     return "";
   }
 
-  return `<footer data-office-letter-footer="true" style="margin:28px 0 0 0;text-align:center;color:#4b5563;font-size:9pt;line-height:1.25;">${renderMultilineHtmlText(
-    footerText,
+  return `<footer data-office-letter-footer="true" style="margin:28px 0 0 0;text-align:center;color:#4b5563;font-size:9pt;line-height:1.25;break-inside:avoid;">${renderMultilineHtmlText(
+    text,
     variables,
   )}</footer>`;
 }
 
+const blockTagInsideParagraph =
+  /<(h[1-6]|div|table|hr|ul|ol|blockquote|section|figure)\b/i;
+
+/**
+ * Um <p> não pode conter elementos de bloco: ao reinterpretar o HTML o
+ * navegador expulsa o bloco do parágrafo, e com ele se perde o estilo do
+ * parágrafo (ex.: text-align:center de um cabeçalho com logo). Trocamos esses
+ * parágrafos por <div>, preservando os atributos do autor. Como <p> não
+ * aninha, o primeiro </p> encontrado é sempre o de fechamento.
+ */
+function normalizeBlockParagraphs(html: string) {
+  return html.replace(
+    /<p\b([^>]*)>([\s\S]*?)<\/p>/gi,
+    (match, attributes: string, content: string) =>
+      blockTagInsideParagraph.test(content)
+        ? `<div${attributes}>${content}</div>`
+        : match,
+  );
+}
+
 function buildOfficeDocumentHtml(
   contentHtml: string,
-  chrome?: OfficeDocumentChrome | null,
+  template?: OfficeDocumentTemplate | null,
   variables: Record<string, string> = {},
 ) {
-  if (isCompleteOfficeDocument(contentHtml) && !hasOfficeChrome(chrome)) {
-    return contentHtml;
-  }
-
-  const bodyHtml = hasOfficeChrome(chrome)
-    ? unwrapOfficeDocument(contentHtml)
-    : contentHtml;
+  const bodyHtml = unwrapOfficeDocument(normalizeBlockParagraphs(contentHtml));
   const documentHtml = [
-    buildOfficeHeaderHtml(chrome, variables),
     `<main data-office-letter-body="true">${bodyHtml}</main>`,
-    buildOfficeFooterHtml(chrome, variables),
+    buildOfficeFooterHtml(template?.footerText, variables),
   ].join("");
 
-  return wrapOfficeDocument(documentHtml);
+  return wrapOfficeDocument(documentHtml, template);
+}
+
+export function renderOfficeLetterDocument(input: {
+  template?: OfficeDocumentTemplate | null;
+  variables: Record<string, string>;
+}) {
+  const template = input.template ?? null;
+  const subjectTemplate = template?.subject ?? defaultOfficeLetterSubject;
+  const contentTemplate =
+    template?.contentHtml ?? defaultOfficeLetterContentHtml;
+  const subject = renderPlainTemplate(subjectTemplate, input.variables);
+  const contentHtml = renderTemplate(
+    contentTemplate,
+    input.variables,
+    new Set(["itens_solicitados_html", "itens_solicitados_tabela"]),
+  );
+
+  return {
+    contentHtml,
+    documentHtml: buildOfficeDocumentHtml(contentHtml, template, input.variables),
+    subject,
+  };
+}
+
+const sampleOfficeItems: OfficeRequestItem[] = [
+  { productName: "Papel A4", quantity: 10, unit: "RSM", unitName: "Resma" },
+  {
+    productName: "Caneta esferográfica azul",
+    quantity: 24,
+    unit: "UN",
+    unitName: "Unidade",
+  },
+];
+
+export function sampleOfficeVariables(): Record<string, string> {
+  const today = formatDate(new Date());
+
+  return {
+    almoxarifado_nome: "Almoxarifado Central",
+    ano_oficio: "2026",
+    cnpj_empresa: "12.345.678/0001-90",
+    data_atual: today,
+    data_nota: today,
+    data_solicitacao: today,
+    itens_solicitados_html: renderItemsHtml(sampleOfficeItems),
+    itens_solicitados_tabela: renderItemsTable(sampleOfficeItems),
+    itens_solicitados_texto: renderItemsText(sampleOfficeItems),
+    motivo_solicitacao: "Reposição de material de expediente",
+    nome_empresa: "Fornecedor Exemplo LTDA",
+    nome_fantasia_empresa: "Fornecedor Exemplo",
+    numero_nota: "000123",
+    numero_oficio: "001",
+    oficio_numero_ano: "001/2026",
+    produto_nome: "Papel A4",
+    quantidade_solicitada: "10",
+    secretaria_nome: "Secretaria de Administração",
+    solicitante_nome: "Maria Souza",
+    unidade_solicitada: "RSM",
+    usuario_logado: "Maria Souza",
+    valor_nota: "R$ 1.234,56",
+  };
 }
 
 async function ensureOfficeNumber(
@@ -1047,6 +1390,12 @@ async function ensureOfficeNumber(
   request: OfficeRequest,
 ) {
   if (request.officeNumber && request.officeYear) {
+    return request;
+  }
+
+  // Solicitações rejeitadas não consomem número: a numeração é reaproveitada
+  // pela próxima solicitação.
+  if (request.status === RequestStatus.REJECTED) {
     return request;
   }
 
@@ -1093,11 +1442,6 @@ export async function getEntryRequestOfficeLetter(
     }
 
     const request = await ensureOfficeNumber(transaction, foundRequest);
-    const settings = await transaction.systemSettings.upsert({
-      create: defaultSettings,
-      update: {},
-      where: { id: settingsId },
-    });
     const template = await transaction.officeLetterTemplate.findFirst({
       orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
       where: { active: true },
@@ -1114,7 +1458,9 @@ export async function getEntryRequestOfficeLetter(
       data_atual: formatDate(new Date()),
       data_solicitacao: formatDate(request.movementDate),
       itens_solicitados_html: renderItemsHtml(items),
+      itens_solicitados_tabela: renderItemsTable(items),
       itens_solicitados_texto: renderItemsText(items),
+      motivo_solicitacao: request.reason ?? "",
       numero_oficio: request.officeNumber
         ? String(request.officeNumber).padStart(3, "0")
         : "",
@@ -1126,34 +1472,11 @@ export async function getEntryRequestOfficeLetter(
       unidade_solicitada: firstItem.unit,
       usuario_logado: viewerName,
     };
-    const subjectTemplate = template?.subject ?? defaultOfficeLetterSubject;
-    const contentTemplate =
-      template?.contentHtml ?? defaultOfficeLetterContentHtml;
-    const subject = renderPlainTemplate(subjectTemplate, variables);
-    const contentHtml = renderTemplate(
-      contentTemplate,
-      variables,
-      new Set(["itens_solicitados_html"]),
-    );
-    const chrome = template
-      ? {
-          footerText: template.footerText,
-          headerAlignment: template.headerAlignment,
-          headerImageUrl: template.headerImageUrl,
-          headerText: template.headerText,
-        }
-      : null;
-    const header = {
-      logoUrl:
-        settings.officeLogoUrl ?? settings.reportLogoUrl ?? settings.logoUrl ?? null,
-      subtitle: request.warehouse.name,
-      title: request.warehouse.category.name,
-    };
+    const rendered = renderOfficeLetterDocument({ template, variables });
 
     return {
-      contentHtml,
-      documentHtml: buildOfficeDocumentHtml(contentHtml, chrome, variables),
-      header,
+      contentHtml: rendered.contentHtml,
+      documentHtml: rendered.documentHtml,
       items,
       number: request.officeNumber,
       numberFormatted,
@@ -1162,7 +1485,7 @@ export async function getEntryRequestOfficeLetter(
         status: request.status,
         warehouseId: request.warehouseId,
       },
-      subject,
+      subject: rendered.subject,
       year: request.officeYear,
     };
   });

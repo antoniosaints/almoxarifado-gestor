@@ -7,6 +7,9 @@ import {
   createAdHocOutputRequest,
   createEntryRequest,
   getEntryRequestOfficeLetter,
+  rejectEntryRequest,
+  undoEntryRequest,
+  updateEntryRequest,
 } from "./entry-request-service.js";
 
 describe("entry request service", () => {
@@ -455,6 +458,7 @@ describe("entry request service", () => {
       items: [{ productId: product.id, quantity: 4 }],
       movementDate: new Date("2026-06-24T12:00:00.000Z"),
       observation: "Saida para evento municipal",
+      reason: "Reposicao de material para evento",
       productId: product.id,
       quantity: 4,
       requestedById: user.id,
@@ -501,6 +505,7 @@ describe("entry request service", () => {
       items: [{ productId: product.id, quantity: 4 }],
       movementDate: new Date("2026-06-24T12:00:00.000Z"),
       observation: "Saida para evento municipal",
+      reason: "Reposicao de material para evento",
       productId: product.id,
       quantity: 4,
       requestedById: user.id,
@@ -565,6 +570,7 @@ describe("entry request service", () => {
       items: [{ productId: product.id, quantity: 4 }],
       movementDate: new Date("2026-06-24T12:00:00.000Z"),
       observation: "Saida para evento municipal",
+      reason: "Reposicao de material para evento",
       productId: product.id,
       quantity: 4,
       requestedById: user.id,
@@ -613,6 +619,7 @@ describe("entry request service", () => {
       createAdHocOutputRequest(prisma, {
         items: [{ productId: product.id, quantity: 3 }],
         movementDate: new Date("2026-06-24T12:00:00.000Z"),
+        reason: "Reposicao de material para evento",
         productId: product.id,
         quantity: 3,
         requestedById: user.id,
@@ -622,5 +629,450 @@ describe("entry request service", () => {
       message: "Quantidade insuficiente no estoque geral.",
       status: 409,
     });
+  });
+
+  it("frees the office number when a request is rejected", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Educacao",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+
+    async function createRequest(quantity: number) {
+      return createEntryRequest(prisma, {
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity,
+        requestedById: operator.id,
+        warehouseId: warehouse.id,
+      });
+    }
+
+    const first = await createRequest(1);
+    const second = await createRequest(2);
+    const third = await createRequest(3);
+
+    expect(first.officeNumber).toBe(1);
+    expect(second.officeNumber).toBe(2);
+    expect(third.officeNumber).toBe(3);
+
+    await rejectEntryRequest(prisma, third.id, user.id);
+
+    // A rejeitada deixa de ocupar o número...
+    await expect(
+      prisma.entryRequest.findUniqueOrThrow({ where: { id: third.id } }),
+    ).resolves.toMatchObject({
+      officeNumber: null,
+      officeYear: null,
+      status: RequestStatus.REJECTED,
+    });
+
+    // ...e o ofício dela não reatribui um número novo.
+    const rejectedLetter = await getEntryRequestOfficeLetter(
+      prisma,
+      third.id,
+      user.name,
+    );
+    expect(rejectedLetter.number).toBeNull();
+    expect(rejectedLetter.numberFormatted).toBe("");
+
+    // A próxima solicitação reaproveita o número 3.
+    const fourth = await createRequest(4);
+    expect(fourth.officeNumber).toBe(3);
+
+    // Rejeitando um número do meio, ele também volta a ser usado.
+    await rejectEntryRequest(prisma, second.id, user.id);
+
+    const fifth = await createRequest(5);
+    expect(fifth.officeNumber).toBe(2);
+  });
+
+  it("requires a reason for an ad hoc output request", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+
+    await expect(
+      createAdHocOutputRequest(prisma, {
+        items: [{ productId: product.id, quantity: 2 }],
+        movementDate: new Date("2026-06-24T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 2,
+        requestedById: user.id,
+        warehouseId: generalWarehouse.id,
+      }),
+    ).rejects.toMatchObject({
+      message: "Informe o motivo da solicitação.",
+      status: 400,
+    });
+  });
+
+  it("updates a pending entry request items", async () => {
+    const { product, productCategory, unit, warehouseCategory } =
+      await createBaseFixture(prisma);
+    const secondProduct = await prisma.product.create({
+      data: {
+        categoryId: productCategory.id,
+        code: "0000002",
+        name: "Caneta azul",
+        unitId: unit.id,
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Educacao",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+    await prisma.stock.createMany({
+      data: [
+        { currentQuantity: 0, productId: product.id, warehouseId: warehouse.id },
+        {
+          currentQuantity: 0,
+          productId: secondProduct.id,
+          warehouseId: warehouse.id,
+        },
+      ],
+    });
+    const request = await createEntryRequest(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 5,
+      requestedById: operator.id,
+      warehouseId: warehouse.id,
+    });
+
+    await updateEntryRequest(prisma, request.id, {
+      items: [{ productId: secondProduct.id, quantity: 7 }],
+      movementDate: new Date("2026-05-25T12:00:00.000Z"),
+      observation: "Ajuste do pedido",
+      productId: secondProduct.id,
+      quantity: 7,
+      requestedById: operator.id,
+      warehouseId: warehouse.id,
+    });
+
+    const items = await prisma.entryRequestItem.findMany({
+      where: { requestId: request.id },
+    });
+    const updated = await prisma.entryRequest.findUniqueOrThrow({
+      where: { id: request.id },
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ productId: secondProduct.id, quantity: 7 });
+    expect(updated).toMatchObject({
+      observation: "Ajuste do pedido",
+      productId: secondProduct.id,
+      quantity: 7,
+      status: RequestStatus.PENDING,
+    });
+  });
+
+  it("blocks editing a request that was already reviewed", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    const request = await createEntryRequest(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 5,
+      requestedById: operator.id,
+      warehouseId: warehouse.id,
+    });
+    await approveEntryRequest(prisma, {
+      requestId: request.id,
+      reviewedById: user.id,
+    });
+
+    await expect(
+      updateEntryRequest(prisma, request.id, {
+        items: [{ productId: product.id, quantity: 3 }],
+        movementDate: new Date("2026-05-22T12:00:00.000Z"),
+        productId: product.id,
+        quantity: 3,
+        requestedById: operator.id,
+        warehouseId: warehouse.id,
+      }),
+    ).rejects.toMatchObject({
+      message: "Só é possível editar solicitações pendentes.",
+      status: 409,
+    });
+  });
+
+  it("undoes an approved entry request and restores stock", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 3,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    const request = await createEntryRequest(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 6,
+      requestedById: operator.id,
+      warehouseId: warehouse.id,
+    });
+    await approveEntryRequest(prisma, {
+      requestId: request.id,
+      reviewedById: user.id,
+    });
+
+    const undone = await undoEntryRequest(prisma, request.id);
+
+    const generalStock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: generalWarehouse.id,
+        },
+      },
+    });
+    const destinationStock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+      },
+    });
+
+    expect(undone).toMatchObject({
+      reviewedAt: null,
+      reviewedById: null,
+      status: RequestStatus.PENDING,
+    });
+    expect(generalStock.currentQuantity).toBe(10);
+    expect(destinationStock.currentQuantity).toBe(3);
+    expect(await prisma.stockMovement.count()).toBe(0);
+  });
+
+  it("undoes an approved ad hoc output and restores stock value", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        totalValue: 100,
+        unitPriceAverage: 10,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+    const request = await createAdHocOutputRequest(prisma, {
+      items: [{ productId: product.id, quantity: 4 }],
+      movementDate: new Date("2026-06-24T12:00:00.000Z"),
+      reason: "Reposicao de material para evento",
+      productId: product.id,
+      quantity: 4,
+      requestedById: user.id,
+      warehouseId: generalWarehouse.id,
+    });
+    await approveEntryRequest(prisma, {
+      requestId: request.id,
+      reviewedById: user.id,
+    });
+
+    await undoEntryRequest(prisma, request.id);
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: generalWarehouse.id,
+        },
+      },
+    });
+
+    expect(stock.currentQuantity).toBe(10);
+    expect(Number(stock.totalValue)).toBe(100);
+    expect(await prisma.stockMovement.count()).toBe(0);
+    await expect(
+      prisma.entryRequest.findUniqueOrThrow({ where: { id: request.id } }),
+    ).resolves.toMatchObject({ status: RequestStatus.PENDING });
+  });
+
+  it("undoes a rejected request without touching stock", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Saude",
+      },
+    });
+    const operator = await prisma.user.create({
+      data: {
+        email: "operador@prefeitura.local",
+        name: "Operador",
+        role: UserRole.OPERATOR,
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    const request = await createEntryRequest(prisma, {
+      movementDate: new Date("2026-05-22T12:00:00.000Z"),
+      productId: product.id,
+      quantity: 5,
+      requestedById: operator.id,
+      warehouseId: warehouse.id,
+    });
+    await rejectEntryRequest(prisma, request.id, user.id);
+
+    const undone = await undoEntryRequest(prisma, request.id);
+
+    expect(undone).toMatchObject({
+      reviewedById: null,
+      status: RequestStatus.PENDING,
+    });
+    expect(await prisma.stockMovement.count()).toBe(0);
+  });
+
+  it("renders the request items as an HTML table variable in the office letter", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const generalWarehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        isGeneral: true,
+        name: "Almoxarifado Central",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        warehouseId: generalWarehouse.id,
+      },
+    });
+    await prisma.officeLetterTemplate.create({
+      data: {
+        contentHtml: "<p>Itens:</p>{{itens_solicitados_tabela}}",
+        name: "Modelo com tabela",
+        subject: "Solicitacao de material",
+      },
+    });
+    const request = await createAdHocOutputRequest(prisma, {
+      items: [{ productId: product.id, quantity: 4 }],
+      movementDate: new Date("2026-06-24T12:00:00.000Z"),
+      reason: "Reposicao de material para evento",
+      productId: product.id,
+      quantity: 4,
+      requestedById: user.id,
+      warehouseId: generalWarehouse.id,
+    });
+
+    const letter = await getEntryRequestOfficeLetter(prisma, request.id, user.name);
+
+    expect(letter.contentHtml).toContain("<table");
+    expect(letter.contentHtml).toContain("<th");
+    expect(letter.contentHtml).toContain(product.name);
+    expect(letter.contentHtml).not.toContain("&lt;table");
   });
 });

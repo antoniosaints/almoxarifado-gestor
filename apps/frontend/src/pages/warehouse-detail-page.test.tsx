@@ -504,6 +504,9 @@ describe("WarehouseTabs", () => {
     expect(within(dialog).getByText("Saldo disponível: 8 RSM")).toBeInTheDocument();
     expect(within(dialog).queryByText("Detergente")).not.toBeInTheDocument();
 
+    fireEvent.change(within(dialog).getByLabelText("Motivo da solicitação"), {
+      target: { value: "Reposição para evento" },
+    });
     fireEvent.change(within(dialog).getByLabelText("Quantidade"), {
       target: { value: "9" },
     });
@@ -524,6 +527,7 @@ describe("WarehouseTabs", () => {
       items: [{ productId: "paper", quantity: 3, unitId: "ream" }],
       productId: "paper",
       quantity: 3,
+      reason: "Reposição para evento",
       warehouseId: "central",
     });
   });

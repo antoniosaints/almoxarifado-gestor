@@ -137,7 +137,9 @@ const allowedOfficeVariables = [
   "data_nota",
   "data_solicitacao",
   "itens_solicitados_html",
+  "itens_solicitados_tabela",
   "itens_solicitados_texto",
+  "motivo_solicitacao",
   "nome_empresa",
   "nome_fantasia_empresa",
   "numero_oficio",
@@ -152,16 +154,47 @@ const allowedOfficeVariables = [
   "valor_nota",
 ] as const;
 
+export const officeFontFamilies = [
+  "Arial",
+  "Times New Roman",
+  "Calibri",
+  "Georgia",
+  "Verdana",
+  "Courier New",
+] as const;
+
+const officeMargin = z.coerce.number().int().min(0).max(60);
+const officeFontFamily = z.enum(officeFontFamilies).default("Arial");
+const officeFontSize = z.coerce.number().int().min(8).max(24).default(12);
+
 export const officeTemplateInput = z.object({
   active: z.boolean().default(true),
   contentHtml: z.string().trim().min(3, "Informe o conteudo do oficio."),
   description: optionalText,
   footerText: optionalText,
+  fontFamily: officeFontFamily,
+  fontSize: officeFontSize,
   headerAlignment: z.enum(["LEFT", "CENTER", "RIGHT"]).default("LEFT"),
   headerImageUrl: optionalUrl,
   headerText: optionalText,
+  marginTop: officeMargin.default(25),
+  marginRight: officeMargin.default(20),
+  marginBottom: officeMargin.default(20),
+  marginLeft: officeMargin.default(20),
   name: z.string().trim().min(2, "Informe o nome do modelo."),
   subject: z.string().trim().min(2, "Informe o assunto do oficio."),
+});
+
+export const officeTemplatePreviewInput = z.object({
+  contentHtml: z.string().default(""),
+  footerText: optionalText,
+  fontFamily: officeFontFamily,
+  fontSize: officeFontSize,
+  marginTop: officeMargin.default(25),
+  marginRight: officeMargin.default(20),
+  marginBottom: officeMargin.default(20),
+  marginLeft: officeMargin.default(20),
+  subject: optionalText,
 });
 
 export function extractOfficeTemplateVariables(...contents: Array<string | null | undefined>) {
@@ -335,6 +368,7 @@ export const entryRequestInput = z
     items: z.array(entryRequestItemInput).optional(),
     movementDate: z.coerce.date(),
     observation: optionalText,
+    reason: optionalText,
     productId: z.string().min(1, "Escolha um produto.").optional(),
     quantity: z.coerce
       .number()

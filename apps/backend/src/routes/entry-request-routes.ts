@@ -10,6 +10,8 @@ import {
   createEntryRequest,
   getEntryRequestOfficeLetter,
   rejectEntryRequest,
+  undoEntryRequest,
+  updateEntryRequest,
 } from "../services/entry-request-service.js";
 import { productConversionsInclude } from "../services/unit-conversion-service.js";
 import {
@@ -149,6 +151,33 @@ entryRequestRoutes.post(
   }),
 );
 
+entryRequestRoutes.put(
+  "/:id",
+  requireRole(UserRole.ADMIN, UserRole.OPERATOR),
+  asyncHandler(async (request, response) => {
+    const { id } = idParam.parse(request.params);
+    const user = currentUser(response);
+    const input = entryRequestInput.parse(request.body);
+    const existing = await prisma.entryRequest.findUnique({
+      select: { warehouseId: true },
+      where: { id },
+    });
+
+    if (!existing) {
+      throw new AppError(404, "Solicitação não encontrada.");
+    }
+
+    await assertWarehouseAccess(prisma, user, existing.warehouseId);
+
+    response.json(
+      await updateEntryRequest(prisma, id, {
+        ...input,
+        requestedById: user.id,
+      }),
+    );
+  }),
+);
+
 entryRequestRoutes.get(
   "/:id/office-letter",
   asyncHandler(async (request, response) => {
@@ -196,5 +225,14 @@ entryRequestRoutes.post(
     response.json(
       await rejectEntryRequest(prisma, id, currentUser(response).id),
     );
+  }),
+);
+
+entryRequestRoutes.post(
+  "/:id/undo",
+  requirePermission("APPROVE_REQUESTS"),
+  asyncHandler(async (request, response) => {
+    const { id } = idParam.parse(request.params);
+    response.json(await undoEntryRequest(prisma, id));
   }),
 );

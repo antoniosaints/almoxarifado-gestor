@@ -310,6 +310,7 @@ export type EntryRequest = {
   items?: EntryRequestItem[];
   movementDate: string;
   observation?: string | null;
+  reason?: string | null;
   product: Pick<Product, "code" | "id" | "name" | "unit">;
   quantity: number;
   conversionFactor?: number | string | null;
@@ -404,15 +405,29 @@ export type Movement = {
   warehouseId: string;
 };
 
+export type OfficeFontFamily =
+  | "Arial"
+  | "Times New Roman"
+  | "Calibri"
+  | "Georgia"
+  | "Verdana"
+  | "Courier New";
+
 export type OfficeLetterTemplate = {
   active: boolean;
   contentHtml: string;
   description?: string | null;
   footerText?: string | null;
+  fontFamily: OfficeFontFamily;
+  fontSize: number;
   headerAlignment: "LEFT" | "CENTER" | "RIGHT";
   headerImageUrl?: string | null;
   headerText?: string | null;
   id: string;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
   name: string;
   subject: string;
   variables: string[];

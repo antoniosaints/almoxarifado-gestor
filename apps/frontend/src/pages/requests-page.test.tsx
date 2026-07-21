@@ -203,6 +203,65 @@ describe("RequestsPage", () => {
     ).toHaveAttribute("href", "/warehouses/health");
   });
 
+  it("hides rejected requests by default and shows them when filtered in", async () => {
+    const rejectedRequest: EntryRequest = {
+      ...entryRequest,
+      id: "rejected-request",
+      product: secondProduct,
+      status: "REJECTED",
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(String(input));
+        const payload =
+          url.pathname === "/entry-requests"
+            ? [entryRequest, rejectedRequest]
+            : [];
+
+        return new Response(JSON.stringify(payload), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        });
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "admin-token",
+            user: {
+              email: "admin@prefeitura.local",
+              id: "admin",
+              name: "Administrador",
+              role: "ADMIN",
+            },
+          }}
+        >
+          <RequestsPage />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    // Padrão: Pendente + Aprovado (a rejeitada fica escondida).
+    await waitFor(() => {
+      expect(screen.getByText("Papel A4")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Caneta azul")).not.toBeInTheDocument();
+
+    // Ligando "Rejeitado" a solicitação aparece.
+    fireEvent.click(screen.getByRole("button", { name: "Rejeitado" }));
+    expect(await screen.findByText("Caneta azul")).toBeInTheDocument();
+
+    // Desligando "Pendente" a pendente some.
+    fireEvent.click(screen.getByRole("button", { name: "Pendente" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Papel A4")).not.toBeInTheDocument();
+    });
+  });
+
   it("opens the office letter for non-general entry requests", async () => {
     const open = vi.spyOn(window, "open").mockReturnValue({} as Window);
     const requestedPaths: string[] = [];
@@ -621,6 +680,9 @@ describe("RequestsPage", () => {
     fireEvent.change(within(dialog).getByLabelText("Quantidade"), {
       target: { value: "2" },
     });
+    fireEvent.change(within(dialog).getByLabelText("Motivo da solicitação"), {
+      target: { value: "Evento municipal" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitação" }));
 
     await waitFor(() => {
@@ -628,6 +690,7 @@ describe("RequestsPage", () => {
         items: [{ productId: product.id, quantity: 2, unitId: product.unit.id }],
         productId: product.id,
         quantity: 2,
+        reason: "Evento municipal",
         warehouseId: centralWarehouse.id,
       });
     });

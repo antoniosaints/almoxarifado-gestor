@@ -42,7 +42,7 @@ describe("entry request office letter rendering", () => {
     await prisma.$disconnect();
   });
 
-  it("renders reusable header/footer config and leaves PDF export to the frontend", async () => {
+  it("renders footer/layout config in the body and leaves PDF export to the frontend", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({
       data: { role: UserRole.ADMIN },
@@ -113,10 +113,17 @@ describe("entry request office letter rendering", () => {
     expect(office.body.contentHtml).toContain(
       "style=\"font-family:'Times New Roman',serif;\"",
     );
-    expect(office.body.documentHtml).toContain("Almoxarifado da Saude");
+    // Layout do modelo (margens/fonte padrão) aplicado no wrapper A4.
+    expect(office.body.documentHtml).toContain("padding:25mm 20mm 20mm 20mm");
+    expect(office.body.documentHtml).toContain(
+      "font-family:Arial, Helvetica, sans-serif",
+    );
+    // Rodapé do modelo é renderizado e os itens vêm do corpo.
     expect(office.body.documentHtml).toContain("Documento 001/2026");
     expect(office.body.documentHtml).toContain("Papel A4 - 4 Unidade.");
-    expect(office.body.documentHtml).toContain(imageUpload.body.url);
+    // O cabeçalho automático do almoxarifado deixou de existir ("tudo no corpo").
+    expect(office.body.documentHtml).not.toContain("data-office-letter-header");
+    expect(office.body.documentHtml).not.toContain(imageUpload.body.url);
 
     const pdf = await request(app)
       .get(`/entry-requests/${createdRequest.body.id}/office-letter/pdf`)
@@ -124,5 +131,46 @@ describe("entry request office letter rendering", () => {
 
     expect(pdf.status).toBe(404);
     expect(pdf.headers["content-type"]).not.toContain("application/pdf");
+  });
+
+  it("previews a template applying custom margins, font and footer identically", async () => {
+    const { user } = await createBaseFixture(prisma);
+    const admin = await prisma.user.update({
+      data: { role: UserRole.ADMIN },
+      where: { id: user.id },
+    });
+    const auth = authorizationFor(admin);
+
+    const preview = await request(app)
+      .post("/office-templates/preview")
+      .set("Authorization", auth)
+      .send({
+        contentHtml: "<p>Corpo</p>{{itens_solicitados_tabela}}",
+        fontFamily: "Georgia",
+        fontSize: 14,
+        footerText: "Rodapé {{ano_oficio}}",
+        marginBottom: 10,
+        marginLeft: 18,
+        marginRight: 15,
+        marginTop: 30,
+      });
+
+    expect(preview.status).toBe(200);
+    expect(preview.body.documentHtml).toContain("padding:30mm 15mm 10mm 18mm");
+    // Regressão: a geometria do papel NÃO pode voltar para o style inline, senão
+    // brigaria com o CSS de impressão e geraria uma página em branco extra.
+    expect(preview.body.documentHtml).not.toContain("min-height:297mm");
+    expect(preview.body.documentHtml).not.toContain("width:210mm");
+    expect(preview.body.documentHtml).toContain(
+      "font-family:Georgia, 'Times New Roman', serif",
+    );
+    expect(preview.body.documentHtml).toContain("font-size:14pt");
+    // Variável de tabela renderiza como HTML real (não escapada).
+    expect(preview.body.documentHtml).toContain("<table");
+    expect(preview.body.documentHtml).not.toContain("&lt;table");
+    // Rodapé com variável de exemplo resolvida, e sem cabeçalho automático.
+    expect(preview.body.documentHtml).toContain("Rodapé 2026");
+    expect(preview.body.documentHtml).toContain("data-office-letter-footer");
+    expect(preview.body.documentHtml).not.toContain("data-office-letter-header");
   });
 });

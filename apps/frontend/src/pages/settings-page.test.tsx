@@ -130,27 +130,10 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("saves reusable office header and simple footer settings", async () => {
+  it("saves footer and layout settings in the office template", async () => {
     let templatePayload: unknown;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
-
-      if (
-        url.pathname === "/uploads/office-template-images" &&
-        init?.method === "POST"
-      ) {
-        return new Response(
-          JSON.stringify({
-            driver: "local",
-            key: "office-template-images/office-header.png",
-            url: "/uploads/office-template-images/office-header.png?v=1",
-          }),
-          {
-            headers: { "Content-Type": "application/json" },
-            status: 201,
-          },
-        );
-      }
 
       if (url.pathname === "/office-templates" && (init?.method ?? "GET") === "POST") {
         templatePayload = JSON.parse(String(init?.body));
@@ -159,7 +142,7 @@ describe("SettingsPage", () => {
           JSON.stringify({
             ...(templatePayload as object),
             id: "template-1",
-            variables: ["secretaria_nome", "almoxarifado_nome"],
+            variables: [],
           }),
           {
             headers: { "Content-Type": "application/json" },
@@ -193,34 +176,27 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Assunto"), {
       target: { value: "Solicitacao" },
     });
-    fireEvent.change(screen.getByLabelText(/Texto do cabe.alho/i), {
-      target: { value: "{{secretaria_nome}}\n{{almoxarifado_nome}}" },
+    fireEvent.change(screen.getByLabelText("Fonte"), {
+      target: { value: "Georgia" },
     });
-    fireEvent.change(screen.getByLabelText(/Posi..o do cabe.alho/i), {
-      target: { value: "CENTER" },
+    fireEvent.change(screen.getByLabelText("Tamanho da fonte (pt)"), {
+      target: { value: "14" },
     });
-    fireEvent.change(screen.getByLabelText(/Rodap. simples/i), {
+    fireEvent.change(screen.getByLabelText("Margem topo (mm)"), {
+      target: { value: "30" },
+    });
+    fireEvent.change(screen.getByLabelText("Rodapé (texto fixo)"), {
       target: { value: "Documento {{oficio_numero_ano}}" },
-    });
-    fireEvent.change(screen.getByLabelText(/Arquivo do cabe.alho/i), {
-      target: {
-        files: [new File(["imagem"], "cabecalho.png", { type: "image/png" })],
-      },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue(/office-header\.png/)).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Salvar modelo" }));
 
     await waitFor(() => {
       expect(templatePayload).toMatchObject({
+        fontFamily: "Georgia",
+        fontSize: 14,
         footerText: "Documento {{oficio_numero_ano}}",
-        headerAlignment: "CENTER",
-        headerImageUrl:
-          "http://127.0.0.1:3333/uploads/office-template-images/office-header.png?v=1",
-        headerText: "{{secretaria_nome}}\n{{almoxarifado_nome}}",
+        marginTop: 30,
       });
     });
   });
@@ -308,6 +284,24 @@ describe("SettingsPage", () => {
         );
       }
 
+      if (
+        url.pathname === "/office-templates/preview" &&
+        init?.method === "POST"
+      ) {
+        return new Response(
+          JSON.stringify({
+            contentHtml: "<p>preview</p>",
+            documentHtml:
+              '<article data-office-letter-document="true"><main data-office-letter-body="true"><p>preview</p></main></article>',
+            subject: "Solicitação",
+          }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
       if (url.pathname === "/office-templates") {
         return new Response(
           JSON.stringify([
@@ -350,9 +344,17 @@ describe("SettingsPage", () => {
       expect(editor.querySelector("strong")).not.toBeNull();
     });
     expect(editor).not.toHaveTextContent("<strong>");
-    expect(
-      document.body.querySelector(".office-letter-a4 [data-office-letter-document]"),
-    ).not.toBeNull();
+    // A prévia agora vem do backend (debounced), então precisa aguardar.
+    await waitFor(
+      () => {
+        expect(
+          document.body.querySelector(
+            ".office-letter-a4 [data-office-letter-document]",
+          ),
+        ).not.toBeNull();
+      },
+      { timeout: 3000 },
+    );
 
     editor.innerHTML = "<p>Texto editado <strong>renderizado</strong></p>";
     fireEvent.input(editor);

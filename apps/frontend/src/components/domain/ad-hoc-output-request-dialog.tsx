@@ -131,6 +131,7 @@ export function AdHocOutputRequestDialog({
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [movementDate, setMovementDate] = useState(todayInputValue());
+  const [reason, setReason] = useState("");
   const [observation, setObservation] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -182,6 +183,7 @@ export function AdHocOutputRequestDialog({
   function openDialog() {
     setItems([createDraftItem(stocks[0])]);
     setMovementDate(todayInputValue());
+    setReason("");
     setObservation("");
     setMessage(null);
     setOpen(true);
@@ -240,6 +242,11 @@ export function AdHocOutputRequestDialog({
       return;
     }
 
+    if (!reason.trim()) {
+      setMessage("Informe o motivo da solicitação.");
+      return;
+    }
+
     if (hasInsufficientStock) {
       setMessage(null);
       return;
@@ -255,6 +262,7 @@ export function AdHocOutputRequestDialog({
         body: JSON.stringify({
           items: validItems,
           movementDate,
+          reason,
           observation,
           productId: primaryItem.productId,
           quantity: primaryItem.quantity,
@@ -395,6 +403,16 @@ export function AdHocOutputRequestDialog({
               />
             </FormField>
             <FormField>
+              <Label htmlFor="ad-hoc-reason">Motivo da solicitação</Label>
+              <Textarea
+                id="ad-hoc-reason"
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Descreva o motivo desta saída avulsa."
+                required
+                value={reason}
+              />
+            </FormField>
+            <FormField>
               <Label htmlFor="ad-hoc-observation">Observação</Label>
               <Textarea
                 id="ad-hoc-observation"
@@ -402,7 +420,7 @@ export function AdHocOutputRequestDialog({
                 value={observation}
               />
             </FormField>
-            <Button disabled={!validItems.length || saving} type="submit">
+            <Button disabled={!validItems.length || !reason.trim() || saving} type="submit">
               <PackageMinus className="h-4 w-4" />
               {saving ? "Enviando..." : "Enviar solicitação"}
             </Button>

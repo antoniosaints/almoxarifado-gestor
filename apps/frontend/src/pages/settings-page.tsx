@@ -32,6 +32,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
   type MouseEvent,
 } from "react";
 import { DataTable } from "@/components/domain/data-table";
@@ -60,7 +61,11 @@ import {
   defaultSystemSettings,
   useSystemSettings,
 } from "@/lib/system-settings";
-import type { OfficeLetterTemplate, SystemSettings } from "@/lib/types";
+import type {
+  OfficeFontFamily,
+  OfficeLetterTemplate,
+  SystemSettings,
+} from "@/lib/types";
 
 type SettingsMessage = {
   kind: "error" | "success";
@@ -180,7 +185,9 @@ const officeVariables = [
   "{{solicitante_nome}}",
   "{{data_solicitacao}}",
   "{{itens_solicitados_html}}",
+  "{{itens_solicitados_tabela}}",
   "{{itens_solicitados_texto}}",
+  "{{motivo_solicitacao}}",
   "{{produto_nome}}",
   "{{quantidade_solicitada}}",
   "{{unidade_solicitada}}",
@@ -194,30 +201,35 @@ const officeVariables = [
   "{{usuario_logado}}",
 ];
 
+const OFFICE_FONT_FAMILIES: OfficeFontFamily[] = [
+  "Arial",
+  "Times New Roman",
+  "Calibri",
+  "Georgia",
+  "Verdana",
+  "Courier New",
+];
+
 type OfficeTemplateDraft = {
   active: boolean;
   contentHtml: string;
   description: string;
   footerText: string;
+  fontFamily: OfficeFontFamily;
+  fontSize: number;
   headerAlignment: "LEFT" | "CENTER" | "RIGHT";
   headerImageUrl: string;
   headerText: string;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
   name: string;
   subject: string;
 };
 
-const officeDocumentAttribute = 'data-office-letter-document="true"';
-
 function isCompleteOfficeDocument(contentHtml: string) {
   return contentHtml.includes("data-office-letter-document");
-}
-
-function createOfficeDocumentHtml(contentHtml: string) {
-  if (isCompleteOfficeDocument(contentHtml)) {
-    return contentHtml;
-  }
-
-  return `<article ${officeDocumentAttribute} class="office-letter-document" style="min-height:297mm;width:210mm;margin:0 auto;padding:18mm 20mm;background:#fff;color:#111827;font-family:'Times New Roman',serif;font-size:12pt;line-height:1.45;">${contentHtml}</article>`;
 }
 
 function extractOfficeDocumentBodyHtml(contentHtml: string) {
@@ -248,25 +260,21 @@ const defaultOfficeTemplateBodyHtml = [
 
 const defaultOfficeTemplateContentHtml = defaultOfficeTemplateBodyHtml;
 
-function officeTemplatePreviewHtml(draft: OfficeTemplateDraft) {
-  const footerHtml = draft.footerText.trim()
-    ? `<footer style="margin:24px 0 0 0;text-align:center;color:#64748b;font-size:12px;">${draft.footerText}</footer>`
-    : "";
-
-  return createOfficeDocumentHtml(
-    `<main>${draft.contentHtml || "-"}</main>${footerHtml}`,
-  );
-}
-
 function createDefaultOfficeTemplateDraft(): OfficeTemplateDraft {
   return {
     active: true,
     contentHtml: defaultOfficeTemplateContentHtml,
     description: "Modelo padrão para solicitação de material por almoxarifado.",
     footerText: "",
+    fontFamily: "Arial",
+    fontSize: 12,
     headerAlignment: "LEFT",
     headerImageUrl: "",
-    headerText: "{{secretaria_nome}}\n{{almoxarifado_nome}}",
+    headerText: "",
+    marginTop: 25,
+    marginRight: 20,
+    marginBottom: 20,
+    marginLeft: 20,
     name: "Solicitação de material",
     subject: "Solicitação de material/equipamento",
   };
@@ -294,6 +302,7 @@ function OfficeTemplatesTab() {
   );
   const [message, setMessage] = useState<SettingsMessage | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [previewHtml, setPreviewHtml] = useState("");
   const attachEditor = useCallback((node: HTMLDivElement | null) => {
     editorRef.current = node;
 
@@ -302,15 +311,74 @@ function OfficeTemplatesTab() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!editing) {
+      return;
+    }
+
+    let active = true;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const rendered = await api<{ documentHtml: string }>(
+            "/office-templates/preview",
+            {
+              body: JSON.stringify({
+                contentHtml: draft.contentHtml,
+                fontFamily: draft.fontFamily,
+                fontSize: draft.fontSize,
+                footerText: draft.footerText,
+                marginBottom: draft.marginBottom,
+                marginLeft: draft.marginLeft,
+                marginRight: draft.marginRight,
+                marginTop: draft.marginTop,
+                subject: draft.subject,
+              }),
+              method: "POST",
+            },
+          );
+
+          if (active) {
+            setPreviewHtml(rendered.documentHtml);
+          }
+        } catch {
+          // Mantém a última prévia válida em erros transitórios de digitação.
+        }
+      })();
+    }, 400);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [
+    editing,
+    draft.contentHtml,
+    draft.fontFamily,
+    draft.fontSize,
+    draft.footerText,
+    draft.marginBottom,
+    draft.marginLeft,
+    draft.marginRight,
+    draft.marginTop,
+    draft.subject,
+  ]);
+
   function openEditTemplate(template: OfficeLetterTemplate) {
-    const nextDraft = {
+    const nextDraft: OfficeTemplateDraft = {
       active: template.active,
       contentHtml: extractOfficeDocumentBodyHtml(template.contentHtml),
       description: template.description ?? "",
       footerText: template.footerText ?? "",
+      fontFamily: template.fontFamily ?? "Arial",
+      fontSize: template.fontSize ?? 12,
       headerAlignment: template.headerAlignment ?? "LEFT",
       headerImageUrl: template.headerImageUrl ?? "",
       headerText: template.headerText ?? "",
+      marginTop: template.marginTop ?? 25,
+      marginRight: template.marginRight ?? 20,
+      marginBottom: template.marginBottom ?? 20,
+      marginLeft: template.marginLeft ?? 20,
       name: template.name,
       subject: template.subject,
     };
@@ -374,23 +442,62 @@ function OfficeTemplatesTab() {
     const range = editorSelectionRef.current;
 
     if (!editor || !range || !editor.contains(range.commonAncestorContainer)) {
-      return;
+      return false;
     }
 
     const selection = document.getSelection();
 
     if (!selection) {
-      return;
+      return false;
     }
 
     editor.focus();
     selection.removeAllRanges();
     selection.addRange(range);
+    return true;
+  }
+
+  // Sem cursor salvo, o execCommand insere no começo do editor. Colocamos o
+  // cursor no fim para o conteúdo novo entrar onde o usuário está escrevendo.
+  function placeCaretAtEditorEnd() {
+    const editor = editorRef.current;
+    const selection = document.getSelection();
+
+    if (!editor || !selection) {
+      return;
+    }
+
+    const range = document.createRange();
+
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editorSelectionRef.current = range.cloneRange();
   }
 
   function preserveEditorToolbarMouseDown(event: MouseEvent<HTMLElement>) {
     event.preventDefault();
     restoreEditorSelection();
+  }
+
+  // Enter cria um bloco novo (saindo, por exemplo, da caixa de texto ao lado da
+  // imagem). Shift+Enter quebra a linha dentro do bloco atual, permitindo
+  // várias linhas ao lado da imagem.
+  function handleEditorKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Enter" || !event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (typeof document.execCommand === "function") {
+      if (!document.execCommand("insertLineBreak")) {
+        document.execCommand("insertHTML", false, "<br>");
+      }
+    }
+
+    syncEditorContent();
   }
 
   function syncEditorContent() {
@@ -454,7 +561,10 @@ function OfficeTemplatesTab() {
     }
 
     editor.focus();
-    restoreEditorSelection();
+
+    if (!restoreEditorSelection()) {
+      placeCaretAtEditorEnd();
+    }
 
     if (typeof document.execCommand === "function") {
       document.execCommand("insertHTML", false, html);
@@ -484,33 +594,24 @@ function OfficeTemplatesTab() {
         file,
       );
 
-      insertHtml(`
-        <div style="
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          gap:12px;
-          width:100%;
-          margin:8px 0;
-          text-align:center;
-        ">
-          <img
-            src="${resolveAssetUrl(uploaded.url)}"
-            alt=""
-            style="
-              max-height:64px;
-              width:auto;
-              height:auto;
-              flex-shrink:0;
-            "
-          />
-          <div contenteditable="true">
-            <strong>PREFEITURA MUNICIPAL</strong><br>
-            Secretaria de Administração<br>
-            Departamento de Ofícios
-          </div>
-        </div>
-      `);
+      // Cabeçalho: imagem + caixa de texto lado a lado, centralizados.
+      // Usamos uma tabela (e não span/div inline-block) porque a célula de
+      // texto NÃO colapsa quando o usuário apaga todo o conteúdo — o cursor
+      // continua dentro da caixa. A célula também aceita várias linhas
+      // (Enter e Shift+Enter) sem pular para baixo da imagem, e tabela é o
+      // layout mais previsível na impressão.
+      insertHtml(
+        `<table style="border-collapse:collapse;margin:8px auto;"><tbody><tr>` +
+          `<td style="padding:0 12px 0 0;vertical-align:middle;">` +
+          `<img src="${resolveAssetUrl(
+            uploaded.url,
+          )}" alt="" style="display:inline-block;max-height:80px;max-width:100%;width:auto;height:auto;" />` +
+          `</td>` +
+          `<td style="padding:0;vertical-align:middle;text-align:left;min-width:60mm;">` +
+          `Escreva aqui o texto ao lado da imagem` +
+          `</td>` +
+          `</tr></tbody></table><p><br /></p>`,
+      );
     } catch (caughtError) {
       setEditorError(
         caughtError instanceof Error
@@ -614,9 +715,15 @@ function OfficeTemplatesTab() {
           contentHtml: template.contentHtml,
           description: template.description ?? "",
           footerText: template.footerText ?? "",
+          fontFamily: template.fontFamily ?? "Arial",
+          fontSize: template.fontSize ?? 12,
           headerAlignment: template.headerAlignment ?? "LEFT",
           headerImageUrl: template.headerImageUrl ?? "",
           headerText: template.headerText ?? "",
+          marginTop: template.marginTop ?? 25,
+          marginRight: template.marginRight ?? 20,
+          marginBottom: template.marginBottom ?? 20,
+          marginLeft: template.marginLeft ?? 20,
           name: template.name,
           subject: template.subject,
         }),
@@ -823,6 +930,84 @@ function OfficeTemplatesTab() {
                 value={draft.description}
               />
             </FormField>
+            <div className="space-y-3 rounded-md border bg-background p-3">
+              <p className="text-xs font-medium uppercase text-muted-foreground">
+                Layout do documento
+              </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField>
+                  <Label htmlFor="office-template-font-family">Fonte</Label>
+                  <Select
+                    id="office-template-font-family"
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        fontFamily: event.target.value as OfficeFontFamily,
+                      })
+                    }
+                    value={draft.fontFamily}
+                  >
+                    {OFFICE_FONT_FAMILIES.map((font) => (
+                      <option key={font} value={font}>
+                        {font}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+                <FormField>
+                  <Label htmlFor="office-template-font-size">
+                    Tamanho da fonte (pt)
+                  </Label>
+                  <Input
+                    id="office-template-font-size"
+                    max={24}
+                    min={8}
+                    onChange={(event) =>
+                      setDraft({ ...draft, fontSize: Number(event.target.value) })
+                    }
+                    type="number"
+                    value={draft.fontSize}
+                  />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {(
+                  [
+                    ["marginTop", "Margem topo"],
+                    ["marginRight", "Margem direita"],
+                    ["marginBottom", "Margem base"],
+                    ["marginLeft", "Margem esquerda"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <FormField key={field}>
+                    <Label htmlFor={`office-template-${field}`}>
+                      {label} (mm)
+                    </Label>
+                    <Input
+                      id={`office-template-${field}`}
+                      max={60}
+                      min={0}
+                      onChange={(event) =>
+                        setDraft({ ...draft, [field]: Number(event.target.value) })
+                      }
+                      type="number"
+                      value={draft[field]}
+                    />
+                  </FormField>
+                ))}
+              </div>
+              <FormField>
+                <Label htmlFor="office-template-footer">Rodapé (texto fixo)</Label>
+                <Textarea
+                  id="office-template-footer"
+                  onChange={(event) =>
+                    setDraft({ ...draft, footerText: event.target.value })
+                  }
+                  placeholder="Ex.: Rua Principal, 100 — Centro — (00) 0000-0000"
+                  value={draft.footerText}
+                />
+              </FormField>
+            </div>
             <div className="flex flex-wrap gap-2 rounded-md border bg-background p-2">
               <Button
                 aria-label="Negrito"
@@ -1004,6 +1189,7 @@ function OfficeTemplatesTab() {
                 onBlur={rememberEditorSelection}
                 onFocus={rememberEditorSelection}
                 onInput={syncEditorContent}
+                onKeyDown={handleEditorKeyDown}
                 onKeyUp={rememberEditorSelection}
                 onMouseUp={rememberEditorSelection}
                 ref={attachEditor}
@@ -1039,9 +1225,13 @@ function OfficeTemplatesTab() {
             </label>
             <div className="rounded-md border bg-background p-4">
               <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">
-                Prévia
+                Prévia (idêntica à impressão)
               </p>
-              <OfficeLetterDocument html={officeTemplatePreviewHtml(draft)} />
+              {previewHtml ? (
+                <OfficeLetterDocument html={previewHtml} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Gerando prévia...</p>
+              )}
             </div>
             <div className="flex justify-end gap-2">
               <Button

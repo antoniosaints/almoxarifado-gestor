@@ -299,6 +299,7 @@ model StockMovement {
   observation            String?
   invoiceId              String?
   stockId                String?
+  entryRequestId         String?
   movementDate           DateTime
   responsibleUserId      String
   createdAt              DateTime     @default(now())
@@ -311,9 +312,11 @@ model StockMovement {
   invoice                Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   stock                  Stock?       @relation(fields: [stockId], references: [id], onDelete: Cascade)
   sourceUnit             UnitOfMeasure? @relation("StockMovementSourceUnit", fields: [sourceUnitId], references: [id], onDelete: SetNull)
+  entryRequest           EntryRequest?  @relation("StockMovementEntryRequest", fields: [entryRequestId], references: [id], onDelete: SetNull)
 
   @@index([stockId])
   @@index([sourceUnitId])
+  @@index([entryRequestId])
 }
 
 model EntryRequest {
@@ -326,6 +329,7 @@ model EntryRequest {
   sourceUnitId     String?
   conversionFactor Decimal?
   observation      String?
+  reason           String?
   movementDate     DateTime
   status           RequestStatus @default(PENDING)
   requestedById    String
@@ -341,6 +345,7 @@ model EntryRequest {
   reviewedBy       User?         @relation("EntryReviewer", fields: [reviewedById], references: [id])
   sourceUnit        UnitOfMeasure? @relation("EntryRequestSourceUnit", fields: [sourceUnitId], references: [id], onDelete: SetNull)
   items            EntryRequestItem[]
+  movements        StockMovement[] @relation("StockMovementEntryRequest")
 
   @@unique([warehouseId, officeYear, officeNumber])
   @@index([sourceUnitId])
@@ -465,6 +470,12 @@ model OfficeLetterTemplate {
   headerAlignment String   @default("LEFT")
   contentHtml     String
   footerText      String?
+  marginTop       Int      @default(25)
+  marginRight     Int      @default(20)
+  marginBottom    Int      @default(20)
+  marginLeft      Int      @default(20)
+  fontFamily      String   @default("Arial")
+  fontSize        Int      @default(12)
   variables       String   @default("[]")
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
