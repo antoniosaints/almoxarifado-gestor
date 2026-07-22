@@ -532,6 +532,79 @@ describe("WarehouseTabs", () => {
     });
   });
 
+  it("creates an ad hoc output request from the opened warehouse", async () => {
+    let requestPayload: unknown;
+    const onMovementSaved = vi.fn(async () => undefined);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/entry-requests/ad-hoc-output" && init?.method === "POST") {
+        requestPayload = JSON.parse(String(init.body));
+
+        return new Response(JSON.stringify({ id: "ad-hoc-output" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        });
+      }
+
+      return new Response(JSON.stringify([]), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <MemoryRouter>
+        <SessionProvider
+          initialSession={{
+            token: "operator-token",
+            user: {
+              email: "operador@prefeitura.local",
+              id: "operator",
+              name: "Operador",
+              role: "OPERATOR",
+            },
+          }}
+        >
+          <WarehouseTabs
+            movements={[]}
+            onMinimumChange={() => Promise.resolve()}
+            onMovementSaved={onMovementSaved}
+            onStockDeleted={() => Promise.resolve()}
+            products={[warehouseWithStock.stocks[0].product]}
+            warehouse={warehouseWithStock}
+            warehouses={[warehouseWithStock]}
+          />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Solicitar saída avulsa" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Saída avulsa" });
+    expect(
+      within(dialog).getByText(
+        "A baixa em Almoxarifado da Saude será registrada somente depois da aprovação.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText("Motivo da solicitação"), {
+      target: { value: "Consumo interno" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Quantidade"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Enviar solicitação" }));
+
+    await waitFor(() => expect(onMovementSaved).toHaveBeenCalled());
+    expect(requestPayload).toMatchObject({
+      items: [{ productId: "paper", quantity: 2, unitId: "ream" }],
+      reason: "Consumo interno",
+      warehouseId: "health",
+    });
+  });
+
   it("shows the converted base quantity in movement forms", () => {
     render(
       <MemoryRouter>

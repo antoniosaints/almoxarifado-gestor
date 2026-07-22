@@ -26,8 +26,8 @@ type DraftItem = {
 };
 
 type AdHocOutputRequestDialogProps = {
-  generalWarehouse?: Warehouse | null;
   onCreated: () => Promise<void>;
+  warehouse?: Warehouse | null;
 };
 
 function draftId() {
@@ -125,8 +125,8 @@ function conversionPreview(product: Product | undefined, item: DraftItem) {
 }
 
 export function AdHocOutputRequestDialog({
-  generalWarehouse,
   onCreated,
+  warehouse,
 }: AdHocOutputRequestDialogProps) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<DraftItem[]>([]);
@@ -135,7 +135,7 @@ export function AdHocOutputRequestDialog({
   const [observation, setObservation] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const stocks = useMemo(() => availableStocks(generalWarehouse), [generalWarehouse]);
+  const stocks = useMemo(() => availableStocks(warehouse), [warehouse]);
   const stockByProduct = useMemo(
     () => new Map(stocks.map((stock) => [stock.productId, stock])),
     [stocks],
@@ -232,8 +232,8 @@ export function AdHocOutputRequestDialog({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!generalWarehouse?.isGeneral) {
-      setMessage("Cadastre um almoxarifado geral ativo.");
+    if (!warehouse?.active) {
+      setMessage("Almoxarifado indisponível para saída avulsa.");
       return;
     }
 
@@ -266,7 +266,7 @@ export function AdHocOutputRequestDialog({
           observation,
           productId: primaryItem.productId,
           quantity: primaryItem.quantity,
-          warehouseId: generalWarehouse.id,
+          warehouseId: warehouse.id,
         }),
         method: "POST",
       });
@@ -294,7 +294,9 @@ export function AdHocOutputRequestDialog({
           <DialogHeader>
             <DialogTitle>Saída avulsa</DialogTitle>
             <DialogDescription>
-              A baixa será registrada somente depois da aprovação.
+              {warehouse
+                ? `A baixa em ${warehouse.name} será registrada somente depois da aprovação.`
+                : "A baixa será registrada somente depois da aprovação."}
             </DialogDescription>
           </DialogHeader>
           <Form onSubmit={submit}>

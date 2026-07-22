@@ -550,6 +550,68 @@ describe("entry request service", () => {
     });
   });
 
+  it("approves an ad hoc output request from a non general warehouse", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado da Educacao",
+      },
+    });
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 10,
+        productId: product.id,
+        totalValue: 100,
+        unitPriceAverage: 10,
+        warehouseId: warehouse.id,
+      },
+    });
+
+    const request = await createAdHocOutputRequest(prisma, {
+      items: [{ productId: product.id, quantity: 4 }],
+      movementDate: new Date("2026-06-24T12:00:00.000Z"),
+      reason: "Consumo interno da secretaria",
+      productId: product.id,
+      quantity: 4,
+      requestedById: user.id,
+      warehouseId: warehouse.id,
+    });
+
+    expect(request).toMatchObject({
+      officeNumber: 1,
+      officeYear: 2026,
+      status: RequestStatus.PENDING,
+      type: "AD_HOC_OUTPUT",
+      warehouseId: warehouse.id,
+    });
+
+    await approveEntryRequest(prisma, {
+      requestId: request.id,
+      reviewedById: user.id,
+    });
+
+    const stock = await prisma.stock.findUniqueOrThrow({
+      where: {
+        warehouseId_productId: {
+          productId: product.id,
+          warehouseId: warehouse.id,
+        },
+      },
+    });
+    const movements = await prisma.stockMovement.findMany();
+
+    expect(stock.currentQuantity).toBe(6);
+    expect(Number(stock.totalValue)).toBe(60);
+    expect(movements).toHaveLength(1);
+    expect(movements[0]).toMatchObject({
+      productId: product.id,
+      quantity: 4,
+      type: "SAIDA",
+      warehouseId: warehouse.id,
+    });
+  });
+
   it("generates an office letter for an ad hoc output request", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const generalWarehouse = await prisma.warehouse.create({
@@ -626,7 +688,7 @@ describe("entry request service", () => {
         warehouseId: generalWarehouse.id,
       }),
     ).rejects.toMatchObject({
-      message: "Quantidade insuficiente no estoque geral.",
+      message: "Quantidade insuficiente no estoque do almoxarifado.",
       status: 409,
     });
   });

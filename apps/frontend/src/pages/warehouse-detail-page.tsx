@@ -2783,6 +2783,11 @@ export function WarehouseTabs({
   const operator = session?.user.role === "OPERATOR";
   const canCreateProducts = hasPermission(session?.user, "CREATE_PRODUCTS");
   const canDeleteMovements = hasPermission(session?.user, "DELETE_STOCKS");
+  // No geral a saída avulsa é só do admin; nos demais o operador também pode
+  // pedir a baixa do próprio estoque, como já faz com a solicitação de entrada.
+  const canRequestAdHocOutput = warehouse.isGeneral
+    ? !operator
+    : operator || session?.user.role === "ADMIN";
   const [activeTab, setActiveTab] = useState(() =>
     readStoredWarehouseTab(warehouse.id),
   );
@@ -2861,20 +2866,20 @@ export function WarehouseTabs({
               warehouses={warehouses}
             />
           ) : null}
+          {canRequestAdHocOutput && activeTab === "stock" ? (
+            <AdHocOutputRequestDialog
+              onCreated={onMovementSaved}
+              warehouse={warehouse}
+            />
+          ) : null}
           {warehouse.isGeneral && activeTab === "stock" && !operator ? (
-            <>
-              <AdHocOutputRequestDialog
-                generalWarehouse={warehouse}
-                onCreated={onMovementSaved}
-              />
-              <MovementDialog
-                kind="transfer"
-                onSaved={onMovementSaved}
-                products={transferableProducts}
-                warehouse={warehouse}
-                warehouses={warehouses}
-              />
-            </>
+            <MovementDialog
+              kind="transfer"
+              onSaved={onMovementSaved}
+              products={transferableProducts}
+              warehouse={warehouse}
+              warehouses={warehouses}
+            />
           ) : null}
           {activeTab === "history" ? (
             <WarehouseMovementsExportDialog

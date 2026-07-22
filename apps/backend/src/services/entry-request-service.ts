@@ -243,7 +243,7 @@ async function nextOfficeNumber(
   return candidate;
 }
 
-async function assertAvailableGeneralStock(
+async function assertAvailableWarehouseStock(
   prisma: Prisma.TransactionClient,
   warehouseId: string,
   items: Array<{ productId: string; quantity: number }>,
@@ -275,7 +275,10 @@ async function assertAvailableGeneralStock(
     const stock = stockByProduct.get(productId);
 
     if (!stock || stock.currentQuantity < quantity) {
-      throw new AppError(409, "Quantidade insuficiente no estoque geral.");
+      throw new AppError(
+        409,
+        "Quantidade insuficiente no estoque do almoxarifado.",
+      );
     }
   }
 }
@@ -395,17 +398,16 @@ export async function createAdHocOutputRequest(
     const warehouse = await transaction.warehouse.findUnique({
       select: {
         active: true,
-        isGeneral: true,
       },
       where: {
         id: input.warehouseId,
       },
     });
 
-    if (!warehouse?.active || !warehouse.isGeneral) {
+    if (!warehouse?.active) {
       throw new AppError(
         400,
-        "Saida avulsa disponivel apenas no almoxarifado geral ativo.",
+        "Saída avulsa disponível apenas em almoxarifado ativo.",
       );
     }
 
@@ -421,7 +423,7 @@ export async function createAdHocOutputRequest(
     );
     const primaryConverted = convertedItems[0];
 
-    await assertAvailableGeneralStock(
+    await assertAvailableWarehouseStock(
       transaction,
       input.warehouseId,
       convertedItems.map((item) => ({
@@ -492,7 +494,6 @@ export async function updateEntryRequest(
     const warehouse = await transaction.warehouse.findUnique({
       select: {
         active: true,
-        isGeneral: true,
       },
       where: { id: request.warehouseId },
     });
@@ -505,10 +506,10 @@ export async function updateEntryRequest(
     const reason = input.reason?.trim() || null;
 
     if (isAdHocOutput) {
-      if (!warehouse.active || !warehouse.isGeneral) {
+      if (!warehouse.active) {
         throw new AppError(
           400,
-          "Saida avulsa disponivel apenas no almoxarifado geral ativo.",
+          "Saída avulsa disponível apenas em almoxarifado ativo.",
         );
       }
 
@@ -551,7 +552,7 @@ export async function updateEntryRequest(
     const primaryConverted = convertedItems[0];
 
     if (isAdHocOutput) {
-      await assertAvailableGeneralStock(
+      await assertAvailableWarehouseStock(
         transaction,
         request.warehouseId,
         convertedItems.map((item) => ({
@@ -838,17 +839,16 @@ async function approveAdHocOutputRequestInTransaction(
   const warehouse = await transaction.warehouse.findUnique({
     select: {
       active: true,
-      isGeneral: true,
     },
     where: {
       id: request.warehouseId,
     },
   });
 
-  if (!warehouse?.active || !warehouse.isGeneral) {
+  if (!warehouse?.active) {
     throw new AppError(
       400,
-      "Saida avulsa disponivel apenas no almoxarifado geral ativo.",
+      "Saída avulsa disponível apenas em almoxarifado ativo.",
     );
   }
 
@@ -874,7 +874,10 @@ async function approveAdHocOutputRequestInTransaction(
     });
 
     if (!stock || stock.currentQuantity < item.quantity) {
-      throw new AppError(409, "Quantidade insuficiente no estoque geral.");
+      throw new AppError(
+        409,
+        "Quantidade insuficiente no estoque do almoxarifado.",
+      );
     }
 
     const updatedStock = await transaction.stock.update({

@@ -399,8 +399,10 @@ function ApprovalDialog({
                       </div>
                       <div className="rounded-md border bg-background p-3 text-sm">
                         <p>
-                          Estoque geral: {sourceBefore}{" "}
-                          {item.product.unit.abbreviation}
+                          {adHocOutput
+                            ? `Estoque ${request.warehouse.name}`
+                            : "Estoque geral"}
+                          : {sourceBefore} {item.product.unit.abbreviation}
                         </p>
                         <p>
                           Após aprovar: {sourceAfter}{" "}
@@ -1684,8 +1686,8 @@ export function RequestsPage() {
           {admin ? (
             <>
               <AdHocOutputRequestDialog
-                generalWarehouse={generalWarehouse}
                 onCreated={requestCreated}
+                warehouse={generalWarehouse}
               />
               <DirectTransferDialog
                 onCreated={transferCreated}
