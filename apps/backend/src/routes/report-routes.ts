@@ -108,6 +108,10 @@ function queryList(query: Record<string, unknown>, key: string) {
     .filter(Boolean);
 }
 
+function queryBoolean(query: Record<string, unknown>, key: string) {
+  return queryString(query, key) === "true";
+}
+
 function ensureSpace(document: PDFKit.PDFDocument, height: number) {
   if (document.y + height > document.page.height - document.page.margins.bottom) {
     return addContinuationPage(document);
@@ -769,6 +773,7 @@ reportRoutes.get(
   "/stocks",
   asyncHandler(async (request, response) => {
     const user = currentUser(response);
+    const onlyWithStock = queryBoolean(request.query, "onlyWithStock");
     const warehouseIds = queryList(request.query, "warehouseIds");
     const stocks = await prisma.stock.findMany({
       include: {
@@ -785,6 +790,7 @@ reportRoutes.get(
       },
       orderBy: [{ warehouse: { name: "asc" } }, { product: { name: "asc" } }],
       where: {
+        currentQuantity: onlyWithStock ? { gt: 0 } : undefined,
         warehouseId: warehouseIds.length ? { in: warehouseIds } : undefined,
         warehouse: warehouseScope(user),
       },

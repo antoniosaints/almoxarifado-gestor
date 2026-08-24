@@ -4,7 +4,12 @@ import path from "node:path";
 
 const backendRoot = process.cwd();
 const databaseFile = path.join(backendRoot, "prisma", "test.db");
-const prismaBinary = path.join(backendRoot, "node_modules", ".bin", "prisma.CMD");
+const prismaBinary = path.join(
+  backendRoot,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "prisma.CMD" : "prisma",
+);
 
 process.env.DATABASE_URL = "file:./test.db";
 
@@ -18,6 +23,6 @@ execFileSync(prismaBinary, ["db", "push", "--skip-generate", "--accept-data-loss
     ...process.env,
     DATABASE_URL: "file:./test.db",
   },
-  shell: true,
+  shell: process.platform === "win32",
   stdio: "pipe",
 });

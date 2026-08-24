@@ -16,7 +16,7 @@
     "db:deploy": "node scripts/prisma-command.mjs deploy",
     "db:deploy:force": "npx prisma migrate deploy",
     "db:push": "node scripts/prisma-command.mjs push",
-    "db:seed": "pnpm db:prepare && prisma db seed --schema prisma/schema.generated.prisma"
+    "db:seed": "pnpm db:generate && prisma db seed --schema prisma/schema.generated.prisma"
   },
   "dependencies": {
     "@prisma/client": "^6.8.2",

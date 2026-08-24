@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-20T20:44:01.619Z",
+  "generatedAt": "2026-08-24T13:42:09.404Z",
   "provider": "sqlite",
   "trustedMigrations": {
     "20260522100000_init": {
@@ -28,7 +28,7 @@
     },
     "20260523150000_invoice_company_import_fields": {
       "risks": [],
-      "sha256": "ebeb32badb38cdf77b20b471d28dbe4e3139259378386229798cc8a730d6a214"
+      "sha256": "18b2787ece30a7f8eeb6f82af01dca6bd8a8c6f84f5842a38fd8e53110e8e66e"
     },
     "20260523162000_delete_controls_and_system_settings": {
       "risks": [
@@ -36,37 +36,37 @@
         "foreign-keys-off",
         "redefine-tables"
       ],
-      "sha256": "c4a6b3deb226221cb77b5dfe0918a439ca205eb48dfc82f7463070576550e1c4"
+      "sha256": "fb8e6fe53805c4dc6ca75a1ae7977dd17bc95980a1393a233714be121976e853"
     },
     "20260524120000_report_personalization_and_default_admin": {
       "risks": [],
-      "sha256": "451e693c04502802ce10447bb77b98a9555582646116d2db9519c53dd310836b"
+      "sha256": "51f85704c4a86b286f7d05489d653d1036579644569e76102dea87f0acebbe33"
     },
     "20260524133000_remove_report_responsible_settings": {
       "risks": [
         "drop-column"
       ],
-      "sha256": "28f1883d56bd6639a47876d656eaeaec06c7927bafd8a0c89d166a4cfaa8071c"
+      "sha256": "4c22d27a8074c5e998d539b956a21c10e280c7c397582bf20cf4636908070df2"
     },
     "20260524143000_add_report_title": {
       "risks": [],
-      "sha256": "7ea50db5b063274a8198f51eed248764987edc9fde40ab810500d65d3a3baac5"
+      "sha256": "57edfcafd688b8ae96bb84728a2a239f6c8d412ff92e152de0797e7dbe637ac6"
     },
     "20260525100000_system_favicon": {
       "risks": [],
-      "sha256": "57e91d6ae59cde2c06d690126921bf462b583fbbb8ec72feb6275e2d6de92cb0"
+      "sha256": "9d2b0776114f2398b598a3786159bed3f8a04b5a2ae0ed98e3913c10a4bba627"
     },
     "20260525150000_product_minimum_quantity": {
       "risks": [],
-      "sha256": "6e36eff49c4e7584643a17a5ad0a8e683e760b3c349153e3ffb4a33f3d4c66d4"
+      "sha256": "b96847d0b32df002177a7fd53ba9e2659b06aedd1d0abf1f3d845c57dadf59ff"
     },
     "20260525190000_manager_system": {
       "risks": [],
-      "sha256": "083512eab9cb85c1cf100c2a0f00b9f149ac719641b7ba68c6aee6da73694045"
+      "sha256": "d5ca3c4f9c60f31afd17ef4e784ee93c1115407955115019b8ba94b7895a84ab"
     },
     "20260525203000_fleet_module": {
       "risks": [],
-      "sha256": "07c190432928230fdd07205bb1ccc191b79e4eb893746bea469eb61cd9594279"
+      "sha256": "0273ca6a3ab969b9d35ae52a01357fa7661c5cf703dd143edaa527ac6d83321d"
     },
     "20260526110657_new_updates": {
       "risks": [
@@ -74,7 +74,7 @@
         "foreign-keys-off",
         "redefine-tables"
       ],
-      "sha256": "9ef953db3ae90540e37e7985eb410dbea7fb3896760276be00e838c44f2f5f4f"
+      "sha256": "df666ac44e2a672ff5361ba69e3d0f3148b38e1e70ba710791fa4c01e2a41e76"
     },
     "20260526143000_suppliers_office_templates": {
       "risks": [
@@ -82,11 +82,11 @@
         "foreign-keys-off",
         "redefine-tables"
       ],
-      "sha256": "b9d89bc5cf851563b59004745f67e1e191c53487e7bc1ffc1286e3ae958091bc"
+      "sha256": "f7e8d08f6bb653f66df79c2d3da0736dd823c4a3e760b2236cffa4d40be3d8cb"
     },
     "20260526170000_entry_request_office_letters": {
       "risks": [],
-      "sha256": "a19be020ad33bcd18cd7bb4e1904ed83d625cab28c5d7bd8cb4ba68523c7d31f"
+      "sha256": "f180de93e475732f7dd58ba6f29f8deb921bf15875bea458d70ee2124385671c"
     },
     "20260527004901_ajuste_migration": {
       "risks": [
@@ -94,15 +94,15 @@
         "foreign-keys-off",
         "redefine-tables"
       ],
-      "sha256": "9ef953db3ae90540e37e7985eb410dbea7fb3896760276be00e838c44f2f5f4f"
+      "sha256": "df666ac44e2a672ff5361ba69e3d0f3148b38e1e70ba710791fa4c01e2a41e76"
     },
     "20260527100000_site_mode": {
       "risks": [],
-      "sha256": "4ae5afd44e1159f0e8474041946ef0012681bac7373a9933c2d869977106caec"
+      "sha256": "a8e5e16fdefd14104831c5f6163d14afb1de89c297691251a5c357f1f74d2c69"
     },
     "20260527103000_entry_request_items": {
       "risks": [],
-      "sha256": "eea57f5c9bc4b1509be378b7e6806c7651a122f18288a63cce312af84b9c8c78"
+      "sha256": "43dda08a6bd505c28cf9ae8b2f9e681a5382fc524a85bd078645d416a509baab"
     },
     "20260527132856_fix_database": {
       "risks": [
@@ -110,7 +110,7 @@
         "foreign-keys-off",
         "redefine-tables"
       ],
-      "sha256": "9ef953db3ae90540e37e7985eb410dbea7fb3896760276be00e838c44f2f5f4f"
+      "sha256": "df666ac44e2a672ff5361ba69e3d0f3148b38e1e70ba710791fa4c01e2a41e76"
     },
     "20260527134056_fix_create_merge_db": {
       "risks": [
@@ -138,11 +138,11 @@
         "foreign-keys-off",
         "redefine-tables"
       ],
-      "sha256": "9ef953db3ae90540e37e7985eb410dbea7fb3896760276be00e838c44f2f5f4f"
+      "sha256": "df666ac44e2a672ff5361ba69e3d0f3148b38e1e70ba710791fa4c01e2a41e76"
     },
     "20260528001000_manager_payment_gateways": {
       "risks": [],
-      "sha256": "2ae5f439a80a18efa985afa2c1965a7d59eff01d34a1b75f80694b5c94997557"
+      "sha256": "bb98be4d3478eb1a8d8d46d0319bb2d79a4a2efc3d64d5b4965b8c9bd76c5def"
     },
     "20260528115328_ajuste_migration_02": {
       "risks": [
@@ -158,11 +158,11 @@
         "foreign-keys-off",
         "redefine-tables"
       ],
-      "sha256": "eede90f4bf4a1550d82ef870eaea032f34d67fb719cfc27d33077c9a561030d9"
+      "sha256": "7cbbfc840299962b7a25d4ee284aca3c857f4640f6f9c58c69674f3b8076c4a8"
     },
     "20260529153000_office_template_header_footer": {
       "risks": [],
-      "sha256": "0d2420fabe381be23fab434665bfde2681626ae768c6ffe0218d9d57390d5e39"
+      "sha256": "728eed9d459f47f40ae6c4f9ac04c8c7bde09ead80de9e3183075c6162f0b135"
     },
     "20260601100000_permission_profiles": {
       "risks": [],
@@ -195,6 +195,10 @@
         "redefine-tables"
       ],
       "sha256": "77f2efe8bf523d54aad8ba809de8fb9ae648422e494d48122325ec867a520b18"
+    },
+    "20260721120000_release_office_number_from_rejected": {
+      "risks": [],
+      "sha256": "3c08aa6349ebeeb4e1db476a79be2891e0e43ef8635e29b08cb8153559a38b4e"
     }
   },
   "version": 1

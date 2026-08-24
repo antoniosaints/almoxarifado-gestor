@@ -150,4 +150,24 @@ describe("ReportsPage", () => {
       ).toBe(true);
     });
   });
+
+  it("exports stock balances without zero quantities when selected", async () => {
+    const requestedPaths = mockReportFetch();
+
+    render(<ReportsPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "Exportar PDF" }).length).toBe(3);
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Exportar PDF" })[1]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Somente itens com estoque" }));
+    fireEvent.click(screen.getByRole("button", { name: "Exportar saldos" }));
+
+    await waitFor(() => {
+      expect(
+        requestedPaths.some((path) => path.includes("/reports/stocks?onlyWithStock=true")),
+      ).toBe(true);
+    });
+  });
 });

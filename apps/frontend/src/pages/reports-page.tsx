@@ -171,6 +171,7 @@ function WarehouseReportDialog({
   warehouses: Warehouse[];
 }) {
   const [open, setOpen] = useState(false);
+  const [onlyWithStock, setOnlyWithStock] = useState(false);
   const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([]);
 
   function toggleWarehouse(warehouseId: string) {
@@ -185,6 +186,7 @@ function WarehouseReportDialog({
     event.preventDefault();
     void onExport(
       `/reports/${reportKey}${reportQuery(from, to, {
+        onlyWithStock: reportKey === "stocks" && onlyWithStock ? "true" : undefined,
         warehouseIds: selectedWarehouseIds.join(","),
       })}`,
       fileName,
@@ -233,6 +235,26 @@ function WarehouseReportDialog({
                 </p>
               ) : null}
             </div>
+            {reportKey === "stocks" ? (
+              <label
+                className="flex cursor-pointer items-start gap-2 rounded-lg border bg-card p-3 text-sm hover:bg-muted"
+                htmlFor="report-stocks-only-with-stock"
+              >
+                <input
+                  aria-label="Somente itens com estoque"
+                  checked={onlyWithStock}
+                  id="report-stocks-only-with-stock"
+                  onChange={(event) => setOnlyWithStock(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>
+                  <span className="block font-medium">Somente itens com estoque</span>
+                  <span className="text-muted-foreground">
+                    Não incluir produtos com saldo zerado.
+                  </span>
+                </span>
+              </label>
+            ) : null}
             <Button disabled={loading} type="submit">
               <FileDown className="h-4 w-4" />
               {loading ? "Gerando..." : title}

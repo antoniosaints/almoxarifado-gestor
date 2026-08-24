@@ -2768,6 +2768,40 @@ describe("api", () => {
     expect(countPdfPages(response.body)).toBe(1);
   });
 
+  it("filters zero stock balances from the exported PDF when requested", async () => {
+    const { product, user, warehouseCategory } = await createBaseFixture(prisma);
+    const warehouse = await prisma.warehouse.create({
+      data: {
+        categoryId: warehouseCategory.id,
+        name: "Almoxarifado Central",
+      },
+    });
+
+    await prisma.stock.create({
+      data: {
+        currentQuantity: 0,
+        minimumQuantity: 2,
+        productId: product.id,
+        warehouseId: warehouse.id,
+      },
+    });
+    const originalFindMany = prisma.stock.findMany.bind(prisma.stock);
+    const findMany = vi
+      .spyOn(prisma.stock, "findMany")
+      .mockImplementation((...args) => originalFindMany(...args));
+
+    const response = await request(app)
+      .get("/reports/stocks?onlyWithStock=true")
+      .set("Authorization", authorizationFor({ ...user, role: UserRole.ADMIN }));
+
+    expect(response.status).toBe(200);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ currentQuantity: { gt: 0 } }),
+      }),
+    );
+  });
+
   it("exports one movement audit record as a PDF with warehouse scope", async () => {
     const { product, user, warehouseCategory } = await createBaseFixture(prisma);
     const admin = await prisma.user.update({

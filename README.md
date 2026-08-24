@@ -38,23 +38,80 @@ de uma prefeitura.
 
 ## Requisitos
 
-- Node.js compativel com Vite 6.
-- `pnpm` instalado.
+- Node.js 20 ou superior (recomendado: versao LTS atual).
+- `pnpm` 10.11 ou superior. Com Node.js instalado, `corepack enable` ativa a
+  versao definida no campo `packageManager` deste projeto.
 - Oficios sao renderizados pelo frontend em uma pagina A4 e salvos como PDF
   pelo fluxo nativo de impressao do navegador.
 
-## Configuracao local
+## Inicio rapido com SQLite
+
+O projeto ja vem preparado para SQLite e nao requer a instalacao de um servidor
+de banco de dados. O arquivo do banco local sera criado em
+`apps/backend/prisma/dev.db`.
+
+No terminal, na raiz do repositorio, execute:
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+```
+
+Na primeira instalacao, o pnpm executa os scripts necessarios do Prisma e do
+esbuild, que ja estao autorizados em `pnpm-workspace.yaml`. Nao e preciso rodar
+`pnpm approve-builds` manualmente.
+
+Em seguida, crie o arquivo de configuracao do backend:
+
+```bash
+cp apps/backend/.env.example apps/backend/.env
+```
+
+No Windows PowerShell, use:
+
+```powershell
+Copy-Item apps/backend/.env.example apps/backend/.env
+```
+
+Confirme que `apps/backend/.env` contem os valores abaixo (eles ja sao o
+padrao do arquivo de exemplo):
+
+```env
+DATABASE_PROVIDER="sqlite"
+DATABASE_URL="file:./dev.db"
+PORT=3333
+FRONTEND_URL="http://127.0.0.1:5173"
+```
+
+Agora crie/atualize o banco, adicione os dados de exemplo e inicie o projeto:
+
+```bash
+pnpm db:deploy
+pnpm db:seed
+pnpm dev
+```
+
+Mantenha esse terminal aberto. Os enderecos sao:
+
+- Frontend: `http://127.0.0.1:5173`
+- Backend: `http://127.0.0.1:3333`
+
+Para iniciar cada parte em terminais separados, use `pnpm dev:backend` e
+`pnpm dev:frontend`.
+
+## Configuracao detalhada
 
 1. Instale dependencias:
 
    ```bash
-   pnpm setup
+   pnpm install --frozen-lockfile
    ```
 
-2. Configure o backend:
+2. Configure o backend (o comando `cp` deve ser trocado por `Copy-Item` no
+   PowerShell):
 
-   ```powershell
-   Copy-Item apps/backend/.env.example apps/backend/.env
+   ```bash
+   cp apps/backend/.env.example apps/backend/.env
    ```
 
    O SQLite usa por padrao `apps/backend/prisma/dev.db`.
@@ -99,6 +156,25 @@ de uma prefeitura.
 
    - Frontend: `http://127.0.0.1:5173`
    - Backend: `http://127.0.0.1:3333`
+
+## Se der erro ao iniciar
+
+- **`ERR_SQLITE_ERROR: unable to open database file` ao rodar `pnpm`:** o erro
+  e do cache local do pnpm, nao do banco da aplicacao. Reinstale usando um
+  store em uma pasta que seu usuario possa gravar, por exemplo:
+  `pnpm config set store-dir /caminho/gravavel/pnpm-store --location user`.
+  Depois execute `pnpm install --frozen-lockfile` novamente. No Windows, use
+  um caminho como `C:\pnpm-store`.
+- **`Ignored build scripts` ou Prisma/esbuild ausente:** atualize o repositorio
+  e rode `pnpm install --frozen-lockfile` novamente. O
+  `pnpm-workspace.yaml` do projeto autoriza os scripts de construcao exigidos.
+- **Porta 3333 ou 5173 ja esta em uso:** encerre o processo que ocupa a porta
+  ou altere `PORT` no `apps/backend/.env`. Para mudar a porta do Vite, use
+  `pnpm --filter @almoxarifado/frontend dev -- --port 5174`.
+- **Banco local com dados de teste antigos:** pare o projeto, faca uma copia de
+  `apps/backend/prisma/dev.db` se precisar preserva-lo, apague esse arquivo e
+  rode novamente `pnpm db:deploy` e `pnpm db:seed`. Isso remove todos os dados
+  locais.
 
 ## Scripts uteis
 
